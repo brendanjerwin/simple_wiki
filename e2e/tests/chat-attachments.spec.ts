@@ -248,12 +248,12 @@ test.describe('Chat Attachments', () => {
     });
 
     test('should show drag-over state when dragging a file over the input area', async ({ page }) => {
-      const inputArea = page.locator('page-chat-panel .input-area');
+      const inputArea = page.locator('page-chat-panel .composer');
 
       await page.evaluate(() => {
         const chatPanel = document.querySelector('page-chat-panel');
-        const area = chatPanel?.shadowRoot?.querySelector('.input-area');
-        if (!area) throw new Error('input-area not found');
+        const area = chatPanel?.shadowRoot?.querySelector('.composer');
+        if (!area) throw new Error('composer not found');
 
         const dt = new DataTransfer();
         const event = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt });
@@ -266,15 +266,15 @@ test.describe('Chat Attachments', () => {
     test('should clear drag-over state on dragleave', async ({ page }) => {
       await page.evaluate(() => {
         const chatPanel = document.querySelector('page-chat-panel');
-        const area = chatPanel?.shadowRoot?.querySelector('.input-area');
-        if (!area) throw new Error('input-area not found');
+        const area = chatPanel?.shadowRoot?.querySelector('.composer');
+        if (!area) throw new Error('composer not found');
 
         const dt = new DataTransfer();
         area.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
         area.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, dataTransfer: dt }));
       });
 
-      const inputArea = page.locator('page-chat-panel .input-area');
+      const inputArea = page.locator('page-chat-panel .composer');
       await expect(inputArea).not.toHaveClass(/drag-over/, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
@@ -285,8 +285,8 @@ test.describe('Chat Attachments', () => {
         const file = new File([blob], 'dropped-photo.png', { type: 'image/png' });
 
         const chatPanel = document.querySelector('page-chat-panel');
-        const area = chatPanel?.shadowRoot?.querySelector('.input-area');
-        if (!area) throw new Error('input-area not found');
+        const area = chatPanel?.shadowRoot?.querySelector('.composer');
+        if (!area) throw new Error('composer not found');
 
         const dt = new DataTransfer();
         dt.items.add(file);
@@ -306,8 +306,8 @@ test.describe('Chat Attachments', () => {
         const file = new File([blob], 'diagram.png', { type: 'image/png' });
 
         const chatPanel = document.querySelector('page-chat-panel');
-        const area = chatPanel?.shadowRoot?.querySelector('.input-area');
-        if (!area) throw new Error('input-area not found');
+        const area = chatPanel?.shadowRoot?.querySelector('.composer');
+        if (!area) throw new Error('composer not found');
 
         const dt = new DataTransfer();
         dt.items.add(file);

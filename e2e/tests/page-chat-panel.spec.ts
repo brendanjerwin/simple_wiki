@@ -203,7 +203,9 @@ test.describe('Chat Panel', () => {
 
       // Textarea and send button should be disabled
       await expect(page.locator('page-chat-panel textarea')).toBeDisabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-      await expect(page.locator('page-chat-panel .send-button')).toBeDisabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      // Send button renders only once the draft has content (#1349); with the
+      // assistant disconnected the draft is empty, so the button is absent.
+      await expect(page.locator('page-chat-panel .send-button')).toHaveCount(0);
     });
 
     test('should enable textarea and send button when assistant is connected', async ({ page }) => {
@@ -212,8 +214,12 @@ test.describe('Chat Panel', () => {
       // Simulate assistant becoming connected
       await setChatPanelProperty(page, 'agentConnected', true);
 
-      // Textarea and send button should now be enabled
+      // Textarea should now be enabled
       await expect(page.locator('page-chat-panel textarea')).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+
+      // Send button renders once the draft has content (#1349)
+      const textarea = page.locator('page-chat-panel textarea');
+      await textarea.fill('draft');
       await expect(page.locator('page-chat-panel .send-button')).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 

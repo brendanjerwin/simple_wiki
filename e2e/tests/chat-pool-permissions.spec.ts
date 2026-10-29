@@ -140,6 +140,9 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
 
       await openChatPanel(page);
 
+      // Send button is hidden while the draft is empty (#1349); type a draft
+      // so it renders, then assert it is enabled.
+      await page.locator('page-chat-panel textarea').fill('draft');
       await expect(page.locator('page-chat-panel .send-button')).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 

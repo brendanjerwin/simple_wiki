@@ -79,6 +79,10 @@ describe('PageChatPanel', () => {
     it('should disable the send button when panel is open', async () => {
       el.drawerOpen = true;
       await el.updateComplete;
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = 'draft';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
       const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
       expect(btn.disabled).to.equal(true);
     });
@@ -337,9 +341,8 @@ describe('PageChatPanel', () => {
       expect(textarea!.getAttribute('maxlength')).to.equal('2000');
     });
 
-    it('should have a send button', () => {
-      const btn = el.shadowRoot!.querySelector('.send-button');
-      expect(btn).to.not.equal(null);
+    it('should not render a send button while the draft is empty (#1349)', async () => {
+      expect(el.shadowRoot!.querySelector('.send-button')).to.equal(null);
     });
   });
 
@@ -546,7 +549,11 @@ describe('PageChatPanel', () => {
       expect(textarea!.disabled).to.equal(false);
     });
 
-    it('should enable the send button', () => {
+    it('should enable the send button once a draft exists', async () => {
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = 'draft';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
       const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
       expect(btn.disabled).to.equal(false);
     });
@@ -1598,7 +1605,11 @@ describe('PageChatPanel', () => {
         expect(textarea!.disabled).to.equal(false);
       });
 
-      it('should enable the send button', () => {
+      it('should enable the send button once a draft exists', async () => {
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = 'draft';
+        textarea.dispatchEvent(new Event('input'));
+        await el.updateComplete;
         const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
         expect(btn.disabled).to.equal(false);
       });
@@ -1617,7 +1628,11 @@ describe('PageChatPanel', () => {
         expect((el as any)._chatAvailable).to.equal(true);
       });
 
-      it('should enable the send button', () => {
+      it('should enable the send button once a draft exists', async () => {
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = 'draft';
+        textarea.dispatchEvent(new Event('input'));
+        await el.updateComplete;
         const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
         expect(btn.disabled).to.equal(false);
       });
@@ -1641,7 +1656,11 @@ describe('PageChatPanel', () => {
         expect(textarea!.disabled).to.equal(true);
       });
 
-      it('should disable the send button', () => {
+      it('should disable the send button when a draft exists', async () => {
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = 'draft';
+        textarea.dispatchEvent(new Event('input'));
+        await el.updateComplete;
         const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
         expect(btn.disabled).to.equal(true);
       });
@@ -3025,14 +3044,14 @@ describe('PageChatPanel attachment handling', () => {
 
   describe('when a file is dragged over the input area', () => {
     beforeEach(async () => {
-      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const inputArea = el.shadowRoot!.querySelector('.composer')!;
       const event = new DragEvent('dragover', { bubbles: true, cancelable: true });
       inputArea.dispatchEvent(event);
       await el.updateComplete;
     });
 
     it('should apply drag-over class to input area', () => {
-      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const inputArea = el.shadowRoot!.querySelector('.composer')!;
       expect(inputArea.classList.contains('drag-over')).to.equal(true);
     });
   });
@@ -3042,7 +3061,7 @@ describe('PageChatPanel attachment handling', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for test setup
       (el as any)._dragOver = true;
       await el.updateComplete;
-      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const inputArea = el.shadowRoot!.querySelector('.composer')!;
       // relatedTarget=null means leaving the component entirely
       const event = new DragEvent('dragleave', { bubbles: true, cancelable: true });
       inputArea.dispatchEvent(event);
@@ -3050,7 +3069,7 @@ describe('PageChatPanel attachment handling', () => {
     });
 
     it('should remove drag-over class', () => {
-      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const inputArea = el.shadowRoot!.querySelector('.composer')!;
       expect(inputArea.classList.contains('drag-over')).to.equal(false);
     });
   });
@@ -3203,7 +3222,7 @@ describe('PageChatPanel attachment handling', () => {
       const file = new File(['data'], 'dropped.png', { type: 'image/png' });
       const dt = new DataTransfer();
       dt.items.add(file);
-      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const inputArea = el.shadowRoot!.querySelector('.composer')!;
       const event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
       inputArea.dispatchEvent(event);
       await el.updateComplete;
@@ -3250,6 +3269,176 @@ describe('PageChatPanel attachment handling', () => {
     it('should clear _pendingAttachments after send', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
       expect((el as any)._pendingAttachments).to.have.length(0);
+    });
+  });
+});
+// ISSUE #1349: Claude-style composer — send button visible only when the
+// draft has text or attachments; chips render inside the composer; plus
+// button has no boxed border.
+describe('PageChatPanel composer (issue #1349)', () => {
+  let el: PageChatPanel;
+
+  beforeEach(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    startStreamStub = stub(PageChatPanel.prototype as any, 'startStream').resolves();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    pollChatStatusStub = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
+    fetchStub = stub(window, 'fetch').resolves(new Response('{}', { status: 200 }));
+
+    el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+    el.agentConnected = true;
+    el.agentStarting = false;
+    el.drawerOpen = true;
+    await el.updateComplete;
+  });
+
+  afterEach(() => {
+    fetchStub.restore();
+    startStreamStub.restore();
+    pollChatStatusStub.restore();
+    resetForTesting();
+  });
+
+  describe('when the composer is empty', () => {
+    beforeEach(async () => {
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = '';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
+    });
+
+    it('should track private _hasDraftText as false', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._hasDraftText).to.equal(false);
+    });
+
+    it('should NOT render the send button (absent from DOM)', () => {
+      expect(el.shadowRoot!.querySelector('.send-button')).to.equal(null);
+    });
+  });
+
+  describe('when the draft has text only (via @input)', () => {
+    beforeEach(async () => {
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = 'Hello!';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
+    });
+
+    it('should track private _hasDraftText as true', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._hasDraftText).to.equal(true);
+    });
+
+    it('should render the send button', () => {
+      const btn = el.shadowRoot!.querySelector('.send-button');
+      expect(btn).to.not.equal(null);
+    });
+  });
+
+  describe('when draft has attachments only and chips inside composer (issue #1349)', () => {
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for test setup
+      (el as any)._pendingAttachments = [
+        { id: '1', url: '/api/chat-attachments/1', filename: 'photo.png', mimeType: 'image/png', previewUrl: 'blob:1' },
+      ];
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = '';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
+    });
+
+    it('should render the send button (attachments drive draft presence)', () => {
+      const btn = el.shadowRoot!.querySelector('.send-button');
+      expect(btn).to.not.equal(null);
+    });
+
+    it('should render the attachment chips inside .composer', () => {
+      const composer = el.shadowRoot!.querySelector('.composer')!;
+      expect(composer.querySelector('.attachment-chips')).to.not.equal(null);
+    });
+
+    it('should render chips with 20px thumbnails', () => {
+      const composer = el.shadowRoot!.querySelector('.composer')!;
+      const img = composer.querySelector('.attachment-chip img') as HTMLImageElement;
+      expect(img).to.not.equal(null);
+      expect(getComputedStyle(img).width).to.equal('20px');
+      expect(getComputedStyle(img).height).to.equal('20px');
+    });
+  });
+
+  describe('when attach button renders with no boxed border (issue #1349 subtle plus styling)', () => {
+    it('should have border:none on .attach-button', () => {
+      const attachBtn = el.shadowRoot!.querySelector('.attach-button') as HTMLElement;
+      expect(attachBtn).to.not.equal(null);
+      expect(getComputedStyle(attachBtn).borderStyle).to.equal('none');
+    });
+  });
+
+  describe('when the plus opens the attach menu from the composer (issue #1349)', () => {
+    beforeEach(async () => {
+      const attachBtn = el.shadowRoot!.querySelector('.attach-button') as HTMLElement;
+      attachBtn.click();
+      await el.updateComplete;
+    });
+
+    it('should open the attach menu inside .composer', () => {
+      const composer = el.shadowRoot!.querySelector('.composer')!;
+      expect(composer.querySelector('.attach-menu')).to.not.equal(null);
+    });
+  });
+
+  describe('when sendMessage clears draft text (issue #1349: _hasDraftText reset)', () => {
+    let sendMessageStub: SinonStub;
+
+    beforeEach(async () => {
+      el.page = 'test-page';
+      sendMessageStub = stub().resolves();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+      (el as any).chatClient = { sendMessage: sendMessageStub };
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = 'Hello!';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      await (el as any).sendMessage();
+      await el.updateComplete;
+    });
+
+    it('should reset _hasDraftText to false after send', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._hasDraftText).to.equal(false);
+    });
+
+    it('should clear the send button from DOM after send', () => {
+      expect(el.shadowRoot!.querySelector('.send-button')).to.equal(null);
+    });
+  });
+
+  describe('when the draft has text (issue #1349 arrow-up path)', () => {
+    beforeEach(async () => {
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = 'Hello!';
+      textarea.dispatchEvent(new Event('input'));
+      await el.updateComplete;
+    });
+
+    it('should render a send button with aria-label "Send message" and an arrow-up icon', () => {
+      const btn = el.shadowRoot!.querySelector('.send-button') as HTMLElement;
+      expect(btn.getAttribute('aria-label')).to.equal('Send message');
+      const icon = btn.querySelector('i');
+      expect(icon).to.not.equal(null);
+      expect(icon!.className).to.include('fa-arrow-up');
+    });
+
+    it('should render round send button (border-radius 50%)', () => {
+      const btn = el.shadowRoot!.querySelector('.send-button') as HTMLElement;
+      expect(getComputedStyle(btn).borderRadius).to.equal('50%');
+    });
+
+    it('should render composer with 12px rounded border', () => {
+      const composer = el.shadowRoot!.querySelector('.composer') as HTMLElement;
+      expect(getComputedStyle(composer).borderRadius).to.equal('12px');
     });
   });
 });
