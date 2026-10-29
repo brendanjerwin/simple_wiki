@@ -781,6 +781,50 @@ describe('when parsing Radio', () => {
  });
 });
 
+describe('when parsing Slider', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Slider with label, min, max, step, value, and onChange', () => {
+  const result = parser.parse(
+   '$sec = 30\nsl = Slider("Hold", 5, 120, 5, $sec, @Set($sec, $value))\nroot = Card("t", [sl])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sl = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(sl.typeName).to.equal('Slider');
+  expect(sl.props['label']).to.equal('Hold');
+  expect(sl.props['min']).to.equal(5);
+  expect(sl.props['max']).to.equal(120);
+  expect(sl.props['step']).to.equal(5);
+  expect(sl.props['value']).to.deep.include({ k: 'StateRef', n: '$sec' });
+ });
+
+ it('should keep Slider reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$sec = 30\nsl = Slider("Hold", 5, 120, 5, $sec)\nroot = Card("t", [sl])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sl = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(sl.partial).to.equal(false);
+ });
+
+ it('should parse Slider without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$sec = 30\nsl = Slider(undefined, 0, 100, 1, $sec, @Set($sec, $value))\nroot = Card("t", [sl])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sl = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof sl.props['label'] === 'string' && sl.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Slider in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Slider');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 

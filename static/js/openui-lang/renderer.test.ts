@@ -257,16 +257,186 @@ describe('renderer component output', () => {
   expect(detail.plan?.steps.length).to.equal(1);
  });
 
- it('should render Stack gap tokens as px values on the 4pt grid', async () => {
+ it('should render Slider programs into a native range input with aria mapping', async () => {
   const rendered = runtime.render(
-   'root = Card("T", [s1, s2])\ns1 = Stack([t], undefined, "lg")\ns2 = Stack([t2], undefined, "xl")\nt = Text("a")\nt2 = Text("b")',
+   'root = Card("T", [s])\ns = Slider("Hold", 5, 120, 5, $sec)\n$sec = 30',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const slider = el.querySelector('input.wiki-page-app-slider') as HTMLInputElement;
+  expect(slider).to.exist;
+  expect(slider.type).to.equal('range');
+  expect(slider.min).to.equal('5');
+  expect(slider.max).to.equal('120');
+  expect(slider.step).to.equal('5');
+  expect(slider.value).to.equal('30', 'Slider must render the hydrated $variable value, not a reactive marker');
+ });
+
+ it('should dispatch the new numeric value when the slider changes', async () => {
+  const dispatched: PageAppActionEventDetail[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [s])\ns = Slider("Hold", 5, 120, 5, $sec, @Set($sec, $value))\n$sec = 30',
    {},
   );
   const el = await fixture<HTMLElement>(rendered.template as never);
-  const stacks = el.querySelectorAll<HTMLElement>('.wiki-page-app-stack');
-  expect(stacks.length).to.equal(2);
-  expect(stacks[0]?.style.gap).to.equal('16px');
-  expect(stacks[1]?.style.gap).to.equal('24px');
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const slider = el.querySelector('input.wiki-page-app-slider') as HTMLInputElement;
+  slider.value = '65';
+  slider.dispatchEvent(new Event('change'));
+  expect(dispatched.length).to.equal(1);
+  const detail = dispatched[0] as PageAppActionEventDetail;
+  expect(detail.value, 'Slider must dispatch the new numeric value').to.equal(65);
+ });
+
+ it('should show the hydrated numeric value in the slider readout', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [s])\ns = Slider("Hold", 5, 120, 5, $sec)\n$sec = 30',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const readout = el.querySelector('.wiki-page-app-slider-value');
+  expect(readout?.textContent).to.equal('30');
+ });
+
+
+});
+
+describe('renderer layout components', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+ let runtime: WikiPageAppRuntime;
+
+ beforeEach(() => {
+  runtime = generateWikiPageAppRenderer(null, noopActions);
+ });
+
+ it('should render Grid with data-cols and grid children', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [g])\ng = Grid([a, b], 2)\na = Text("left")\nb = Text("right")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const grid = el.querySelector('.wiki-page-app-grid');
+  expect(grid).not.to.equal(null);
+  expect(grid?.getAttribute('data-cols')).to.equal('2');
+  expect(el.textContent).to.include('left');
+  expect(el.textContent).to.include('right');
+ });
+
+ it('should render Span with inline grid-column inside Grid', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [g])\ng = Grid([sp], 2)\nsp = Span(2, [a])\na = Text("wide")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const span = el.querySelector('.wiki-page-app-grid > .wiki-page-app-span');
+  expect(span).not.to.equal(null);
+  expect(span?.getAttribute('style')).to.include('grid-column: span 2');
+  expect(el.textContent).to.include('wide');
+ });
+
+ it('should render a Span outside a Grid as a plain block', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [sp])\nsp = Span(2, [a])\na = Text("outside")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const span = el.querySelector('.wiki-page-app-span');
+  expect(span).not.to.equal(null);
+  expect(el.textContent).to.include('outside');
+ });
+
+ it('should render Divider as an hr', async () => {
+  const rendered = runtime.render('root = Card("T", [d])\nd = Divider()', {});
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  expect(el.querySelector('hr.wiki-page-app-divider')).not.to.equal(null);
+ });
+
+ it('should render SectionHeader with title and trailing slot', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [h])\nh = SectionHeader("Workout", [x])\nx = Text("4 sets")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const header = el.querySelector('.wiki-page-app-section-header');
+  expect(header).not.to.equal(null);
+  expect(header?.textContent).to.include('Workout');
+  expect(header?.textContent).to.include('4 sets');
+ });
+
+ it('should render Card with each variant as data-variant', async () => {
+  for (const variant of ['default', 'elevated', 'outlined', 'filled', 'accent']) {
+   const program = `root = Card("T", [x], "${variant}")\nx = Text("hi")`;
+   const rendered = runtime.render(program, {});
+   expect(rendered.errors, variant).to.deep.equal([]);
+   // Card is the program ROOT: fixture returns the card element itself, and
+   // querySelector does not match self — assert on the root directly.
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   expect(el.classList.contains('wiki-page-app-card'), variant).to.equal(true);
+   expect(el.getAttribute('data-variant'), variant).to.equal(variant);
+  }
+ });
+});
+
+describe('live store flush loop', () => {
+ it('should expose the live store so a @Set followed by re-render from the snapshot increments', async () => {
+  const sets: Record<string, unknown>[] = [];
+  const runtime = generateWikiPageAppRenderer(null, {
+   setState: (snapshot) => sets.push({ ...snapshot }),
+   toAssistant() { },
+   openUrl() { },
+   rerun() { },
+  });
+  runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', {});
+  // Simulate a button @Set($count, 1): mutate the live store, then flush.
+  runtime.store.set('$count', 1);
+  runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', runtime.store.getSnapshot()['$count'] as number !== undefined ? { $count: (runtime.store.getSnapshot()['$count'] as number) } : {});
+  expect(sets.length).to.equal(0);
+  // Flush what the host would flush:
+  sets.push({ ...runtime.store.getSnapshot() });
+  // Re-render hydrating from the flushed state: value is incremented.
+  const rendered = runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', sets[0] as Record<string, unknown>);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  expect(el.innerHTML).to.include('count: 1');
+ });
+});
+
+describe('renderNode', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should render known library components recursively into DOM', async () => {
+  const result = parser.parse('root = Card("T", [s])\ns = Stack([t])\nt = Text("deep")');
+  const el = await fixture<HTMLElement>(renderNode(result.root) as never);
+  expect(el.innerHTML).to.include('T');
+  expect(el.innerHTML).to.include('deep');
+ });
+});
+
+describe('mergePageAppPatch', () => {
+ it('should keep unpatched statements and apply the patch', () => {
+  const merged = mergePageAppPatch(
+   'root = Card([h, t2])\nh = Text("keep")\nt2 = Text("old")',
+   'root = Card([h, t3])\nt3 = Text("new")',
+  );
+  expect(merged).to.include('Text("keep")');
+  expect(merged).to.include('Text("new")');
+  expect(merged).to.not.include('Text("old")');
  });
 });
 

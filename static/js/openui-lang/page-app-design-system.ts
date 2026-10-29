@@ -548,6 +548,20 @@ export const wikiPageAppDesignSystem = css`
     font-size: 0.9rem;
     color: var(--color-text-primary, #333333);
   }
+  .wiki-page-app-slider-field .wiki-page-app-slider {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 360px;
+    margin: 4px 0 0;
+    accent-color: var(--color-action-confirm, #007bff);
+    cursor: pointer;
+  }
+  .wiki-page-app-slider-value {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary, #333333);
+  }
+
 
   .wiki-page-app-radio-group {
     display: flex;

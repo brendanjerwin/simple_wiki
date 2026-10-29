@@ -984,6 +984,55 @@ function buildLibrary(): Library {
 
 
 
+/**
+ * Slider renders a numeric range control bound to a $variable. The value
+ * stays on the bound $variable — @Set($var, $value) with the new numeric
+ * value flows out on change so state survives reloads. `value` is reactive
+ * so moves via @Set/@Reset flow back into the slider position.
+ * Positional order: label, min, max, step, value, onChange — mirrors Input.
+ */
+const SliderSchema = z.object({
+ label: z.string().optional(),
+ min: z.number().optional(),
+ max: z.number().optional(),
+ step: z.number().optional(),
+ value: z.number().optional(),
+ onChange: action().optional(),
+});
+markReactive(SliderSchema.shape.value);
+const Slider = defineComponent({
+ name: 'Slider',
+ props: SliderSchema,
+ description:
+  'A numeric range slider bound to a $variable. `label` is the display label; `min` the lowest allowed value (default 0); `max` the highest (default 100); `step` the granularity (default 1); `value` the current number (bind a $variable); `onChange` the action that runs when the slider changes — use @Set($var, $value) where $value is the new number. Example: `Slider("Hold seconds", 5, 120, 5, $holdSeconds, @Set($holdSeconds, $value))`.',
+ component: (({ label, min, max, step, value, onChange }) => {
+  const minNum = typeof min === 'number' ? min : 0;
+  const maxNum = typeof max === 'number' ? max : 100;
+  const stepNum = typeof step === 'number' && step > 0 ? step : 1;
+  const valueNum = typeof value === 'number' ? value : minNum;
+  const fire = (event: Event) => {
+   dispatchArtifactAction(event, {
+    plan: asPlan(onChange),
+    value: event.currentTarget instanceof HTMLInputElement ? Number(event.currentTarget.value) : undefined,
+   });
+  };
+  return html`<label class="wiki-page-app-field wiki-page-app-slider-field">
+        ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+        <input
+          class="wiki-page-app-slider"
+          type="range"
+          min="${minNum}"
+          max="${maxNum}"
+          step="${stepNum}"
+          .value="${valueNum}"
+          @change=${fire}
+        />
+        <span class="wiki-page-app-slider-value">${valueNum}</span>
+      </label>`;
+ }) as WikiRenderer,
+});
+
+
  /**
   * Tabs renders a tab bar that shows one panel at a time. `labels` is the
   * array of tab headers (positional first), `children` the matching array of
@@ -1068,6 +1117,7 @@ function buildLibrary(): Library {
   Switch.ref,
   Checkbox.ref,
   Radio.ref,
+  Slider.ref,
   Drawer.ref,
   Dialog.ref,
   Toast.ref,
@@ -1114,6 +1164,7 @@ function buildLibrary(): Library {
    Switch,
    Checkbox,
    Radio,
+   Slider,
    Drawer,
    Dialog,
    Toast,
