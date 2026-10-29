@@ -119,7 +119,7 @@ root = Card("App", Stack([
   toast,
 ]))
 ```
-## Form controls: `Switch`, `Checkbox`, `Select`
+## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`
 
 **Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
 
@@ -153,6 +153,18 @@ root = Card("Workout Picker", Stack([
   Text("selected: " + $routine),
 ]))
 ```
+
+**Radio**(label?, options, selected, onSelect) renders a radio group that lets the user pick exactly one option from an `options` list. Bind a `$variable` to the current choice and react to changes with `@Set($var, $value)`:
+
+```
+$size = "md"
+picker = Radio("Size", ["sm", "md", "lg"], $size, @Set($size, $value))
+root = Card("Shirt Picker", Stack([
+  picker,
+  Text("selected: " + $size),
+]))
+```
+
 
 ## Navigation: `Tabs`, `Accordion`
 

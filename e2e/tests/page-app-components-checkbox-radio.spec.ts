@@ -131,3 +131,81 @@ test.describe.serial('Checkbox component', () => {
   });
  });
 });
+
+test.describe.serial('Radio component', () => {
+ test.setTimeout(90000);
+
+ test.beforeEach(async ({ request }) => {
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+ });
+
+ test.afterAll(async ({ request }) => {
+  await callAPI(request, 'PageAppService', 'ClearPageApp', { page: TEST_PAGE });
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+ });
+
+ test.describe('when a page app contains Radio', () => {
+  test('renders the radio group with all options and initial selection', async ({ page, request }) => {
+   const program = [
+    '$size = "md"',
+    'r = Radio("Size", ["sm", "md", "lg"], $size, @Set($size, $value))',
+    'root = Card("Picker", r)',
+   ].join('\n');
+   await setupPage(request, TEST_PAGE, pageBody(program));
+
+   await page.goto(`/${TEST_PAGE}/view`);
+
+   const host = page.locator('wiki-page-app-host');
+   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+   await expect(
+    host.locator('.wiki-page-app-card-title', { hasText: 'Picker' }),
+   ).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
+
+   // The group label renders
+   await expect(host.locator('.wiki-page-app-radio-group-label', { hasText: 'Size' })).toBeVisible();
+
+   // All three options render as radio inputs
+   const inputs = host.locator('.wiki-page-app-radio-input');
+   await expect(inputs).toHaveCount(3);
+
+   // Only the initial selection is checked
+   await expect(inputs.nth(1)).toBeChecked();
+   await expect(inputs.nth(0)).not.toBeChecked();
+   await expect(inputs.nth(2)).not.toBeChecked();
+  });
+
+  test('updates selected state when a different option is clicked', async ({ page, request }) => {
+   const program = [
+    '$size = "sm"',
+    'r = Radio("Size", ["sm", "md", "lg"], $size, @Set($size, $value))',
+    'status = Text("picked: " + $size)',
+    'root = Card("Switch Test", Stack([r, status]))',
+   ].join('\n');
+   await setupPage(request, TEST_PAGE, pageBody(program));
+
+   await page.goto(`/${TEST_PAGE}/view`);
+
+   const host = page.locator('wiki-page-app-host');
+   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+   await expect(
+    host.locator('.wiki-page-app-card-title', { hasText: 'Switch Test' }),
+   ).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
+
+   const inputs = host.locator('.wiki-page-app-radio-input');
+
+   // Initially the first option is selected
+   await expect(inputs.nth(0)).toBeChecked();
+   await expect(host.locator('.wiki-page-app-text', { hasText: 'picked: sm' })).toBeVisible();
+
+   // Click the third option
+   await inputs.nth(2).click();
+
+   // Selection moved and state updated
+   await expect(inputs.nth(2)).toBeChecked({ timeout: PAGE_LOAD_TIMEOUT_MS });
+   await expect(inputs.nth(0)).not.toBeChecked();
+   await expect(host.locator('.wiki-page-app-text', { hasText: 'picked: lg' })).toBeVisible({
+    timeout: PAGE_LOAD_TIMEOUT_MS,
+   });
+  });
+ });
+});
