@@ -92,3 +92,9 @@ Wire: stories task → screenshot task → consolidation PR.
 - Every dispatched worker: e2e spec + help docs update in scope; devbox scripts only.
 - Post-implementation validation fan-out (parallel, one per check):
   fe:test / fe:lint / fe:typecheck / opengrep:lint / scoped e2e specs.
+- **API alignment (from PLAN-1302.md, the project's own agreed roadmap)**:
+  - `Radio` in PLAN-1302 is called `RadioGroup` — the shipped component is `Radio` (label? first, options, selected, onSelect). Keep `Radio`; note the rename in PR body.
+  - `Skeleton` in PR5 is FOR Query loading states — must accept a loading/`Query`-fed pattern, not only a standalone placebholder block.
+  - `Badge` kinds use the existing `--color-*-soft` token pairs mentioned in PLAN-1302 G6 (no parallel *-soft family).
+  - `Image(fileHash|src, alt?, fit?, aspectRatio?)` — `fileHash` variant over the wiki file-upload surface preferred over bare `src`; Card `image:`/`minHeight:` props stay DEFERRED per PLAN-1302 G5 (unsanitized `url()` interpolation was the original drop reason; any reintroduction MUST pass sanitation review).
+  - `Sketch` (PR7 graphics tier 1) is opt-in declarative canvas/SVG primitives; shapes/gradients/particles with $state-fed animation params; no arbitrary JS; Lottie/regl deferred.
