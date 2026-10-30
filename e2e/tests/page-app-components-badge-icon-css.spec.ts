@@ -6,6 +6,8 @@
  * Button emphasis palette plus "accent". We verify the rendered DOM
  * structure, variant attributes, label text, and SectionHeader composition.
  * (Icon/Css components join this spec file as they land in this phase.)
+ * Icon coverage added here: DOM shape, aria-hidden, inline SVG contract,
+ * and Stack-row composition.
  */
 import { expect, test } from '@playwright/test';
 import { callAPI, setupPage } from './page-app-helpers';
@@ -128,6 +130,136 @@ test.describe.serial('Badge component', () => {
    expect(composed!.badgeText).toBe('4 sets');
    expect(composed!.badgeVariant).toBe('accent');
    expect(composed!.badgeInHeader).toBe(true);
+  });
+ });
+});
+
+test.describe.serial('Icon component', () => {
+ test.setTimeout(90000);
+
+ const ICON_PROGRAM = [
+  'checkIcon = Icon("check")',
+  'closeIcon = Icon("close")',
+  'infoIcon = Icon("info")',
+  'warnIcon = Icon("warn")',
+  'errorIcon = Icon("error")',
+  'chevronIcon = Icon("chevron")',
+  'arrowLeftIcon = Icon("arrow-left")',
+  'arrowRightIcon = Icon("arrow-right")',
+  'playIcon = Icon("play")',
+  'pauseIcon = Icon("pause")',
+  'calendarIcon = Icon("calendar")',
+  'clockIcon = Icon("clock")',
+  'userIcon = Icon("user")',
+  'imageIcon = Icon("image")',
+  'doneRow = Stack([checkIcon, Text("complete")], undefined, "sm")',
+  'root = Card("Icon test", Stack([checkIcon, closeIcon, infoIcon, warnIcon, errorIcon, chevronIcon, arrowLeftIcon, arrowRightIcon, playIcon, pauseIcon, calendarIcon, clockIcon, userIcon, imageIcon, doneRow]))',
+ ].join('\n');
+
+ test.describe('when the page renders icons from the curated registry', () => {
+  test.beforeEach(async ({ request }) => {
+   await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+   await setupPage(
+    request,
+    TEST_PAGE,
+    `Prose.\n\n\`\`\`wiki-page-app\n${ICON_PROGRAM}\n\`\`\`\n`,
+   );
+  });
+
+  test.afterAll(async ({ request }) => {
+   await callAPI(request, 'PageAppService', 'ClearPageApp', { page: TEST_PAGE });
+   await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+  });
+
+  test('renders every curated icon as an aria-hidden span with inline SVG and no external references', async ({ page }) => {
+   await page.goto(`/${TEST_PAGE}/view`);
+
+   const host = page.locator('wiki-page-app-host');
+   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+   await expect(host.locator('.wiki-page-app-card-title')).toBeVisible({
+    timeout: PAGE_LOAD_TIMEOUT_MS,
+   });
+
+   const { icons, externalRefs } = await page.evaluate(() => {
+    const host = document.querySelector('wiki-page-app-host');
+    const spans = Array.from(host?.shadowRoot?.querySelectorAll('span.wiki-page-app-icon') ?? []);
+    let external = false;
+    for (const span of spans) {
+     const svg = span.querySelector('svg');
+     if (!svg) continue;
+     const markup = span.innerHTML;
+     if (/https?:|url\(/i.test(markup)) external = true;
+    }
+    return {
+     icons: spans.map((span) => {
+      const svg = span.querySelector('svg');
+      return {
+       icon: span.getAttribute('data-icon'),
+       hidden: span.getAttribute('aria-hidden'),
+       hasSvg: svg !== null,
+       viewBox: svg?.getAttribute('viewBox') ?? null,
+       stroke: svg?.getAttribute('stroke') ?? null,
+       shapes: svg?.querySelectorAll('path,circle,rect,line,polygon').length ?? 0,
+      };
+     }),
+     externalRefs: external,
+    };
+   });
+   expect(externalRefs).toBe(false);
+   const expectedIcons = [
+    'check', 'close', 'info', 'warn', 'error', 'chevron',
+    'arrow-left', 'arrow-right', 'play', 'pause',
+    'calendar', 'clock', 'user', 'image',
+   ];
+   // 14 top-level icons in program order, plus `check` again inside the
+   // composed Stack row.
+   expect(icons.length).toBe(expectedIcons.length + 1);
+   expect(icons.slice(0, expectedIcons.length).map((i) => i.icon)).toEqual(expectedIcons);
+   expect(icons[expectedIcons.length].icon).toBe('check');
+   for (const icon of icons) {
+    expect(icon.hidden, icon.icon).toBe('true');
+    expect(icon.hasSvg, icon.icon).toBe(true);
+    expect(icon.viewBox, icon.icon).toBe('0 0 24 24');
+    expect(icon.stroke, icon.icon).toBe('currentColor');
+    expect(icon.shapes, icon.icon).toBeGreaterThan(0);
+   }
+  });
+
+  test('composes an icon into a Stack row with its label text', async ({ page }) => {
+   await page.goto(`/${TEST_PAGE}/view`);
+
+   const host = page.locator('wiki-page-app-host');
+   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+   await expect(host.locator('.wiki-page-app-card-title')).toBeVisible({
+    timeout: PAGE_LOAD_TIMEOUT_MS,
+   });
+
+   const row = await page.evaluate(() => {
+    const host = document.querySelector('wiki-page-app-host');
+    const stacks = Array.from(host?.shadowRoot?.querySelectorAll('.wiki-page-app-stack') ?? []);
+    const rowStack = stacks.find(
+     (s) =>
+      s.parentElement?.classList.contains('wiki-page-app-stack') &&
+      s.querySelector('span.wiki-page-app-icon') !== null,
+    ) ?? null;
+    if (!rowStack) return null;
+    const span = rowStack.querySelector('span.wiki-page-app-icon')!;
+    const rect = span.getBoundingClientRect();
+    const svg = span.querySelector('svg');
+    return {
+     iconStroke: svg?.getAttribute('stroke') ?? null,
+     text: rowStack.textContent?.trim().replace(/\s+/g, ' ') ?? null,
+     paths: svg?.querySelectorAll('path,circle,rect,line,polygon').length ?? 0,
+     widthPx: rect.width,
+     heightPx: rect.height,
+    };
+   });
+   expect(row).not.toBeNull();
+   expect(row!.iconStroke).toBe('currentColor');
+   expect(row!.text).toContain('complete');
+   expect(row!.paths).toBeGreaterThan(0);
+   expect(row!.widthPx).toBeGreaterThan(0);
+   expect(row!.widthPx).toBeCloseTo(row!.heightPx, 0);
   });
  });
 });

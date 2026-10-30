@@ -789,6 +789,26 @@ export const wikiPageAppDesignSystem = css`
     border: 1px solid var(--color-accent-text, #0d5dd7);
   }
 
+  /* ── Icon ──────────────────────────────────────────────────────────── */
+  /* Inline SVG glyph drawn from the wiki-curated registry (library.ts
+     ICON_LIBRARY); inherits the surrounding text color via currentColor
+     and scales with the local font-size so it reads like a text glyph. */
+  .wiki-page-app-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    color: inherit;
+    flex: none;
+  }
+  .wiki-page-app-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;

@@ -7,7 +7,7 @@
  * elements; interactive components dispatch `wiki-page-app-action`
  * CustomEvents that the page app host executes (state sets, chat, URLs).
  */
-import { css, html, LitElement, nothing, type TemplateResult } from 'lit';
+import { css, html, LitElement, nothing, svg, type SVGTemplateResult, type TemplateResult } from 'lit';
 import { property } from 'lit/decorators.js';
 import { z } from 'zod/v4';
 import {
@@ -279,6 +279,41 @@ export class WikiPageAppCountdown extends LitElement {
 }
 
 customElements.define(WikiPageAppCountdown.is, WikiPageAppCountdown);
+
+/**
+ * The curated icon names the wiki `Icon` component accepts. Unknown names
+ * fail at parse time via the `name` enum.
+ */
+export const ICON_NAMES = [
+ 'check', 'close', 'info', 'warn', 'error', 'chevron',
+ 'arrow-left', 'arrow-right', 'play', 'pause',
+ 'calendar', 'clock', 'user', 'image',
+] as const;
+
+/** A curated icon name. */
+export type IconName = (typeof ICON_NAMES)[number];
+
+/**
+ * The curated inline SVG icon registry (PLAN-1302 PR5, issue #1320): 24×24
+ * stroke glyphs painted with `currentColor` so icons follow the theme's text
+ * color. Everything ships inside the wiki bundle — no external fetches.
+ */
+export const ICON_LIBRARY: Record<IconName, SVGTemplateResult> = {
+ check: svg`<path d="M20 6L9 17l-5-5"/>`,
+ close: svg`<path d="M18 6L6 18"/><path d="M6 6l12 12"/>`,
+ info: svg`<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 11v5"/>`,
+ warn: svg`<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>`,
+ error: svg`<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/>`,
+ chevron: svg`<path d="M9 18l6-6-6-6"/>`,
+ 'arrow-left': svg`<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>`,
+ 'arrow-right': svg`<path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>`,
+ play: svg`<path d="M7 4l13 8-13 8z"/>`,
+ pause: svg`<path d="M8 5v14"/><path d="M16 5v14"/>`,
+ calendar: svg`<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 11h18"/>`,
+ clock: svg`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`,
+ user: svg`<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0114 0"/>`,
+ image: svg`<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M5.5 17.5l4-4 3 3 3.5-3.5 2.5 2.5"/>`,
+};
 
 /**
  * Build the wiki library. Slot unions need every component's `.ref`, and
@@ -746,6 +781,36 @@ function buildLibrary(): Library {
     aria-label=${typeof label === 'string' ? label : ''}
     data-variant=${typeof variant === 'string' ? variant : nothing}
    >${typeof label === 'string' ? label : ''}</span>`) as WikiRenderer,
+ });
+
+
+ /** True only when `value` names an icon in the curated registry. */
+ const isIconName = (value: string): value is IconName => value in ICON_LIBRARY;
+
+ /**
+  * Icon renders a curated inline SVG glyph by name (PLAN-1302 PR5, issue
+  * #1320). It inherits the surrounding text color via `stroke="currentColor"`,
+  * sizes with `font-size`/`1em`, and never fetches anything external. It is
+  * non-interactive — purely visual, dispatches no action, and takes no
+  * children.
+  */
+ const Icon = defineComponent({
+  name: 'Icon',
+  props: z.object({
+   name: z.enum(ICON_NAMES),
+  }),
+  description:
+   'A small inline SVG icon drawn from the wiki-curated set: check, close, info, warn, error, chevron, arrow-left, arrow-right, play, pause, calendar, clock, user, image. The icon follows the current text color and never fetches anything external. Non-interactive.',
+  component: (({ name }) => {
+   const label = typeof name === 'string' && isIconName(name) ? name : undefined;
+   if (label === undefined) return html`${nothing}`;
+   const fragment = ICON_LIBRARY[label];
+   return html`<span
+    class="wiki-page-app-icon"
+    data-icon="${label}"
+    aria-hidden="true"
+   ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${fragment}</svg></span>`;
+  }) as WikiRenderer,
  });
 
  /**
@@ -1252,6 +1317,7 @@ function buildLibrary(): Library {
   Accordion.ref,
   Tooltip.ref,
   Badge.ref,
+  Icon.ref,
  ]);
 
  /**
@@ -1302,6 +1368,7 @@ function buildLibrary(): Library {
    Accordion,
    Tooltip,
    Badge,
+   Icon,
   ],
   actions: [Beep],
   root: WIKI_ROOT_COMPONENT,

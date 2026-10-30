@@ -16,6 +16,8 @@ import {
  createLibraryDefinition,
  formatRemaining,
  generateWikiSystemPrompt,
+ ICON_LIBRARY,
+ ICON_NAMES,
  PAGE_APP_ACTION_EVENT,
  WIKI_LIBRARY_VERSION,
  WIKI_ROOT_COMPONENT,
@@ -344,6 +346,55 @@ describe('when parsing Badge', () => {
   const header = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
   expect(header.typeName).to.equal('SectionHeader');
   expect(((header.props['trailing'] as ElementNode[])[0] as ElementNode).typeName).to.equal('Badge');
+ });
+});
+
+describe('when parsing Icon', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Icon with every name in the curated set', () => {
+  for (const name of ICON_NAMES) {
+   const result = parser.parse(`root = Card("t", [i])\ni = Icon("${name}")`);
+   expect(result.meta.errors, name).to.deep.equal([]);
+   const icon = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(icon.typeName, name).to.equal('Icon');
+   expect(icon.props['name'], name).to.equal(name);
+  }
+ });
+
+ it('should fail names outside the curated registry at parse time', () => {
+  for (const bogus of ['sparkly', 'magic-wand', '/etc/passwd']) {
+   const result = parser.parse(`root = Card("t", [i])\ni = Icon("${bogus}")`);
+   expect(result.meta.errors, bogus).to.not.deep.equal([]);
+  }
+  const codes = parser
+   .parse('root = Card("t", [i])\ni = Icon("sparkly")')
+   .meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+});
+
+describe('ICON_LIBRARY', () => {
+ it('should cover exactly the curated icon names', () => {
+  expect([...Object.keys(ICON_LIBRARY)].sort()).to.deep.equal([...ICON_NAMES].sort());
+ });
+
+ it('should hold a non-null SVG fragment for every curated name', () => {
+  for (const name of ICON_NAMES) {
+   expect(ICON_LIBRARY[name], name).to.not.equal(null);
+  }
+ });
+
+ it('should keep every fragment self-contained with no external references', () => {
+  for (const name of ICON_NAMES) {
+   const fragment = ICON_LIBRARY[name]!;
+   const source = fragment.strings.join('');
+   expect(source, name).to.not.match(/http|url\(/i);
+  }
  });
 });
 
