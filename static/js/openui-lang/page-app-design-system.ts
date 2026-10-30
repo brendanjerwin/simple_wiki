@@ -530,6 +530,104 @@ export const wikiPageAppDesignSystem = css`
     color: var(--color-text-primary, #333333);
   }
 
+  .wiki-page-app-checkbox-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .wiki-page-app-checkbox-input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--color-action-confirm, #007bff);
+  }
+  .wiki-page-app-checkbox-label {
+    font-size: 0.9rem;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-slider-field .wiki-page-app-slider {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 360px;
+    margin: 4px 0 0;
+    accent-color: var(--color-action-confirm, #007bff);
+    cursor: pointer;
+  }
+  .wiki-page-app-slider-value {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-number-input {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 120px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-default, #dddddd);
+    border-radius: 8px;
+    background: var(--color-surface-primary, #ffffff);
+    color: var(--color-text-primary, #333333);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .wiki-page-app-number-input:focus {
+    outline: none;
+    border-color: var(--color-border-focus, #4a90d9);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus, #4a90d9) 33%, transparent);
+  }
+
+
+ .wiki-page-app-textarea {
+   box-sizing: border-box;
+   width: 100%;
+   max-width: 480px;
+   padding: 8px 12px;
+   border: 1px solid var(--color-border-default, #dddddd);
+   border-radius: 8px;
+   background: var(--color-surface-primary, #ffffff);
+   color: var(--color-text-primary, #333333);
+   font-size: 0.9rem;
+   font-family: inherit;
+   resize: vertical;
+ }
+ .wiki-page-app-textarea:focus {
+   outline: none;
+   border-color: var(--color-border-focus, #4a90d9);
+   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus, #4a90d9) 33%, transparent);
+ }
+  .wiki-page-app-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .wiki-page-app-radio-group-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-radio-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .wiki-page-app-radio-input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--color-action-confirm, #007bff);
+  }
+  .wiki-page-app-radio-label {
+    font-size: 0.9rem;
+    color: var(--color-text-primary, #333333);
+  }
+
+
   .wiki-page-app-tabs {
     display: flex;
     flex-direction: column;

@@ -697,6 +697,221 @@ describe('when parsing Switch', () => {
  });
 });
 
+describe('when parsing Checkbox', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Checkbox with label, checked, and onChange', () => {
+  const result = parser.parse(
+   '$done = false\ncb = Checkbox("Done", $done, @Set($done, $value))\nroot = Card("t", [cb])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const cb = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(cb.typeName).to.equal('Checkbox');
+  expect(cb.props['label']).to.equal('Done');
+  expect(cb.props['checked']).to.deep.include({ k: 'StateRef', n: '$done' });
+ });
+
+ it('should keep Checkbox reactive when checked comes from a $variable', () => {
+  const result = parser.parse(
+   '$done = true\ncb = Checkbox("flag", $done)\nroot = Card("t", [cb])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const cb = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(cb.partial).to.equal(false);
+ });
+
+ it('should parse Checkbox without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$done = false\ncb = Checkbox(undefined, $done, @Set($done, $value))\nroot = Card("t", [cb])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const cb = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof cb.props['label'] === 'string' && cb.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Checkbox in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Checkbox');
+ });
+});
+
+describe('when parsing Radio', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Radio with label, options, selected, and onSelect', () => {
+  const result = parser.parse(
+   '$pick = "a"\nr = Radio("Choose", ["a", "b"], $pick, @Set($pick, $value))\nroot = Card("t", [r])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const r = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(r.typeName).to.equal('Radio');
+  expect(r.props['label']).to.equal('Choose');
+  expect(r.props['options']).to.deep.equal(['a', 'b']);
+  expect(r.props['selected']).to.deep.include({ k: 'StateRef', n: '$pick' });
+ });
+
+ it('should keep Radio reactive when selected comes from a $variable', () => {
+  const result = parser.parse(
+   '$pick = "a"\nr = Radio("flag", ["a", "b"], $pick)\nroot = Card("t", [r])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const r = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(r.partial).to.equal(false);
+ });
+
+ it('should parse Radio without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$pick = "a"\nr = Radio(undefined, ["a", "b"], $pick, @Set($pick, $value))\nroot = Card("t", [r])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const r = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  // The parser maps the `undefined` literal to null/undefined; either is valid (no label string).
+  expect(typeof r.props['label'] === 'string' && r.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Radio in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Radio');
+ });
+});
+
+describe('when parsing Slider', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Slider with label, min, max, step, value, and onChange', () => {
+  const result = parser.parse(
+   '$sec = 30\nsl = Slider("Hold", 5, 120, 5, $sec, @Set($sec, $value))\nroot = Card("t", [sl])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sl = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(sl.typeName).to.equal('Slider');
+  expect(sl.props['label']).to.equal('Hold');
+  expect(sl.props['min']).to.equal(5);
+  expect(sl.props['max']).to.equal(120);
+  expect(sl.props['step']).to.equal(5);
+  expect(sl.props['value']).to.deep.include({ k: 'StateRef', n: '$sec' });
+ });
+
+ it('should keep Slider reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$sec = 30\nsl = Slider("Hold", 5, 120, 5, $sec)\nroot = Card("t", [sl])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sl = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(sl.partial).to.equal(false);
+ });
+
+ it('should parse Slider without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$sec = 30\nsl = Slider(undefined, 0, 100, 1, $sec, @Set($sec, $value))\nroot = Card("t", [sl])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sl = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof sl.props['label'] === 'string' && sl.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Slider in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Slider');
+ });
+});
+
+describe('when parsing NumberInput', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse NumberInput with label, min, max, step, value, and onChange', () => {
+  const result = parser.parse(
+   '$reps = 10\nnum = NumberInput("Reps", 1, 100, 1, $reps, @Set($reps, $value))\nroot = Card("t", [num])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const num = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(num.typeName).to.equal('NumberInput');
+  expect(num.props['label']).to.equal('Reps');
+  expect(num.props['min']).to.equal(1);
+  expect(num.props['max']).to.equal(100);
+  expect(num.props['step']).to.equal(1);
+  expect(num.props['value']).to.deep.include({ k: 'StateRef', n: '$reps' });
+ });
+
+ it('should keep NumberInput reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$reps = 10\nnum = NumberInput("Reps", 1, 100, 1, $reps)\nroot = Card("t", [num])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const num = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(num.partial).to.equal(false);
+ });
+
+ it('should parse NumberInput without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$reps = 10\nnum = NumberInput(undefined, 1, 100, 1, $reps, @Set($reps, $value))\nroot = Card("t", [num])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const num = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof num.props['label'] === 'string' && num.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include NumberInput in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('NumberInput');
+ });
+});
+
+describe('when parsing Textarea', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Textarea with label, placeholder, rows, value, and onChange', () => {
+  const result = parser.parse(
+   '$notes = ""\nta = Textarea("Notes", "type here", 6, $notes, @Set($notes, $value))\nroot = Card("t", [ta])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const ta = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(ta.typeName).to.equal('Textarea');
+  expect(ta.props['label']).to.equal('Notes');
+  expect(ta.props['placeholder']).to.equal('type here');
+  expect(ta.props['rows']).to.equal(6);
+  expect(ta.props['value']).to.deep.include({ k: 'StateRef', n: '$notes' });
+ });
+
+ it('should keep Textarea reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$notes = ""\nta = Textarea("Notes", undefined, undefined, $notes)\nroot = Card("t", [ta])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const ta = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(ta.partial).to.equal(false);
+ });
+
+ it('should parse Textarea without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$notes = ""\nta = Textarea(undefined, undefined, undefined, $notes, @Set($notes, $value))\nroot = Card("t", [ta])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const ta = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof ta.props['label'] === 'string' && ta.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Textarea in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Textarea');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 

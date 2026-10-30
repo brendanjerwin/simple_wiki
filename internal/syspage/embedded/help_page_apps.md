@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; `Slider` and the `Image` component are still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -89,8 +89,6 @@ drawer = Drawer($drawerOpen, "right", [details], @Set($drawerOpen, false))
 root = Card("Routine", Stack([Button("View details", @Set($drawerOpen, true)), drawer]))
 ```
 
-## Overlays: `Dialog`, `Toast`
-
 **Dialog**(title?, open, children, onClose?) renders a modal overlay when `open` is true. Bind `$open = false` and use @Set to open/close. Clicking the backdrop or the × button dispatches `onClose`. Use this for confirmation flows that previously routed through @ToAssistant.
 
 ```
@@ -120,7 +118,7 @@ root = Card("App", Stack([
 ]))
 ```
 
-## Form controls: `Switch`, `Select`
+## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`
 
 **Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
 
@@ -133,6 +131,17 @@ root = Card("Leg hold", Stack([
 ]))
 ```
 
+**Checkbox**(label?, checked, onChange) renders a native square checkbox — the standard checkmark control for boolean states like task completion, opt-ins, and "done" flags. Like Switch it binds a boolean `$variable` and updates it with `@Set($var, $value)`:
+
+```
+$done = false
+cb = Checkbox("Done", $done, @Set($done, $value))
+root = Card("Task", Stack([
+  cb,
+  Text("status: " + $done),
+]))
+```
+
 **Select**(label?, value, onChange, options) renders a dropdown that lets the user pick one item from an `options` list. Bind a `$variable` to persist the selection and react to changes with `@Set($var, $value)`:
 
 ```
@@ -141,6 +150,50 @@ picker = Select("Routine type", $routine, @Set($routine, $value), ["strength", "
 root = Card("Workout Picker", Stack([
   picker,
   Text("selected: " + $routine),
+]))
+```
+
+**Radio**(label?, options, selected, onSelect) renders a radio group that lets the user pick exactly one option from an `options` list. Bind a `$variable` to the current choice and react to changes with `@Set($var, $value)`:
+
+```
+$size = "md"
+picker = Radio("Size", ["sm", "md", "lg"], $size, @Set($size, $value))
+root = Card("Shirt Picker", Stack([
+  picker,
+  Text("selected: " + $size),
+]))
+```
+
+**Slider**(label?, min, max, step, value, onChange) renders a native range slider for picking a number within bounds. Bind a numeric `$variable` to persist the value and update it with `@Set($var, $value)` (where `$value` is the new number). Defaults when omitted: `min` 0, `max` 100, `step` 1:
+
+```
+$holdSeconds = 30
+sl = Slider("Hold seconds", 5, 120, 5, $holdSeconds, @Set($holdSeconds, $value))
+root = Card("Leg Hold Timer", Stack([
+  sl,
+  Text("configured: " + $holdSeconds + "s"),
+]))
+```
+
+**NumberInput**(label?, min, max, step, value, onChange) renders a numeric text field for typing an exact value — the complement to Slider, which picks within bounds by dragging. It commits on change (when you leave or press Enter, not per keystroke), and binds a numeric `$variable` updated with `@Set($var, $value)`. Defaults when omitted: `step` 1; `min`/`max` unrestricted. Non-numeric input is rejected:
+
+```
+$reps = 10
+num = NumberInput("Reps", 1, 100, 1, $reps, @Set($reps, $value))
+root = Card("Strength Log", Stack([
+  num,
+  Text("logged: " + $reps + " reps"),
+]))
+```
+
+**Textarea**(label?, placeholder?, rows?, value, onChange) renders a multiline text field for free-form notes — the Input sibling with more room. It commits on change (when you leave the field, not per keystroke), and binds a string `$variable` updated with `@Set($var, $value)`. Defaults when omitted: `rows` 4:
+
+```
+$notes = ""
+ta = Textarea("Session notes", "how did it feel?", 6, $notes, @Set($notes, $value))
+root = Card("Training Journal", Stack([
+  ta,
+  Text("you wrote: " + $notes),
 ]))
 ```
 
@@ -388,7 +441,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a date picker", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 
