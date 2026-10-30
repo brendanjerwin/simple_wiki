@@ -846,6 +846,19 @@ describe('Avatar renderer', () => {
   expect(avatar!.hasAttribute('data-broken')).to.equal(true);
  });
 
+ it('should clear data-broken on a successful load so a repaired src is not latched hidden', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar("/uploads/sha256-missing", "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar') as HTMLElement | null;
+  expect(avatar).not.to.equal(null);
+  const img = avatar!.querySelector('img.wiki-page-app-avatar-img');
+  img!.dispatchEvent(new Event('error'));
+  expect(avatar!.hasAttribute('data-broken')).to.equal(true);
+  img!.dispatchEvent(new Event('load'));
+  expect(avatar!.hasAttribute('data-broken')).to.equal(false);
+ });
+
  it('should set data-size for each size token', async () => {
   for (const size of ['sm', 'md', 'lg']) {
    const el = await renderAvatarProgram(

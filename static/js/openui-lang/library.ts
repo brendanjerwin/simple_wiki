@@ -843,10 +843,16 @@ function buildLibrary(): Library {
    const initialsText =
     typeof initials === 'string' ? initials.trim().slice(0, 2).toUpperCase() : '';
    // A failed `<img>` load fires `error`: stamp the wrapper so CSS hides
-   // the image and reveals the un-scaled initials underneath.
+   // the image and reveals the un-scaled initials underneath. `@load`
+   // clears the stamp again so a later re-render with a repaired `src`
+   // shows the image instead of latching on the stale fallback forever.
    const markBroken = (event: Event) => {
     const image = event.currentTarget;
     if (image instanceof HTMLElement) image.parentElement?.setAttribute('data-broken', 'true');
+   };
+   const clearBroken = (event: Event) => {
+    const image = event.currentTarget;
+    if (image instanceof HTMLElement) image.parentElement?.removeAttribute('data-broken');
    };
    const fallback = initialsText !== ''
     ? html`<span class="wiki-page-app-avatar-fallback">${initialsText}</span>`
@@ -859,14 +865,15 @@ function buildLibrary(): Library {
     role="img"
     aria-label=${initialsText || 'avatar'}
    >${fallback}${srcStr !== '' && srcIsSafe
-    ? html`<img
+     ? html`<img
        class="wiki-page-app-avatar-img"
        src=${srcStr}
        alt=""
        loading="lazy"
        @error=${markBroken}
+      @load=${clearBroken}
       />`
-    : nothing}</span>`;
+     : nothing}</span>`;
   }) as WikiRenderer,
  });
 
