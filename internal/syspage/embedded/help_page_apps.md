@@ -221,6 +221,18 @@ root = Card("Routine", Stack([
 ]))
 ```
 
+## Display: `Badge`
+
+`Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` sets emphasis: `"primary"` (default, accent-tinted), `"secondary"` (muted bordered chip), `"ghost"` (transparent), `"danger"` (error-tinted), or `"accent"` (accent-tinted with a matching outline).
+
+```
+root = Card("Workout", Stack([
+  SectionHeader("Warm-up", [Badge("5 min", "secondary")]),
+  SectionHeader("Workout", [Badge("4 sets")]),
+  SectionHeader("Cooldown", [Badge("injured", "danger")]),
+]))
+```
+
 ## Layout: `Grid`, `Span`, `Divider`, `SectionHeader`
 
 **Grid**(children, cols?, gap?) — children FIRST, then columns: `Grid([a, b, c, d], 2, "lg")` lays four children into a 2-column grid. `cols` accepts `2`, `3`, or the `"sidebar"` preset (240px main column + flexible rest). `gap` takes the same 4pt tokens as Stack. Grids collapse to one column below 520px — author as if each cell may stack vertically.
@@ -260,18 +272,6 @@ root = Card("Routine", Stack([
 **Accessibility**: the `title` attribute is also set, so keyboard users and screen readers get the tooltip text natively. The CSS bubble appears on mouse hover; `title` covers the keyboard/touch path.
 
 **Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. (Background-image hero cards are coming later; request via issue if blocked on them today.)
-
-## Display: `Badge`
-
-`Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` reuses the Button emphasis palette plus one extra: `"primary"` (solid accent, the default), `"secondary"` (muted bordered), `"ghost"` (subtle raised), `"danger"` (red), or `"accent"` (accent-tinted wash).
-
-```
-root = Card("Workout", Stack([
-  SectionHeader("Warm-up", [Badge("5 min", "secondary")]),
-  SectionHeader("Workout", [Badge("4 sets")]),
-  SectionHeader("Cooldown", [Badge("injured", "danger")]),
-]))
-```
 
 ## Standalone app mode & install (PWA)
 
@@ -453,7 +453,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a date picker", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Dialog`, `Toast`, and `Drawer`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a date picker", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Badge`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 

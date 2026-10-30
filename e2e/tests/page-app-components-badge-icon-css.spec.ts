@@ -15,11 +15,13 @@ const PAGE_LOAD_TIMEOUT_MS = 15000;
 
 const BADGE_PROGRAM = [
  'defaultBadge = Badge("4 sets")',
+ 'primaryBadge = Badge("level 3", "primary")',
+ 'secondaryBadge = Badge("queued", "secondary")',
+ 'ghostBadge = Badge("hover me", "ghost")',
  'dangerBadge = Badge("injured", "danger")',
- 'secondaryBadge = Badge("5 min", "secondary")',
- 'badgedHeader = Badge("4 sets", "accent")',
- 'header = SectionHeader("Workout", [badgedHeader])',
- 'root = Card("Badge test", Stack([defaultBadge, dangerBadge, secondaryBadge, header]))',
+ 'accentBadge = Badge("3 done", "accent")',
+ 'badgedHeader = SectionHeader("Workout", [Badge("4 sets", "accent")])',
+ 'root = Card("Badge test", Stack([defaultBadge, primaryBadge, secondaryBadge, ghostBadge, dangerBadge, accentBadge, badgedHeader]))',
 ].join('\n');
 
 test.describe.serial('Badge component', () => {
@@ -40,7 +42,7 @@ test.describe.serial('Badge component', () => {
  });
 
  test.describe('when the page renders Badges with and without variants', () => {
-  test('renders each Badge as a span with the expected label', async ({ page }) => {
+  test('renders the default Badge as a labeled span without data-variant', async ({ page }) => {
    await page.goto(`/${TEST_PAGE}/view`);
 
    const host = page.locator('wiki-page-app-host');
@@ -49,19 +51,27 @@ test.describe.serial('Badge component', () => {
     timeout: PAGE_LOAD_TIMEOUT_MS,
    });
 
-   const labels = await page.evaluate(() => {
+   const { text, ariaLabel } = await page.evaluate(() => {
     const host = document.querySelector('wiki-page-app-host');
     const badges = Array.from(
-     host?.shadowRoot?.querySelectorAll('.wiki-page-app-card-body .wiki-page-app-badge') ?? [],
+     host?.shadowRoot?.querySelectorAll('.wiki-page-app-badge') ?? [],
     );
-    // Skip the badge nested inside the SectionHeader; it lives below.
-    const top = badges.filter((b) => b.closest('.wiki-page-app-section-header') === null);
-    return top.map((b) => b.textContent?.trim() ?? null);
+    const badge = badges.find(
+     (b) =>
+      b.textContent?.trim() === '4 sets' &&
+      b.getAttribute('data-variant') === null,
+    ) ?? null;
+    if (!badge) return { text: null, ariaLabel: null };
+    return {
+     text: badge.textContent?.trim() ?? null,
+     ariaLabel: badge.getAttribute('aria-label'),
+    };
    });
-   expect(labels).toEqual(['4 sets', 'injured', '5 min']);
+   expect(text).toBe('4 sets');
+   expect(ariaLabel).toBe('4 sets');
   });
 
-  test('sets data-variant only when a variant is passed', async ({ page }) => {
+  test('sets data-variant and aria-label for every Badge variant', async ({ page }) => {
    await page.goto(`/${TEST_PAGE}/view`);
 
    const host = page.locator('wiki-page-app-host');
@@ -77,35 +87,17 @@ test.describe.serial('Badge component', () => {
       .find((b) => b.textContent?.trim() === text) ?? null;
     return {
      default: badge('4 sets')?.getAttribute('data-variant') ?? null,
+     primary: badge('level 3')?.getAttribute('data-variant') ?? null,
+     secondary: badge('queued')?.getAttribute('data-variant') ?? null,
+     ghost: badge('hover me')?.getAttribute('data-variant') ?? null,
      danger: badge('injured')?.getAttribute('data-variant') ?? null,
-     secondary: badge('5 min')?.getAttribute('data-variant') ?? null,
+     accent: badge('3 done')?.getAttribute('data-variant') ?? null,
     };
    });
-   // The default badge renders both bare and variant-marked spans with the
-   // same text; assert per-testid-free semantics via ordered selection.
-   expect(variants.danger).toBe('danger');
-   expect(variants.secondary).toBe('secondary');
-  });
-
-  test('renders the default badge without a data-variant attribute', async ({ page }) => {
-   await page.goto(`/${TEST_PAGE}/view`);
-
-   const host = page.locator('wiki-page-app-host');
-   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
-   await expect(host.locator('.wiki-page-app-card-title')).toBeVisible({
-    timeout: PAGE_LOAD_TIMEOUT_MS,
-   });
-
-   const bareVariants = await page.evaluate(() => {
-    const host = document.querySelector('wiki-page-app-host');
-    return Array.from(
-     host?.shadowRoot?.querySelectorAll('.wiki-page-app-badge') ?? [],
-    )
-     .filter((b) => b.textContent?.trim() === '4 sets')
-     .filter((b) => b.getAttribute('data-variant') === null)
-     .length;
-   });
-   expect(bareVariants).toBe(1);
+   expect(variants.default).toBe(null);
+   for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'accent']) {
+    expect(variants[variant], variant).toBe(variant);
+   }
   });
  });
 

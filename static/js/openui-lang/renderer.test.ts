@@ -496,6 +496,47 @@ describe('renderer layout components', () => {
    expect(el.getAttribute('data-variant'), variant).to.equal(variant);
   }
  });
+
+ it('should render Badge with the label text and aria-label', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  const rendered = runtime.render('root = Card("T", [b])\nb = Badge("4 sets")', {});
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const badge = el.querySelector('.wiki-page-app-badge');
+  expect(badge?.getAttribute('aria-label')).to.equal('4 sets');
+  expect(badge?.getAttribute('data-variant')).to.equal(null);
+  expect(badge?.textContent).to.equal('4 sets');
+ });
+
+ it('should render Badge with each variant as data-variant', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  for (const variant of ['default', 'primary', 'secondary', 'ghost', 'danger', 'accent']) {
+   const rendered = runtime.render(
+    `root = Card("T", [b])\nb = Badge("x", "${variant}")`,
+    {},
+   );
+   expect(rendered.errors, variant).to.deep.equal([]);
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   const badge = el.querySelector('.wiki-page-app-badge');
+   expect(badge?.getAttribute('data-variant'), variant).to.equal(variant);
+  }
+ });
+
+ it('should render Badge inside SectionHeader trailing content', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  const rendered = runtime.render(
+   'root = Card("T", [h])\nh = SectionHeader("Workout", [b])\nb = Badge("4 sets")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const header = el.querySelector('.wiki-page-app-section-header');
+  const badge = header?.querySelector('.wiki-page-app-badge');
+  expect(header).not.to.equal(null);
+  expect(badge).not.to.equal(null);
+  expect(badge?.getAttribute('data-variant')).to.equal(null);
+  expect(header?.textContent).to.include('4 sets');
+ });
 });
 
 describe('live store flush loop', () => {

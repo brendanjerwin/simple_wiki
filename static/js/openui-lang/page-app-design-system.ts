@@ -754,38 +754,39 @@ export const wikiPageAppDesignSystem = css`
   }
 
   /* ── Badge ─────────────────────────────────────────────────────────── */
-  /* Inline pill label; variants mirror the Button emphasis palette plus
-     "accent" for tinted highlights. Non-interactive, shrink-wrapped. */
+  /* Inline pill label. Kinds reuse the existing opaque semantic token
+     pairs (PLAN-1302 PR5): primary/default sit on the --color-accent
+     pair, danger on --color-error, secondary on the sunken chip pair,
+     ghost transparent, accent the badge-only kind (accent wash with a
+     matching outline so it reads heavier than primary). Non-interactive. */
   .wiki-page-app-badge {
     display: inline-block;
     align-self: flex-start;
     padding: 2px 10px;
     border-radius: 999px;
+    border: 1px solid transparent;
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.5;
     white-space: nowrap;
-    background: var(--color-action-confirm, #007bff);
-    color: #ffffff;
-  }
-  .wiki-page-app-badge[data-variant='secondary'] {
-    background: var(--color-action-secondary-bg, #ffffff);
-    color: var(--color-text-secondary, #666666);
-    border: 1px solid var(--color-border-default, #dddddd);
-  }
-  .wiki-page-app-badge[data-variant='ghost'] {
-    background: var(--color-surface-sunken, #f8f9fa);
-    color: var(--color-text-secondary, #666666);
-    border: 1px solid transparent;
-  }
-  .wiki-page-app-badge[data-variant='danger'] {
-    background: var(--color-action-danger, #dc3545);
-    color: #ffffff;
-  }
-  .wiki-page-app-badge[data-variant='accent'] {
     background: var(--color-accent-bg, #e9f2ff);
     color: var(--color-accent-text, #0d5dd7);
-    border: 1px solid transparent;
+  }
+  .wiki-page-app-badge[data-variant='secondary'] {
+    background: var(--color-surface-sunken, #f8f9fa);
+    color: var(--color-text-secondary, #666666);
+    border: 1px solid var(--color-border-subtle, #e0e0e0);
+  }
+  .wiki-page-app-badge[data-variant='ghost'] {
+    background: transparent;
+    color: var(--color-text-secondary, #666666);
+  }
+  .wiki-page-app-badge[data-variant='danger'] {
+    background: var(--color-error-bg, #f8d7da);
+    color: var(--color-error-text, #721c24);
+  }
+  .wiki-page-app-badge[data-variant='accent'] {
+    border: 1px solid var(--color-accent-text, #0d5dd7);
   }
 
    @media (max-width: 520px) {

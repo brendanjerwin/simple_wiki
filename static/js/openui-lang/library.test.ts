@@ -319,8 +319,8 @@ describe('when parsing Badge', () => {
   expect(badge.props['variant']).to.equal('danger');
  });
 
- it('should accept the Button variant enum plus accent', () => {
-  for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'accent']) {
+ it('should accept the Badge variant enum and treat "default" like unset', () => {
+  for (const variant of ['default', 'primary', 'secondary', 'ghost', 'danger', 'accent']) {
    const result = parser.parse(`root = Card("t", [b])\nb = Badge("x", "${variant}")`);
    expect(result.meta.errors, variant).to.deep.equal([]);
    const badge = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
@@ -328,6 +328,7 @@ describe('when parsing Badge', () => {
    expect(badge.props['variant']).to.equal(variant);
   }
  });
+
 
  it('should reject an unknown Badge variant', () => {
   const result = parser.parse('root = Card("t", [b])\nb = Badge("x", "sparkly")');

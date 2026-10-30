@@ -727,23 +727,25 @@ function buildLibrary(): Library {
  });
 
  /**
-  * Badge renders a small inline pill label. `variant` reuses the Button
-  * variant emphasis palette plus `accent` for tinted highlights:
-  * primary/secondary/ghost/danger/accent. Non-interactive — purely visual.
+  * Badge renders a small inline pill label. Kinds reuse the existing
+  * opaque semantic token pairs (PLAN-1302): accent pair, sunken chip,
+  * transparent ghost, error pair, with "accent" outlined heavier.
+  * Non-interactive — purely visual.
   */
  const Badge = defineComponent({
   name: 'Badge',
   props: z.object({
    label: z.string(),
-   variant: z.enum(['primary', 'secondary', 'ghost', 'danger', 'accent']).optional(),
+   variant: z.enum(['default', 'primary', 'secondary', 'ghost', 'danger', 'accent']).optional(),
   }),
   description:
-   'A small inline pill label for statuses and counts. `label` is the text; optional second positional `variant` sets emphasis: "primary" (default, solid accent), "secondary" (muted bordered), "ghost" (subtle raised), "danger" (red), "accent" (accent-tinted wash). Non-interactive.',
+   'A small inline pill label for statuses and counts. `label` is the text; optional second positional `variant` sets emphasis: "primary" (default, accent-tinted), "secondary" (muted bordered chip), "ghost" (transparent), "danger" (error-tinted), or "accent" (accent-tinted with matching outline). Non-interactive.',
   component: (({ label, variant }) =>
    html`<span
     class="wiki-page-app-badge"
+    aria-label=${typeof label === 'string' ? label : ''}
     data-variant=${typeof variant === 'string' ? variant : nothing}
-  >${typeof label === 'string' ? label : ''}</span>`) as WikiRenderer,
+   >${typeof label === 'string' ? label : ''}</span>`) as WikiRenderer,
  });
 
  /**
