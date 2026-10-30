@@ -16,6 +16,7 @@ import {
  type WikiPageAppRuntime,
 } from './renderer.js';
 import {
+ ICON_NAMES,
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
 } from './library.js';
@@ -557,6 +558,47 @@ describe('renderer layout components', () => {
    expect(el.getAttribute('data-variant'), variant).to.equal(variant);
   }
  });
+
+ it('should render Badge with the label text and aria-label', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  const rendered = runtime.render('root = Card("T", [b])\nb = Badge("4 sets")', {});
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const badge = el.querySelector('.wiki-page-app-badge');
+  expect(badge?.getAttribute('aria-label')).to.equal('4 sets');
+  expect(badge?.getAttribute('data-variant')).to.equal(null);
+  expect(badge?.textContent).to.equal('4 sets');
+ });
+
+ it('should render Badge with each variant as data-variant', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  for (const variant of ['default', 'primary', 'secondary', 'ghost', 'danger', 'accent']) {
+   const rendered = runtime.render(
+    `root = Card("T", [b])\nb = Badge("x", "${variant}")`,
+    {},
+   );
+   expect(rendered.errors, variant).to.deep.equal([]);
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   const badge = el.querySelector('.wiki-page-app-badge');
+   expect(badge?.getAttribute('data-variant'), variant).to.equal(variant);
+  }
+ });
+
+ it('should render Badge inside SectionHeader trailing content', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  const rendered = runtime.render(
+   'root = Card("T", [h])\nh = SectionHeader("Workout", [b])\nb = Badge("4 sets")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const header = el.querySelector('.wiki-page-app-section-header');
+  const badge = header?.querySelector('.wiki-page-app-badge');
+  expect(header).not.to.equal(null);
+  expect(badge).not.to.equal(null);
+  expect(badge?.getAttribute('data-variant')).to.equal(null);
+  expect(header?.textContent).to.include('4 sets');
+ });
 });
 
 describe('live store flush loop', () => {
@@ -742,5 +784,149 @@ describe('mergePageAppPatch', () => {
   expect(merged).to.include('Text("keep")');
   expect(merged).to.include('Text("new")');
   expect(merged).to.not.include('Text("old")');
+ });
+});
+
+describe('Icon renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ it('should render every curated name as an aria-hidden svg span with the data-icon attribute', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  for (const name of ICON_NAMES) {
+   const rendered = runtime.render(`root = Card("T", [i])\ni = Icon("${name}")`, {});
+   expect(rendered.errors, name).to.deep.equal([]);
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   const span = el.querySelector('span.wiki-page-app-icon') as HTMLElement | null;
+   expect(span, name).not.to.equal(null);
+   expect(span?.getAttribute('aria-hidden'), name).to.equal('true');
+   expect(span?.getAttribute('data-icon'), name).to.equal(name);
+   const svg = span?.querySelector('svg') ?? null;
+   expect(svg, name).not.to.equal(null);
+   expect(svg?.getAttribute('viewBox'), name).to.equal('0 0 24 24');
+   expect(svg?.getAttribute('stroke'), name).to.equal('currentColor');
+   const shapes = svg?.querySelectorAll('path,circle,rect,line,polygon').length ?? 0;
+   expect(shapes, name).to.be.greaterThan(0);
+  }
+ });
+
+ it('should drop an unknown name at parse time when the whole program renders', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  const rendered = runtime.render(
+   'root = Card("T", [i])\ni = Icon("sparkly")',
+   {},
+  );
+  expect(rendered.errors).to.not.deep.equal([]);
+ });
+});
+
+describe('Avatar renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ function avatarRuntime() {
+  return generateWikiPageAppRenderer(null, noopActions);
+ }
+
+ async function renderAvatarProgram(program: string): Promise<HTMLElement> {
+  const rendered = avatarRuntime().render(program, {});
+  expect(rendered.errors).to.deep.equal([]);
+  return fixture<HTMLElement>(rendered.template as never);
+ }
+
+ it('should render the image and keep the initials fallback for a src avatar', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar("/uploads/sha256-AAAA", "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar');
+  expect(avatar).not.to.equal(null);
+  expect(avatar?.getAttribute('data-size')).to.equal('md');
+  const img = avatar?.querySelector('img.wiki-page-app-avatar-img');
+  expect(img?.getAttribute('src')).to.equal('/uploads/sha256-AAAA');
+  const fallback = avatar?.querySelector('.wiki-page-app-avatar-fallback');
+  expect(fallback?.textContent).to.include('BJ');
+  expect(avatar?.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should render no image when only initials are present', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar(undefined, "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar');
+  expect(avatar).not.to.equal(null);
+  expect(avatar?.querySelector('img')).to.equal(null);
+  expect(avatar?.textContent).to.include('BJ');
+  expect(avatar?.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should trim, truncate to two glyphs, and uppercase the initials', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar(undefined, " brendan midford ")',
+  );
+  const fallback = el.querySelector('.wiki-page-app-avatar-fallback');
+  expect(fallback?.textContent).to.equal('BR');
+ });
+
+ it('should render the curated person glyph when neither src nor initials is present', async () => {
+  const el = await renderAvatarProgram('root = Card("T", [a])\na = Avatar()');
+  const avatar = el.querySelector('.wiki-page-app-avatar');
+  expect(avatar).not.to.equal(null);
+  expect(avatar?.querySelector('img')).to.equal(null);
+  expect(avatar?.querySelectorAll('svg').length).to.be.greaterThan(0);
+ });
+
+ it('should never fetch unsafe non-http src values (javascript:/data: fallbacks)', async () => {
+  for (const unsafe of ['javascript:alert(1)', 'data:text/html,<p>hi</p>', '//evil.com/a.png']) {
+   const el = await renderAvatarProgram(
+    `root = Card("T", [a])\na = Avatar("${unsafe}", "BJ")`,
+   );
+   const avatar = el.querySelector('.wiki-page-app-avatar');
+   expect(avatar?.querySelector('img'), unsafe).to.equal(null);
+   expect(avatar?.textContent, unsafe).to.include('BJ');
+  }
+ });
+
+ it('should mark the wrapper data-broken when the image errors out', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar("/uploads/sha256-missing", "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar') as HTMLElement | null;
+  expect(avatar).not.to.equal(null);
+  expect(avatar!.hasAttribute('data-broken')).to.equal(false);
+  const img = avatar!.querySelector('img.wiki-page-app-avatar-img');
+  expect(img).not.to.equal(null);
+  img!.dispatchEvent(new Event('error'));
+  expect(avatar!.hasAttribute('data-broken')).to.equal(true);
+ });
+
+ it('should clear data-broken on a successful load so a repaired src is not latched hidden', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar("/uploads/sha256-missing", "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar') as HTMLElement | null;
+  expect(avatar).not.to.equal(null);
+  const img = avatar!.querySelector('img.wiki-page-app-avatar-img');
+  img!.dispatchEvent(new Event('error'));
+  expect(avatar!.hasAttribute('data-broken')).to.equal(true);
+  img!.dispatchEvent(new Event('load'));
+  expect(avatar!.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should set data-size for each size token', async () => {
+  for (const size of ['sm', 'md', 'lg']) {
+   const el = await renderAvatarProgram(
+    `root = Card("T", [a])\na = Avatar("/uploads/x", "BJ", "${size}")`,
+   );
+   const avatar = el.querySelector('.wiki-page-app-avatar');
+   expect(avatar?.getAttribute('data-size'), size).to.equal(size);
+  }
  });
 });

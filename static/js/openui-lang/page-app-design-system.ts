@@ -769,6 +769,122 @@ export const wikiPageAppDesignSystem = css`
     opacity: 1;
   }
 
+  /* ── Badge ─────────────────────────────────────────────────────────── */
+  /* Inline pill label. Kinds reuse the existing opaque semantic token
+     pairs (PLAN-1302 PR5): primary/default sit on the --color-accent
+     pair, danger on --color-error, secondary on the sunken chip pair,
+     ghost transparent, accent the badge-only kind (accent wash with a
+     matching outline so it reads heavier than primary). Non-interactive. */
+  .wiki-page-app-badge {
+    display: inline-block;
+    align-self: flex-start;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    background: var(--color-accent-bg, #e9f2ff);
+    color: var(--color-accent-text, #0d5dd7);
+  }
+  .wiki-page-app-badge[data-variant='secondary'] {
+    background: var(--color-surface-sunken, #f8f9fa);
+    color: var(--color-text-secondary, #666666);
+    border: 1px solid var(--color-border-subtle, #e0e0e0);
+  }
+  .wiki-page-app-badge[data-variant='ghost'] {
+    background: transparent;
+    color: var(--color-text-secondary, #666666);
+  }
+  .wiki-page-app-badge[data-variant='danger'] {
+    background: var(--color-error-bg, #f8d7da);
+    color: var(--color-error-text, #721c24);
+  }
+  .wiki-page-app-badge[data-variant='accent'] {
+    border: 1px solid var(--color-accent-text, #0d5dd7);
+  }
+
+  /* ── Icon ──────────────────────────────────────────────────────────── */
+  /* Inline SVG glyph drawn from the wiki-curated registry (library.ts
+     ICON_LIBRARY); inherits the surrounding text color via currentColor
+     and scales with the local font-size so it reads like a text glyph. */
+  .wiki-page-app-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    color: inherit;
+    flex: none;
+  }
+  .wiki-page-app-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* ── Avatar ──────────────────────────────────────────────────────── */
+  /* Circular avatar with an initials/glyph fallback underneath (library
+     Avatar). The accent pair is the same contrast-checked pair Badge
+     primary uses — no new tokens. A failed image load stamps data-broken
+     on the wrapper, which hides the <img> and reveals the fallback. */
+  .wiki-page-app-avatar {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    overflow: hidden;
+    border-radius: 50%;
+    vertical-align: middle;
+  }
+  .wiki-page-app-avatar[data-size='sm'] {
+    width: 24px;
+    height: 24px;
+  }
+  .wiki-page-app-avatar[data-size='md'] {
+    width: 32px;
+    height: 32px;
+  }
+  .wiki-page-app-avatar[data-size='lg'] {
+    width: 48px;
+    height: 48px;
+  }
+  .wiki-page-app-avatar-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--color-accent-bg, #e9f2ff);
+    color: var(--color-accent-text, #0d5dd7);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .wiki-page-app-avatar[data-size='sm'] .wiki-page-app-avatar-fallback {
+    font-size: 0.55rem;
+  }
+  .wiki-page-app-avatar[data-size='lg'] .wiki-page-app-avatar-fallback {
+    font-size: 1.05rem;
+  }
+  .wiki-page-app-avatar-fallback svg {
+    width: 55%;
+    height: 55%;
+    display: block;
+  }
+  .wiki-page-app-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .wiki-page-app-avatar[data-broken] .wiki-page-app-avatar-img {
+    display: none;
+  }
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;

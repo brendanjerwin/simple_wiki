@@ -32,7 +32,7 @@ echo "Logging to: $LOG_FILE"
   revive -config revive.toml -set_exit_status ./...
   go test ./...
   go run golang.org/x/tools/cmd/deadcode@latest . || true
-  markdownlint --fix '**/*.md' --ignore vendor
+  markdownlint --fix '**/*.md' --ignore vendor --ignore 'e2e/test-data/**'
 
   # Prefer caller-provided binary; default to a working one (#1282).
   if [[ -z "${CHROMIUM_BIN:-}" ]]; then
