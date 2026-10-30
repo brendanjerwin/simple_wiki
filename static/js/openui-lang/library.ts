@@ -727,6 +727,26 @@ function buildLibrary(): Library {
  });
 
  /**
+  * Badge renders a small inline pill label. `variant` reuses the Button
+  * variant emphasis palette plus `accent` for tinted highlights:
+  * primary/secondary/ghost/danger/accent. Non-interactive — purely visual.
+  */
+ const Badge = defineComponent({
+  name: 'Badge',
+  props: z.object({
+   label: z.string(),
+   variant: z.enum(['primary', 'secondary', 'ghost', 'danger', 'accent']).optional(),
+  }),
+  description:
+   'A small inline pill label for statuses and counts. `label` is the text; optional second positional `variant` sets emphasis: "primary" (default, solid accent), "secondary" (muted bordered), "ghost" (subtle raised), "danger" (red), "accent" (accent-tinted wash). Non-interactive.',
+  component: (({ label, variant }) =>
+   html`<span
+    class="wiki-page-app-badge"
+    data-variant=${typeof variant === 'string' ? variant : nothing}
+  >${typeof label === 'string' ? label : ''}</span>`) as WikiRenderer,
+ });
+
+ /**
   * Tooltip wraps any children with a hover tooltip showing `text`.
   * Uses a CSS ::after pseudo-element driven by data-tooltip — no per-element
   * IDs, no JS, no popover API. Works in any slot; composable with Button,
@@ -1229,6 +1249,7 @@ function buildLibrary(): Library {
   Tabs.ref,
   Accordion.ref,
   Tooltip.ref,
+  Badge.ref,
  ]);
 
  /**
@@ -1278,6 +1299,7 @@ function buildLibrary(): Library {
    Tabs,
    Accordion,
    Tooltip,
+   Badge,
   ],
   actions: [Beep],
   root: WIKI_ROOT_COMPONENT,

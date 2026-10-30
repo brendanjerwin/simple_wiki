@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Badge`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -260,6 +260,18 @@ root = Card("Routine", Stack([
 **Accessibility**: the `title` attribute is also set, so keyboard users and screen readers get the tooltip text natively. The CSS bubble appears on mouse hover; `title` covers the keyboard/touch path.
 
 **Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. (Background-image hero cards are coming later; request via issue if blocked on them today.)
+
+## Display: `Badge`
+
+`Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` reuses the Button emphasis palette plus one extra: `"primary"` (solid accent, the default), `"secondary"` (muted bordered), `"ghost"` (subtle raised), `"danger"` (red), or `"accent"` (accent-tinted wash).
+
+```
+root = Card("Workout", Stack([
+  SectionHeader("Warm-up", [Badge("5 min", "secondary")]),
+  SectionHeader("Workout", [Badge("4 sets")]),
+  SectionHeader("Cooldown", [Badge("injured", "danger")]),
+]))
+```
 
 ## Standalone app mode & install (PWA)
 

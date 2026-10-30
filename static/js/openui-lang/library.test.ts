@@ -294,6 +294,58 @@ describe('when parsing Divider and SectionHeader', () => {
  });
 });
 
+describe('when parsing Badge', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Badge with a label and no variant', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Badge("4 sets")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const badge = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(badge.typeName).to.equal('Badge');
+  expect(badge.props['label']).to.equal('4 sets');
+  expect(badge.props['variant']).to.equal(undefined);
+ });
+
+ it('should parse Badge variant as the second positional arg', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Badge("wip", "danger")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const badge = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(badge.typeName).to.equal('Badge');
+  expect(badge.props['label']).to.equal('wip');
+  expect(badge.props['variant']).to.equal('danger');
+ });
+
+ it('should accept the Button variant enum plus accent', () => {
+  for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'accent']) {
+   const result = parser.parse(`root = Card("t", [b])\nb = Badge("x", "${variant}")`);
+   expect(result.meta.errors, variant).to.deep.equal([]);
+   const badge = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(badge.typeName).to.equal('Badge');
+   expect(badge.props['variant']).to.equal(variant);
+  }
+ });
+
+ it('should reject an unknown Badge variant', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Badge("x", "sparkly")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should parse a Badge as SectionHeader trailing content', () => {
+  const result = parser.parse(
+   'root = Card("t", [h])\nh = SectionHeader("Workout", [b])\nb = Badge("4 sets")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const header = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(header.typeName).to.equal('SectionHeader');
+  expect(((header.props['trailing'] as ElementNode[])[0] as ElementNode).typeName).to.equal('Badge');
+ });
+});
+
 describe('when parsing Card variants', () => {
  let parser: Parser;
 

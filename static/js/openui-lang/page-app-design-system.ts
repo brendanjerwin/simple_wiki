@@ -753,6 +753,41 @@ export const wikiPageAppDesignSystem = css`
     opacity: 1;
   }
 
+  /* ── Badge ─────────────────────────────────────────────────────────── */
+  /* Inline pill label; variants mirror the Button emphasis palette plus
+     "accent" for tinted highlights. Non-interactive, shrink-wrapped. */
+  .wiki-page-app-badge {
+    display: inline-block;
+    align-self: flex-start;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    background: var(--color-action-confirm, #007bff);
+    color: #ffffff;
+  }
+  .wiki-page-app-badge[data-variant='secondary'] {
+    background: var(--color-action-secondary-bg, #ffffff);
+    color: var(--color-text-secondary, #666666);
+    border: 1px solid var(--color-border-default, #dddddd);
+  }
+  .wiki-page-app-badge[data-variant='ghost'] {
+    background: var(--color-surface-sunken, #f8f9fa);
+    color: var(--color-text-secondary, #666666);
+    border: 1px solid transparent;
+  }
+  .wiki-page-app-badge[data-variant='danger'] {
+    background: var(--color-action-danger, #dc3545);
+    color: #ffffff;
+  }
+  .wiki-page-app-badge[data-variant='accent'] {
+    background: var(--color-accent-bg, #e9f2ff);
+    color: var(--color-accent-text, #0d5dd7);
+    border: 1px solid transparent;
+  }
+
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;
