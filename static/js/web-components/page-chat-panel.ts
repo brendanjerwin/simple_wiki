@@ -416,11 +416,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         min-width: 0;
         width: 100%;
         resize: none;
-        border: 1px solid var(--color-editor-border);
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.05);
+        border: none;
+        border-radius: 0;
+        background: transparent;
         color: var(--color-text-primary);
-        padding: 12px;
+        padding: 8px 4px;
         font-size: 0.9rem;
         font-family: inherit;
         min-height: 44px;
@@ -432,7 +432,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         touch-action: manipulation;
       }
 
-      .composer textarea:focus {
+      .composer:focus-within {
         border-color: var(--color-text-muted);
       }
 
