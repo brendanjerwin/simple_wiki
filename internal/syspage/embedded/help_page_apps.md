@@ -221,7 +221,7 @@ root = Card("Routine", Stack([
 ]))
 ```
 
-## Display: `Badge`
+## Display: Badge, Icon
 
 `Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` sets emphasis: `"primary"` (default, accent-tinted), `"secondary"` (muted bordered chip), `"ghost"` (transparent), `"danger"` (error-tinted), or `"accent"` (accent-tinted with a matching outline).
 
@@ -233,8 +233,7 @@ root = Card("Workout", Stack([
 ]))
 ```
 
-`Icon(name)` renders a small inline SVG glyph from a **curated set** of 14 names: `check`, `close`, `info`, `warn`, `error`, `chevron`, `arrow-left`, `arrow-right`, `play`, `pause`, `calendar`, `clock`, `user`, `image`. The icon is **decorative** (`aria-hidden`, non-interactive), follows the surrounding text color, and scales with the local font size, so it reads like a text glyph inside a `Stack` row or next to a `Badge`. Unknown names fail at parse time. There are **no external fetches** — every glyph ships inside the wiki, so icons render offline and never depend on a CDN.
-
+`Icon(name)` renders a small inline SVG glyph from a **curated set** of 15 names: `check`, `close`, `info`, `warn`, `error`, `chevron-left`, `chevron-right`, `arrow-left`, `arrow-right`, `play`, `pause`, `calendar`, `clock`, `user`, `image`. The icon is **decorative** (`aria-hidden`, non-interactive), follows the surrounding text color, and scales with the local font size, so it reads like a text glyph inside a `Stack` row or next to a `Badge`. Unknown names fail at parse time. There are **no external fetches** — every glyph ships inside the wiki, so icons render offline and never depend on a CDN.
 ```
 check = Icon("check")
 warn = Icon("warn")

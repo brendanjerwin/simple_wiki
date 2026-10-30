@@ -16,6 +16,7 @@ import {
  type WikiPageAppRuntime,
 } from './renderer.js';
 import {
+ ICON_NAMES,
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
 } from './library.js';
@@ -722,5 +723,42 @@ describe('mergePageAppPatch', () => {
   expect(merged).to.include('Text("keep")');
   expect(merged).to.include('Text("new")');
   expect(merged).to.not.include('Text("old")');
+ });
+});
+
+describe('Icon renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ it('should render every curated name as an aria-hidden svg span with the data-icon attribute', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  for (const name of ICON_NAMES) {
+   const rendered = runtime.render(`root = Card("T", [i])\ni = Icon("${name}")`, {});
+   expect(rendered.errors, name).to.deep.equal([]);
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   const span = el.querySelector('span.wiki-page-app-icon') as HTMLElement | null;
+   expect(span, name).not.to.equal(null);
+   expect(span?.getAttribute('aria-hidden'), name).to.equal('true');
+   expect(span?.getAttribute('data-icon'), name).to.equal(name);
+   const svg = span?.querySelector('svg') ?? null;
+   expect(svg, name).not.to.equal(null);
+   expect(svg?.getAttribute('viewBox'), name).to.equal('0 0 24 24');
+   expect(svg?.getAttribute('stroke'), name).to.equal('currentColor');
+   const shapes = svg?.querySelectorAll('path,circle,rect,line,polygon').length ?? 0;
+   expect(shapes, name).to.be.greaterThan(0);
+  }
+ });
+
+ it('should drop an unknown name at parse time when the whole program renders', async () => {
+  const runtime = generateWikiPageAppRenderer(null, noopActions);
+  const rendered = runtime.render(
+   'root = Card("T", [i])\ni = Icon("sparkly")',
+   {},
+  );
+  expect(rendered.errors).to.not.deep.equal([]);
  });
 });

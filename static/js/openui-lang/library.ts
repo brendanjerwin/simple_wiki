@@ -285,8 +285,8 @@ customElements.define(WikiPageAppCountdown.is, WikiPageAppCountdown);
  * fail at parse time via the `name` enum.
  */
 export const ICON_NAMES = [
- 'check', 'close', 'info', 'warn', 'error', 'chevron',
- 'arrow-left', 'arrow-right', 'play', 'pause',
+ 'check', 'close', 'info', 'warn', 'error', 'chevron-left',
+ 'chevron-right', 'arrow-left', 'arrow-right', 'play', 'pause',
  'calendar', 'clock', 'user', 'image',
 ] as const;
 
@@ -304,7 +304,8 @@ export const ICON_LIBRARY: Record<IconName, SVGTemplateResult> = {
  info: svg`<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 11v5"/>`,
  warn: svg`<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>`,
  error: svg`<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/>`,
- chevron: svg`<path d="M9 18l6-6-6-6"/>`,
+ 'chevron-left': svg`<path d="M15 18l-6-6 6-6"/>`,
+ 'chevron-right': svg`<path d="M9 18l6-6-6-6"/>`,
  'arrow-left': svg`<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>`,
  'arrow-right': svg`<path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>`,
  play: svg`<path d="M7 4l13 8-13 8z"/>`,
@@ -800,7 +801,7 @@ function buildLibrary(): Library {
    name: z.enum(ICON_NAMES),
   }),
   description:
-   'A small inline SVG icon drawn from the wiki-curated set: check, close, info, warn, error, chevron, arrow-left, arrow-right, play, pause, calendar, clock, user, image. The icon follows the current text color and never fetches anything external. Non-interactive.',
+   'A small inline SVG icon drawn from the wiki-curated set: check, close, info, warn, error, chevron-left, chevron-right, arrow-left, arrow-right, play, pause, calendar, clock, user, image. The icon follows the current text color and never fetches anything external. Non-interactive.',
   component: (({ name }) => {
    const label = typeof name === 'string' && isIconName(name) ? name : undefined;
    if (label === undefined) return html`${nothing}`;

@@ -143,7 +143,8 @@ test.describe.serial('Icon component', () => {
   'infoIcon = Icon("info")',
   'warnIcon = Icon("warn")',
   'errorIcon = Icon("error")',
-  'chevronIcon = Icon("chevron")',
+  'chevronLeftIcon = Icon("chevron-left")',
+  'chevronRightIcon = Icon("chevron-right")',
   'arrowLeftIcon = Icon("arrow-left")',
   'arrowRightIcon = Icon("arrow-right")',
   'playIcon = Icon("play")',
@@ -153,7 +154,7 @@ test.describe.serial('Icon component', () => {
   'userIcon = Icon("user")',
   'imageIcon = Icon("image")',
   'doneRow = Stack([checkIcon, Text("complete")], undefined, "sm")',
-  'root = Card("Icon test", Stack([checkIcon, closeIcon, infoIcon, warnIcon, errorIcon, chevronIcon, arrowLeftIcon, arrowRightIcon, playIcon, pauseIcon, calendarIcon, clockIcon, userIcon, imageIcon, doneRow]))',
+  'root = Card("Icon test", Stack([checkIcon, closeIcon, infoIcon, warnIcon, errorIcon, chevronLeftIcon, chevronRightIcon, arrowLeftIcon, arrowRightIcon, playIcon, pauseIcon, calendarIcon, clockIcon, userIcon, imageIcon, doneRow]))',
  ].join('\n');
 
  test.describe('when the page renders icons from the curated registry', () => {
@@ -207,8 +208,8 @@ test.describe.serial('Icon component', () => {
    });
    expect(externalRefs).toBe(false);
    const expectedIcons = [
-    'check', 'close', 'info', 'warn', 'error', 'chevron',
-    'arrow-left', 'arrow-right', 'play', 'pause',
+    'check', 'close', 'info', 'warn', 'error', 'chevron-left',
+    'chevron-right', 'arrow-left', 'arrow-right', 'play', 'pause',
     'calendar', 'clock', 'user', 'image',
    ];
    // 14 top-level icons in program order, plus `check` again inside the
@@ -261,5 +262,58 @@ test.describe.serial('Icon component', () => {
    expect(row!.widthPx).toBeGreaterThan(0);
    expect(row!.widthPx).toBeCloseTo(row!.heightPx, 0);
   });
+ });
+});
+
+test.describe.serial('Icon component — unknown name', () => {
+ test.setTimeout(90000);
+ const BAD_ICON_PROGRAM = [
+  'okIcon = Icon("check")',
+  'badIcon = Icon("sparkly")',
+  'root = Card("Icon test", Stack([okIcon, badIcon, Text("still renders")]))',
+ ].join('\n');
+
+ test.beforeEach(async ({ request }) => {
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+  await setupPage(
+   request,
+   TEST_PAGE,
+   `Prose.\n\n\`\`\`wiki-page-app\n${BAD_ICON_PROGRAM}\n\`\`\`\n`,
+  );
+ });
+
+ test.afterAll(async ({ request }) => {
+  await callAPI(request, 'PageAppService', 'ClearPageApp', { page: TEST_PAGE });
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+ });
+
+ test('surfaces the parse error and drops only the bad statement', async ({ page }) => {
+  await page.goto(`/${TEST_PAGE}/view`);
+
+  const host = page.locator('wiki-page-app-host');
+  await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+  await expect(host.locator('.wiki-page-app-card-title')).toBeVisible({
+   timeout: PAGE_LOAD_TIMEOUT_MS,
+  });
+
+  const { errorText, icons, stackText } = await page.evaluate(() => {
+   const host = document.querySelector('wiki-page-app-host');
+   const errorPanel =
+    host?.shadowRoot?.querySelector('.wiki-page-app-parse-errors') ?? null;
+   const icons = Array.from(
+    host?.shadowRoot?.querySelectorAll('span.wiki-page-app-icon') ?? [],
+   ).map((span) => span.getAttribute('data-icon'));
+   return {
+    errorText: errorPanel?.textContent?.trim() ?? null,
+    icons,
+    stackText:
+     host?.shadowRoot?.querySelector('.wiki-page-app-stack')?.textContent?.trim()
+     ?? null,
+   };
+  });
+  expect(errorText).not.toBeNull();
+  expect(errorText).toContain('sparkly');
+  expect(icons).toEqual(['check']);
+  expect(stackText).toContain('still renders');
  });
 });
