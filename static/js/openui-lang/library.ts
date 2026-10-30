@@ -1090,6 +1090,47 @@ function buildLibrary(): Library {
 
 
  /**
+  * Textarea renders a multiline text field bound to a $variable. The value
+  * stays on the bound $variable — @Set($var, $value) with the new text flows
+  * out on commit (the `change` event, not per keystroke) so state survives
+  * reloads. `value` is reactive so @Set/@Reset flows back into the field.
+  * Positional order: label, placeholder, rows, value, onChange — rows
+  * defaults to 4.
+  */
+ const TextareaSchema = z.object({
+  label: z.string().optional(),
+  placeholder: z.string().optional(),
+  rows: z.number().optional(),
+  value: z.string().optional(),
+  onChange: action().optional(),
+ });
+ markReactive(TextareaSchema.shape.value);
+ const Textarea = defineComponent({
+  name: 'Textarea',
+  props: TextareaSchema,
+  description:
+   'A multiline text field bound to a $variable, committing on change (blur or Enter, not per keystroke). `label` is the display label; `placeholder` the hint text when empty; `rows` the visible line count (default 4); `value` the current text (bind a $variable); `onChange` the action that runs when the value is committed — use @Set($var, $value) where $value is the new text. Example: `Textarea("Notes", undefined, 6, $notes, @Set($notes, $value))`.',
+  component: (({ label, placeholder, rows, value, onChange }) => {
+   const rowsNum = typeof rows === 'number' && rows > 0 ? Math.floor(rows) : 4;
+   const fire = (event: Event) => {
+    const textarea = event.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : null;
+    if (!textarea) return;
+    dispatchArtifactAction(event, { plan: asPlan(onChange), value: textarea.value });
+   };
+   return html`<label class="wiki-page-app-field wiki-page-app-textarea-field">
+       ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+       <textarea
+         class="wiki-page-app-textarea"
+         rows="${rowsNum}"
+         placeholder="${typeof placeholder === 'string' ? placeholder : ''}"
+         .value="${typeof value === 'string' ? value : ''}"
+         @change=${fire}
+       ></textarea>
+     </label>`;
+  }) as WikiRenderer,
+ });
+
+ /**
   * Tabs renders a tab bar that shows one panel at a time. `labels` is the
   * array of tab headers (positional first), `children` the matching array of
   * content panels. Bind `$tab = 0` to persist the active tab across reloads:
@@ -1175,6 +1216,7 @@ function buildLibrary(): Library {
   Radio.ref,
   Slider.ref,
   NumberInput.ref,
+  Textarea.ref,
   Drawer.ref,
   Dialog.ref,
   Toast.ref,
@@ -1223,6 +1265,7 @@ function buildLibrary(): Library {
    Radio,
    Slider,
    NumberInput,
+   Textarea,
    Drawer,
    Dialog,
    Toast,

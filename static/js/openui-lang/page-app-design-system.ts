@@ -580,6 +580,24 @@ export const wikiPageAppDesignSystem = css`
   }
 
 
+ .wiki-page-app-textarea {
+   box-sizing: border-box;
+   width: 100%;
+   max-width: 480px;
+   padding: 8px 12px;
+   border: 1px solid var(--color-border-default, #dddddd);
+   border-radius: 8px;
+   background: var(--color-surface-primary, #ffffff);
+   color: var(--color-text-primary, #333333);
+   font-size: 0.9rem;
+   font-family: inherit;
+   resize: vertical;
+ }
+ .wiki-page-app-textarea:focus {
+   outline: none;
+   border-color: var(--color-border-focus, #4a90d9);
+   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus, #4a90d9) 33%, transparent);
+ }
   .wiki-page-app-radio-group {
     display: flex;
     flex-direction: column;

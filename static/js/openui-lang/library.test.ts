@@ -869,6 +869,49 @@ describe('when parsing NumberInput', () => {
  });
 });
 
+describe('when parsing Textarea', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Textarea with label, placeholder, rows, value, and onChange', () => {
+  const result = parser.parse(
+   '$notes = ""\nta = Textarea("Notes", "type here", 6, $notes, @Set($notes, $value))\nroot = Card("t", [ta])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const ta = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(ta.typeName).to.equal('Textarea');
+  expect(ta.props['label']).to.equal('Notes');
+  expect(ta.props['placeholder']).to.equal('type here');
+  expect(ta.props['rows']).to.equal(6);
+  expect(ta.props['value']).to.deep.include({ k: 'StateRef', n: '$notes' });
+ });
+
+ it('should keep Textarea reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$notes = ""\nta = Textarea("Notes", undefined, undefined, $notes)\nroot = Card("t", [ta])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const ta = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(ta.partial).to.equal(false);
+ });
+
+ it('should parse Textarea without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$notes = ""\nta = Textarea(undefined, undefined, undefined, $notes, @Set($notes, $value))\nroot = Card("t", [ta])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const ta = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof ta.props['label'] === 'string' && ta.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Textarea in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Textarea');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 

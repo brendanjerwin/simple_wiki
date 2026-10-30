@@ -368,6 +368,48 @@ describe('renderer component output', () => {
  });
 
 
+ it('should render Textarea programs into a native textarea with rows and hydrated value', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [ta])\nta = Textarea("Notes", "type here", 6, $notes)\n$notes = "hello"',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const ta = el.querySelector('textarea.wiki-page-app-textarea') as HTMLTextAreaElement;
+  expect(ta).to.exist;
+  expect(ta.rows).to.equal(6);
+  expect(ta.placeholder).to.equal('type here');
+  expect(ta.value).to.equal('hello', 'Textarea must render the hydrated $variable value, not a reactive marker');
+ });
+
+ it('should dispatch the committed string value when Textarea commits', async () => {
+  const dispatched: PageAppActionEventDetail[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [ta])\nta = Textarea("Notes", undefined, undefined, $notes, @Set($notes, $value))\n$notes = ""',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const ta = el.querySelector('textarea.wiki-page-app-textarea') as HTMLTextAreaElement;
+  ta.value = 'new text';
+  ta.dispatchEvent(new Event('change'));
+  expect(dispatched.length).to.equal(1);
+  const detail = dispatched[0] as PageAppActionEventDetail;
+  expect(detail.value, 'Textarea must dispatch the committed string value').to.equal('new text');
+ });
+
+ it('should default rows to 4 when omitted', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [ta])\nta = Textarea("Notes", undefined, undefined, $notes)\n$notes = ""',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const ta = el.querySelector('textarea.wiki-page-app-textarea') as HTMLTextAreaElement;
+  expect(ta.rows).to.equal(4);
+ });
+
 });
 
 describe('renderer layout components', () => {

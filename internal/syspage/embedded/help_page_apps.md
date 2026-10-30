@@ -118,7 +118,7 @@ root = Card("App", Stack([
 ]))
 ```
 
-## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`
+## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`
 
 **Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
 
@@ -186,7 +186,16 @@ root = Card("Strength Log", Stack([
 ]))
 ```
 
+**Textarea**(label?, placeholder?, rows?, value, onChange) renders a multiline text field for free-form notes — the Input sibling with more room. It commits on change (when you leave the field, not per keystroke), and binds a string `$variable` updated with `@Set($var, $value)`. Defaults when omitted: `rows` 4:
 
+```
+$notes = ""
+ta = Textarea("Session notes", "how did it feel?", 6, $notes, @Set($notes, $value))
+root = Card("Training Journal", Stack([
+  ta,
+  Text("you wrote: " + $notes),
+]))
+```
 
 ## Navigation: `Tabs`, `Accordion`
 
