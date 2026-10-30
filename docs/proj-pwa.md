@@ -127,7 +127,6 @@ Page apps (OpenUI Lang artifact pages) get first-class install support, **still 
 
 **Decision:** the service worker the issue text mentions was NOT built. Manifest-only installability covers Chrome 93+/Safari 16.4+ and preserves the Zero Caching rule above; offline support remains a Future-Enhancement gate.
 
-
 ## Future Enhancements (Implement Only On User Request)
 
 ### Update Notification Features

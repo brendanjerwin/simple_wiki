@@ -31,6 +31,7 @@ validation checks (test/lint/typecheck/e2e) are independent, so they fan out in 
 ## Waves
 
 ### Wave A — P3 form controls (Refs #1320)
+
 - A1 Checkbox/Radio: Checkbox(label, checked, onChange); Radio group as one component.
 - A2 Slider: Slider(label, min, max, step, value, onChange) bound to a $variable.
 - A3 NumberInput: numeric Input; binds $value.
@@ -38,6 +39,7 @@ validation checks (test/lint/typecheck/e2e) are independent, so they fan out in 
 - A5 DatePicker: date-validated Input adapter (native input type=date if clean in stateless render).
 
 ### Wave B — P4 display/polish (Refs #1320)
+
 - B1 Badge/Pill: Badge(text, variant) — inline pill, Button-like variant enum.
 - B2 Icon: Icon(name) — curated set (check, close, info, warn, error, chevron); no arbitrary fetches.
 - B3 Avatar: Avatar(src, initials, size) — src from FileStorageService URL; initials fallback.
@@ -45,14 +47,17 @@ validation checks (test/lint/typecheck/e2e) are independent, so they fan out in 
 - B5 List: List(items, ordered) — bullet/numbered list; plain strings or Text children.
 
 ### Wave C — P5 imagery (Refs #1320)
+
 - C1 Image: Image(src, alt, width, height, fit).
 - C2 background-image on Card: extend CardSchema with a validated backgroundImage prop.
 
 ### Wave D — P6 graphics harness
+
 - D1 Canvas2D/SVG declarative primitives: scope-gated to what the validation funnel safely renders.
 - D2 Lottie/regl: deferred unless D1 reveals a clean path; document as deferred.
 
 ### Validation checks (each its own task, parallel)
+
 After all component PRs merge, one task per check — these are independent and fan out in parallel:
 
 - **fe:test** — `devbox run fe:test`, full suite, report pass/fail counts.
@@ -63,6 +68,7 @@ After all component PRs merge, one task per check — these are independent and 
 - **lint:everything** — `devbox run lint:everything`, last gate before push.
 
 ### Screenshot + PR body
+
 Capture one screenshot per component (Checkbox, Radio, Slider, NumberInput, Textarea, DatePicker,
 Badge, Icon, Avatar, Skeleton, List, Image, Sketch) against the running server or Storybook, then
 assemble the final PR description with an embedded screenshot per component. Required by the user;

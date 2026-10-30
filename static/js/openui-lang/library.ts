@@ -1282,6 +1282,50 @@ function buildLibrary(): Library {
  });
 
  /**
+  * DatePicker renders a native date input bound to a $variable. The value
+  * stays on the bound $variable — @Set($var, $value) with the new ISO date
+  * string (yyyy-mm-dd) flows out on commit (the `change` event) so state
+  * survives reloads. `value` is reactive so @Set/@Reset flows back into the
+  * field. Date validity is enforced natively by the browser's `type=date`
+  * input — no custom validation.
+  * Positional order: label, value, onChange.
+  */
+ const DatePickerSchema = z.object({
+  label: z.string().optional(),
+  value: z.string().optional(),
+  onChange: action().optional(),
+ });
+ markReactive(DatePickerSchema.shape.value);
+ const DatePicker = defineComponent({
+  name: 'DatePicker',
+  props: DatePickerSchema,
+  description:
+   'A date picker bound to a $variable, committing on change. `label` is the display label; `value` the current date as an ISO string (yyyy-mm-dd, bind a $variable); `onChange` the action that runs when a date is picked — use @Set($var, $value) where $value is the new ISO date string. A missing or invalid value renders the empty (unset) picker. Example: `DatePicker("Due date", $due, @Set($due, $value))`.',
+  component: (({ label, value, onChange }) => {
+   const valueStr = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+   const fire = (event: Event) => {
+    const input = event.currentTarget instanceof HTMLInputElement ? event.currentTarget : null;
+    if (!input) return;
+    if (input.value === '') {
+     // Preserve-empty: no dispatch. The re-render from the reactive
+     // $variable restores the committed value.
+     return;
+    }
+    dispatchArtifactAction(event, { plan: asPlan(onChange), value: input.value });
+   };
+   return html`<label class="wiki-page-app-field wiki-page-app-datepicker-field">
+      ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+      <input
+        class="wiki-page-app-datepicker"
+        type="date"
+        .value="${valueStr}"
+        @change=${fire}
+      />
+    </label>`;
+  }) as WikiRenderer,
+ });
+
+ /**
   * Tabs renders a tab bar that shows one panel at a time. `labels` is the
   * array of tab headers (positional first), `children` the matching array of
   * content panels. Bind `$tab = 0` to persist the active tab across reloads:
@@ -1368,6 +1412,7 @@ function buildLibrary(): Library {
   Slider.ref,
   NumberInput.ref,
   Textarea.ref,
+  DatePicker.ref,
   Drawer.ref,
   Dialog.ref,
   Toast.ref,
@@ -1420,6 +1465,7 @@ function buildLibrary(): Library {
    Slider,
    NumberInput,
    Textarea,
+   DatePicker,
    Drawer,
    Dialog,
    Toast,
