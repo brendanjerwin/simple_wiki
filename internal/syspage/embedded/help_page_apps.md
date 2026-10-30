@@ -221,7 +221,7 @@ root = Card("Routine", Stack([
 ]))
 ```
 
-## Display: Badge, Icon
+## Display: `Badge`, `Icon`
 
 `Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` sets emphasis: `"primary"` (default, accent-tinted), `"secondary"` (muted bordered chip), `"ghost"` (transparent), `"danger"` (error-tinted), or `"accent"` (accent-tinted with a matching outline).
 

@@ -212,7 +212,7 @@ test.describe.serial('Icon component', () => {
     'chevron-right', 'arrow-left', 'arrow-right', 'play', 'pause',
     'calendar', 'clock', 'user', 'image',
    ];
-   // 14 top-level icons in program order, plus `check` again inside the
+   // 15 top-level icons in program order, plus `check` again inside the
    // composed Stack row.
    expect(icons.length).toBe(expectedIcons.length + 1);
    expect(icons.slice(0, expectedIcons.length).map((i) => i.icon)).toEqual(expectedIcons);
