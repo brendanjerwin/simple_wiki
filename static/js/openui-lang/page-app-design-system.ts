@@ -809,6 +809,66 @@ export const wikiPageAppDesignSystem = css`
     display: block;
   }
 
+  /* ── Avatar ──────────────────────────────────────────────────────── */
+  /* Circular avatar with an initials/glyph fallback underneath (library
+     Avatar). The accent pair is the same contrast-checked pair Badge
+     primary uses — no new tokens. A failed image load stamps data-broken
+     on the wrapper, which hides the <img> and reveals the fallback. */
+  .wiki-page-app-avatar {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    overflow: hidden;
+    border-radius: 50%;
+    vertical-align: middle;
+  }
+  .wiki-page-app-avatar[data-size='sm'] {
+    width: 24px;
+    height: 24px;
+  }
+  .wiki-page-app-avatar[data-size='md'] {
+    width: 32px;
+    height: 32px;
+  }
+  .wiki-page-app-avatar[data-size='lg'] {
+    width: 48px;
+    height: 48px;
+  }
+  .wiki-page-app-avatar-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--color-accent-bg, #e9f2ff);
+    color: var(--color-accent-text, #0d5dd7);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .wiki-page-app-avatar[data-size='sm'] .wiki-page-app-avatar-fallback {
+    font-size: 0.55rem;
+  }
+  .wiki-page-app-avatar[data-size='lg'] .wiki-page-app-avatar-fallback {
+    font-size: 1.05rem;
+  }
+  .wiki-page-app-avatar-fallback svg {
+    width: 55%;
+    height: 55%;
+    display: block;
+  }
+  .wiki-page-app-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .wiki-page-app-avatar[data-broken] .wiki-page-app-avatar-img {
+    display: none;
+  }
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;

@@ -814,6 +814,62 @@ function buildLibrary(): Library {
   }) as WikiRenderer,
  });
 
+
+ /**
+  * Avatar renders a circular avatar image with an initials fallback
+  * (issue #1320, PLAN-1302 B3): `src` accepts an uploaded-file
+  * (`FileStorageService` `/uploads/...`) URL or an http(s) image URL;
+  * unsafe scheme literals and non-strings render the fallback instead of
+  * the image. When `src` is absent or the image fails to load the browser
+  * fires `error` and the wrapper gets `data-broken`, revealing the
+  * `initials` fallback (blank initials render the curated `user` glyph).
+  * Non-interactive — purely visual, dispatches no action, no children.
+  */
+ const Avatar = defineComponent({
+  name: 'Avatar',
+  props: z.object({
+   src: z.string().optional(),
+   initials: z.string().optional(),
+   size: z.enum(['sm', 'md', 'lg']).optional(),
+  }),
+  description:
+   'A circular avatar image. `src` accepts an uploaded-file URL (a FileStorageService `/uploads/...` link) or an http(s) image URL; when `src` is absent, unsafe, or fails to load, the `initials` fallback shows instead (blank initials fall back to a person glyph). `size` sets the diameter: "md" (32px, default), "sm" (24px), or "lg" (48px). Non-interactive.',
+  component: (({ src, initials, size }) => {
+   // An agent-authored program is untrusted data: only http(s) URLs and
+   // same-origin relative paths (the FileStorageService `/uploads/...`
+   // shape) become an `<img>` fetch. Anything else falls back outright.
+   const srcStr = typeof src === 'string' ? src : '';
+   const srcIsSafe = /^https?:\/\//i.test(srcStr) || (srcStr.startsWith('/') && !srcStr.startsWith('//'));
+   const initialsText =
+    typeof initials === 'string' ? initials.trim().slice(0, 2).toUpperCase() : '';
+   // A failed `<img>` load fires `error`: stamp the wrapper so CSS hides
+   // the image and reveals the un-scaled initials underneath.
+   const markBroken = (event: Event) => {
+    const image = event.currentTarget;
+    if (image instanceof HTMLElement) image.parentElement?.setAttribute('data-broken', 'true');
+   };
+   const fallback = initialsText !== ''
+    ? html`<span class="wiki-page-app-avatar-fallback">${initialsText}</span>`
+    : html`<span class="wiki-page-app-avatar-fallback"
+       aria-hidden="true"
+      ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_LIBRARY.user}</svg></span>`;
+   return html`<span
+    class="wiki-page-app-avatar"
+    data-size=${size === 'sm' || size === 'lg' ? size : 'md'}
+    role="img"
+    aria-label=${initialsText || 'avatar'}
+   >${fallback}${srcStr !== '' && srcIsSafe
+    ? html`<img
+       class="wiki-page-app-avatar-img"
+       src=${srcStr}
+       alt=""
+       loading="lazy"
+       @error=${markBroken}
+      />`
+    : nothing}</span>`;
+  }) as WikiRenderer,
+ });
+
  /**
   * Tooltip wraps any children with a hover tooltip showing `text`.
   * Uses a CSS ::after pseudo-element driven by data-tooltip — no per-element
@@ -1319,6 +1375,7 @@ function buildLibrary(): Library {
   Tooltip.ref,
   Badge.ref,
   Icon.ref,
+  Avatar.ref,
  ]);
 
  /**
@@ -1370,6 +1427,7 @@ function buildLibrary(): Library {
    Tooltip,
    Badge,
    Icon,
+   Avatar,
   ],
   actions: [Beep],
   root: WIKI_ROOT_COMPONENT,

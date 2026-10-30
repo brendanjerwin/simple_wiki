@@ -762,3 +762,97 @@ describe('Icon renderer', () => {
   expect(rendered.errors).to.not.deep.equal([]);
  });
 });
+
+describe('Avatar renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ function avatarRuntime() {
+  return generateWikiPageAppRenderer(null, noopActions);
+ }
+
+ async function renderAvatarProgram(program: string): Promise<HTMLElement> {
+  const rendered = avatarRuntime().render(program, {});
+  expect(rendered.errors).to.deep.equal([]);
+  return fixture<HTMLElement>(rendered.template as never);
+ }
+
+ it('should render the image and keep the initials fallback for a src avatar', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar("/uploads/sha256-AAAA", "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar');
+  expect(avatar).not.to.equal(null);
+  expect(avatar?.getAttribute('data-size')).to.equal('md');
+  const img = avatar?.querySelector('img.wiki-page-app-avatar-img');
+  expect(img?.getAttribute('src')).to.equal('/uploads/sha256-AAAA');
+  const fallback = avatar?.querySelector('.wiki-page-app-avatar-fallback');
+  expect(fallback?.textContent).to.include('BJ');
+  expect(avatar?.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should render no image when only initials are present', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar(undefined, "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar');
+  expect(avatar).not.to.equal(null);
+  expect(avatar?.querySelector('img')).to.equal(null);
+  expect(avatar?.textContent).to.include('BJ');
+  expect(avatar?.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should trim, truncate to two glyphs, and uppercase the initials', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar(undefined, " brendan midford ")',
+  );
+  const fallback = el.querySelector('.wiki-page-app-avatar-fallback');
+  expect(fallback?.textContent).to.equal('BR');
+ });
+
+ it('should render the curated person glyph when neither src nor initials is present', async () => {
+  const el = await renderAvatarProgram('root = Card("T", [a])\na = Avatar()');
+  const avatar = el.querySelector('.wiki-page-app-avatar');
+  expect(avatar).not.to.equal(null);
+  expect(avatar?.querySelector('img')).to.equal(null);
+  expect(avatar?.querySelectorAll('svg').length).to.be.greaterThan(0);
+ });
+
+ it('should never fetch unsafe non-http src values (javascript:/data: fallbacks)', async () => {
+  for (const unsafe of ['javascript:alert(1)', 'data:text/html,<p>hi</p>', '//evil.com/a.png']) {
+   const el = await renderAvatarProgram(
+    `root = Card("T", [a])\na = Avatar("${unsafe}", "BJ")`,
+   );
+   const avatar = el.querySelector('.wiki-page-app-avatar');
+   expect(avatar?.querySelector('img'), unsafe).to.equal(null);
+   expect(avatar?.textContent, unsafe).to.include('BJ');
+  }
+ });
+
+ it('should mark the wrapper data-broken when the image errors out', async () => {
+  const el = await renderAvatarProgram(
+   'root = Card("T", [a])\na = Avatar("/uploads/sha256-missing", "BJ")',
+  );
+  const avatar = el.querySelector('.wiki-page-app-avatar') as HTMLElement | null;
+  expect(avatar).not.to.equal(null);
+  expect(avatar!.hasAttribute('data-broken')).to.equal(false);
+  const img = avatar!.querySelector('img.wiki-page-app-avatar-img');
+  expect(img).not.to.equal(null);
+  img!.dispatchEvent(new Event('error'));
+  expect(avatar!.hasAttribute('data-broken')).to.equal(true);
+ });
+
+ it('should set data-size for each size token', async () => {
+  for (const size of ['sm', 'md', 'lg']) {
+   const el = await renderAvatarProgram(
+    `root = Card("T", [a])\na = Avatar("/uploads/x", "BJ", "${size}")`,
+   );
+   const avatar = el.querySelector('.wiki-page-app-avatar');
+   expect(avatar?.getAttribute('data-size'), size).to.equal(size);
+  }
+ });
+});

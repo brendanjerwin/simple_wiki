@@ -378,6 +378,57 @@ describe('when parsing Icon', () => {
  });
 });
 
+describe('when parsing Avatar', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Avatar with a src and leave initials/size unset', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Avatar("/uploads/sha256-AAAA")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const avatar = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(avatar.typeName).to.equal('Avatar');
+  expect(avatar.props['src']).to.equal('/uploads/sha256-AAAA');
+  expect(avatar.props['initials']).to.satisfy((v: unknown) => v === undefined || v === null);
+  expect(avatar.props['size']).to.satisfy((v: unknown) => v === undefined || v === null);
+ });
+
+ it('should parse an initials-only Avatar via the second positional arg', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Avatar(undefined, "BJ")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const avatar = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(avatar.typeName).to.equal('Avatar');
+  // The parser maps the `undefined` positional literal to null/undefined;
+  // either is valid (no src means the initials fallback owns the avatar).
+  expect(avatar.props['src'] == null).to.equal(true);
+  expect(avatar.props['initials']).to.equal('BJ');
+ });
+
+ it('should accept every size token as the third positional arg', () => {
+  for (const size of ['sm', 'md', 'lg']) {
+   const result = parser.parse(`root = Card("t", [a])\na = Avatar("/uploads/x", "BJ", "${size}")`);
+   expect(result.meta.errors, size).to.deep.equal([]);
+   const avatar = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(avatar.typeName, size).to.equal('Avatar');
+   expect(avatar.props['size'], size).to.equal(size);
+  }
+ });
+
+ it('should reject an unknown Avatar size at parse time', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Avatar("/uploads/x", "BJ", "huge")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should reject a non-string Avatar src', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Avatar(4)');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+});
+
 describe('ICON_LIBRARY', () => {
  it('should cover exactly the curated icon names', () => {
   expect([...Object.keys(ICON_LIBRARY)].sort()).to.deep.equal([...ICON_NAMES].sort());
