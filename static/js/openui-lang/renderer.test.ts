@@ -410,6 +410,67 @@ describe('renderer component output', () => {
   expect(ta.rows).to.equal(4);
  });
 
+
+ it('should render DatePicker programs into a native date input with the hydrated ISO value', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [d])\nd = DatePicker("Due date", $due)\n$due = "2026-01-15"',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const picker = el.querySelector('input.wiki-page-app-datepicker') as HTMLInputElement;
+  expect(picker).to.exist;
+  expect(picker.type).to.equal('date');
+  expect(picker.value).to.equal('2026-01-15', 'DatePicker must render the hydrated $variable ISO value, not a reactive marker');
+ });
+
+ it('should dispatch the committed ISO string when DatePicker commits', async () => {
+  const dispatched: PageAppActionEventDetail[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [d])\nd = DatePicker("Due date", $due, @Set($due, $value))\n$due = ""',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const picker = el.querySelector('input.wiki-page-app-datepicker') as HTMLInputElement;
+  picker.value = '2026-03-02';
+  picker.dispatchEvent(new Event('change'));
+  expect(dispatched.length).to.equal(1);
+  const detail = dispatched[0] as PageAppActionEventDetail;
+  expect(detail.value, 'DatePicker must dispatch the committed ISO date string').to.equal('2026-03-02');
+ });
+
+ it('should render an empty picker when the value is missing or invalid', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", Stack([d1, d2]))\nd1 = DatePicker("Missing", $a)\nd2 = DatePicker("Invalid", "not-a-date")\n$a = ""',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const pickers = el.querySelectorAll('input.wiki-page-app-datepicker');
+  expect(pickers.length).to.equal(2);
+  expect((pickers[0] as HTMLInputElement).value).to.equal('');
+  expect((pickers[1] as HTMLInputElement).value).to.equal('');
+ });
+
+ it('should not dispatch when the picker is committed empty', async () => {
+  const dispatched: PageAppActionEventDetail[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [d])\nd = DatePicker("Due date", $due, @Set($due, $value))\n$due = "2026-01-15"',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const picker = el.querySelector('input.wiki-page-app-datepicker') as HTMLInputElement;
+  picker.value = '';
+  picker.dispatchEvent(new Event('change'));
+  expect(dispatched.length, 'empty commit must not dispatch').to.equal(0);
+ });
+
 });
 
 describe('renderer layout components', () => {

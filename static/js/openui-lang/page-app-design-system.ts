@@ -598,6 +598,22 @@ export const wikiPageAppDesignSystem = css`
    border-color: var(--color-border-focus, #4a90d9);
    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus, #4a90d9) 33%, transparent);
  }
+ .wiki-page-app-datepicker {
+   box-sizing: border-box;
+   width: 100%;
+   max-width: 200px;
+   padding: 8px 12px;
+   border: 1px solid var(--color-border-default, #dddddd);
+   border-radius: 8px;
+   background: var(--color-surface-primary, #ffffff);
+   color: var(--color-text-primary, #333333);
+   font-size: 0.9rem;
+ }
+ .wiki-page-app-datepicker:focus {
+   outline: none;
+   border-color: var(--color-border-focus, #4a90d9);
+   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus, #4a90d9) 33%, transparent);
+ }
   .wiki-page-app-radio-group {
     display: flex;
     flex-direction: column;

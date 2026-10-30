@@ -912,6 +912,47 @@ describe('when parsing Textarea', () => {
  });
 });
 
+describe('when parsing DatePicker', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse DatePicker with label, value, and onChange', () => {
+  const result = parser.parse(
+   '$due = "2026-01-15"\ndue = DatePicker("Due date", $due, @Set($due, $value))\nroot = Card("t", [due])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const picker = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(picker.typeName).to.equal('DatePicker');
+  expect(picker.props['label']).to.equal('Due date');
+  expect(picker.props['value']).to.deep.include({ k: 'StateRef', n: '$due' });
+ });
+
+ it('should keep DatePicker reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$due = "2026-01-15"\ndue = DatePicker("Due date", $due)\nroot = Card("t", [due])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const picker = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(picker.partial).to.equal(false);
+ });
+
+ it('should parse DatePicker without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$due = "2026-01-15"\ndue = DatePicker(undefined, $due, @Set($due, $value))\nroot = Card("t", [due])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const picker = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof picker.props['label'] === 'string' && picker.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include DatePicker in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('DatePicker');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 
