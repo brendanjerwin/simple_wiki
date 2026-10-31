@@ -680,7 +680,7 @@ describe('when parsing Card backgroundImage', () => {
   expect(result.meta.errors).to.deep.equal([]);
   // Explicit undefined positionals arrive as null (parser substitutes before
   // schema validation treats null as absent); safeBackgroundImageUrl drops both.
-  expect(result.root?.props['backgroundImage'] ?? null).to.equal(null);
+  expect(result.root?.props['backgroundImage']).to.equal(null);
  });
 
  it('should reject a non-string backgroundImage', () => {
