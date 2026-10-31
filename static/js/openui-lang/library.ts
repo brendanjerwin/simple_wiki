@@ -362,6 +362,26 @@ function cardBackgroundImageStyle(safeUrl: string): string {
 }
 
 /**
+ * Shared img-error handler: stamp the wrapper element `data-broken="true"` so
+ * CSS can hide the broken `<img>` and reveal a fallback. Used by both Avatar
+ * and Image components which share the same stamp-or-clear contract.
+ */
+function markImgBroken(event: Event): void {
+ const image = event.currentTarget;
+ if (image instanceof HTMLElement) image.parentElement?.setAttribute('data-broken', 'true');
+}
+
+/**
+ * Companion to `markImgBroken`: clears the `data-broken` stamp on `@load` so
+ * a re-render with a repaired `src` shows the image instead of latching the
+ * stale fallback.
+ */
+function clearImgBroken(event: Event): void {
+ const image = event.currentTarget;
+ if (image instanceof HTMLElement) image.parentElement?.removeAttribute('data-broken');
+}
+
+/**
  * Build the wiki library. Slot unions need every component's `.ref`, and
  * each component's own schema references those unions — refs are assembled
  * in dependency order, the full children union closes over all components
@@ -901,14 +921,6 @@ function buildLibrary(): Library {
    // the image and reveals the un-scaled initials underneath. `@load`
    // clears the stamp again so a later re-render with a repaired `src`
    // shows the image instead of latching on the stale fallback forever.
-   const markBroken = (event: Event) => {
-    const image = event.currentTarget;
-    if (image instanceof HTMLElement) image.parentElement?.setAttribute('data-broken', 'true');
-   };
-   const clearBroken = (event: Event) => {
-    const image = event.currentTarget;
-    if (image instanceof HTMLElement) image.parentElement?.removeAttribute('data-broken');
-   };
    const fallback = initialsText !== ''
     ? html`<span class="wiki-page-app-avatar-fallback">${initialsText}</span>`
     : html`<span class="wiki-page-app-avatar-fallback"
@@ -925,8 +937,8 @@ function buildLibrary(): Library {
        src=${srcStr}
        alt=""
        loading="lazy"
-       @error=${markBroken}
-      @load=${clearBroken}
+       @error=${markImgBroken}
+      @load=${clearImgBroken}
       />`
      : nothing}</span>`;
   }) as WikiRenderer,
@@ -1042,19 +1054,6 @@ function buildLibrary(): Library {
    const widthPx = typeof width === 'number' ? width : undefined;
    const heightPx = typeof height === 'number' ? height : undefined;
    const fitValue = fit === 'contain' || fit === 'fill' ? fit : 'cover';
-   // A failed `<img>` load fires `error`: stamp the wrapper so CSS hides
-   // the image and reveals the glyph fallback. `@load` clears the stamp
-   // again so a later re-render with a repaired `src` shows the image
-   // instead of latching on the stale fallback forever (same contract as
-   // Avatar's stamp-or-clear handlers).
-   const markBroken = (event: Event) => {
-    const image = event.currentTarget;
-    if (image instanceof HTMLElement) image.parentElement?.setAttribute('data-broken', 'true');
-   };
-   const clearBroken = (event: Event) => {
-    const image = event.currentTarget;
-    if (image instanceof HTMLElement) image.parentElement?.removeAttribute('data-broken');
-   };
    const fallback = html`<span
      class="wiki-page-app-image-fallback"
      aria-hidden="true"
@@ -1074,8 +1073,8 @@ function buildLibrary(): Library {
         width=${widthPx != null ? widthPx : nothing}
         height=${heightPx != null ? heightPx : nothing}
         loading="lazy"
-        @error=${markBroken}
-       @load=${clearBroken}
+        @error=${markImgBroken}
+       @load=${clearImgBroken}
        />`
      : nothing}</span>`;
   }) as WikiRenderer,
