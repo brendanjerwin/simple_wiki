@@ -1,69 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
-import { LitElement, type TemplateResult, html } from 'lit';
-import { property } from 'lit/decorators.js';
-import { createParser, type Parser } from '@openuidev/lang-core';
-import { renderNode } from './renderer.js';
-import { wikiLibrary, WIKI_ROOT_COMPONENT } from './library.js';
-import { wikiPageAppDesignSystem } from './page-app-design-system.js';
+import type { TemplateResult } from 'lit';
+import { html } from 'lit';
+import { renderWikiProgram } from './page-app-story-wrap.js';
 
 /**
  * Stories for the wiki-core@3 layout vocabulary: Grid, Span, Divider,
  * SectionHeader, and Card variants. Each story parses a REAL OpenUI Lang
  * program through the actual wiki library and renders the resulting Lit
- * template — mock data, never mock markup.
+ * template — mock data, never mock markup. The parse/render/wrapper
+ * machinery is shared (page-app-story-wrap.ts).
  */
-
-let parser: Parser;
-try {
- parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
-} catch {
- // parse errors surface per-story below; no throw at meta time
-}
-
-/**
- * The design-system CSS lives in <wiki-page-app-host>'s shadow root in the real
- * app. Stories render the library's raw templates, so this wrapper element
- * renders the program INSIDE its own shadow root (not slotted — adopted
- * stylesheets don't reach slotted light-DOM children).
- */
-class PageAppStoryWrap extends LitElement {
- @property({ type: String }) declare program: string;
-
- static override styles = [wikiPageAppDesignSystem];
-
- constructor() {
-  super();
-  this.program = '';
- }
-
- static shadowTemplate(program: string): TemplateResult {
-  let inner: TemplateResult;
-  const result = parser.parse(program);
-  if (result.meta.errors.length > 0 || !result.root) {
-   inner = html`<pre style="color: red">parse errors: ${JSON.stringify(result.meta.errors, null, 1)}</pre>`;
-  } else {
-   inner = renderNode(result.root) as TemplateResult;
-  }
-  return html`${inner}`;
- }
-
- override render(): TemplateResult {
-  return PageAppStoryWrap.shadowTemplate(this.program);
- }
-}
-customElements.define('wiki-page-app-story-wrap', PageAppStoryWrap);
-
-declare global {
- interface HTMLElementTagNameMap {
-  'wiki-page-app-story-wrap': PageAppStoryWrap;
- }
-}
 
 /** Parse a program and render its root inside the styled wrapper's shadow root. */
 function render(program: string): TemplateResult {
- return html`<wiki-page-app-story-wrap
-   .program=${program}
- ></wiki-page-app-story-wrap>`;
+ return renderWikiProgram(program);
 }
 const GRID_TWO_UP = 'root = Card("Per-leg holds", Grid([a, b], 2, "lg"))\na = Card("Left leg", [t])\nb = Card("Right leg", [t])\nt = Text("hold: 0:30")';
 
@@ -195,6 +145,21 @@ export const ParseErrorTransparency: Story = {
  parameters: {
   docs: {
    description: { story: 'Structured error surfacing: invalid cols and unknown components come back as parse errors, shown here instead of a silent blank.' },
+  },
+ },
+};
+
+const BACKDROP_PROGRAMS: Record<string, string> = {
+ 'Upload backdrop': 'root = Card("Session log", [t], "accent", "/uploads/example-hash?filename=canvas.png")\nt = Text("cover-fit backdrop with a theme-tinted contrast scrim")',
+ 'Https backdrop': 'root = Card("Travel log", [t], "outlined", "https://picsum.photos/seed/wiki-core-3/640/360")\nt = Text("remote cover-fit backdrop")',
+};
+
+export const CardBackdrops: Story = {
+ name: 'Card backdrop images',
+ render: () => html`<div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start">${Object.values(BACKDROP_PROGRAMS).map((program) => html`<div style="max-width:360px">${render(program)}</div>`)}</div>`,
+ parameters: {
+  docs: {
+   description: { story: 'Card backgroundImage as the fourth positional arg: a wiki upload URL (/uploads/<hash>?filename=…) or a fully-qualified https:// URL, rendered cover-fit under an automatic theme-tinted contrast scrim. Unsafe schemes (http://, javascript:, data:, protocol-relative) are silently dropped.' },
   },
  },
 };
