@@ -62,6 +62,14 @@ export const wikiPageAppDesignSystem = css`
    border: none;
    background: linear-gradient(135deg, var(--color-accent-bg, #e9f2ff), transparent 60%), var(--color-surface-elevated, #ffffff);
  }
+  /* Backdrop-image cards: the renderer composes background-image from the
+     validated URL (https or /uploads/ only) plus this theme-tinted scrim layer
+     so text stays readable over the photo in both light and dark themes. */
+  .wiki-page-app-card[data-bg-image] {
+    --page-app-card-backdrop-scrim: color-mix(in srgb, var(--color-surface-elevated, #ffffff) 62%, transparent);
+    background-size: cover;
+    background-position: center;
+  }
 
   .wiki-page-app-stack {
     display: flex;

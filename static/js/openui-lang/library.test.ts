@@ -637,6 +637,66 @@ describe('when parsing Card variants', () => {
   expect(result.meta.errors.length).to.be.greaterThan(0);
  });
 });
+describe('when parsing Card backgroundImage', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should keep positional Card("title", children) binding unchanged when backgroundImage is absent', () => {
+  const result = parser.parse('root = Card("t", [x])\nx = Text("hi")');
+  expect(result.meta.errors).to.deep.equal([]);
+  expect(result.root?.props['backgroundImage']).to.equal(undefined);
+ });
+
+ it('should bind backgroundImage as the fourth positional arg after variant', () => {
+  const result = parser.parse(
+   'root = Card("t", [x], undefined, "/uploads/sha256-abc123?filename=bg.jpg")\nx = Text("hi")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  expect(result.root?.props['backgroundImage']).to.equal('/uploads/sha256-abc123?filename=bg.jpg');
+ });
+
+ it('should bind backgroundImage after variant as the third positional arg', () => {
+  const result = parser.parse(
+   'root = Card("t", [x], "elevated", "https://example.com/bg.webp")\nx = Text("hi")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  expect(result.root?.props['variant']).to.equal('elevated');
+  expect(result.root?.props['backgroundImage']).to.equal('https://example.com/bg.webp');
+ });
+
+ it('should accept a FileStorageService uploads URL', () => {
+  const result = parser.parse(
+   'root = Card("t", [x], undefined, "/uploads/sha256-CU7VONBJPNC6XSXU2I3QT2WDP2ASRMHSEKJZPQEV4DI2ML6IXJBA====?filename=photo.png")\nx = Text("hi")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  expect(result.root?.props['backgroundImage']).to.contain('/uploads/sha256-');
+ });
+
+ it('should skip an undefined backgroundImage cleanly', () => {
+  const result = parser.parse('root = Card("t", [x], undefined, undefined)\nx = Text("hi")');
+  expect(result.meta.errors).to.deep.equal([]);
+  // Explicit undefined positionals arrive as null (parser substitutes before
+  // schema validation treats null as absent); safeBackgroundImageUrl drops both.
+  expect(result.root?.props['backgroundImage'] ?? null).to.equal(null);
+ });
+
+ it('should reject a non-string backgroundImage', () => {
+  const result = parser.parse('root = Card("t", [x], undefined, 42)\nx = Text("hi")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should bind variant as the third positional arg when backgroundImage is absent', () => {
+  const result = parser.parse('root = Card("t", [x], "filled")\nx = Text("hi")');
+  expect(result.meta.errors).to.deep.equal([]);
+  expect(result.root?.props['variant']).to.equal('filled');
+  expect(result.root?.props['backgroundImage']).to.equal(undefined);
+ });
+});
+
 
 
 describe('wiki library parsing', () => {

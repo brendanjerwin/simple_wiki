@@ -17,6 +17,7 @@ import {
 } from './renderer.js';
 import {
  ICON_NAMES,
+ safeBackgroundImageUrl,
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
 } from './library.js';
@@ -206,6 +207,57 @@ describe('renderer component output', () => {
   const title = el.querySelector('p.wiki-page-app-text[data-variant="title"]');
   expect(title).to.exist;
   expect(title?.textContent).to.equal('hello');
+ });
+ describe('when rendering Card background images', () => {
+  it('should emit a background-image style for an https URL', async () => {
+   const rendered = runtime.render(
+    'root = Card("T", [t], undefined, "https://example.com/bg.webp")\nt = Text("hi")',
+    {},
+   );
+   expect(rendered.errors).to.deep.equal([]);
+   // Card is the program ROOT: fixture returns the card element itself, and
+   // querySelector does not match self — assert on the root directly.
+   const card = (await fixture<HTMLElement>(rendered.template as never)) as HTMLElement;
+   expect(card.classList.contains('wiki-page-app-card')).to.equal(true);
+   expect(card.getAttribute('style')).to.include('background-image');
+   expect(card.getAttribute('style')).to.include('url("https://example.com/bg.webp")');
+   expect(card.getAttribute('data-bg-image')).to.equal('true');
+  });
+
+  it('should emit a background-image style for a FileStorageService uploads URL', async () => {
+   const rendered = runtime.render(
+    'root = Card("T", [t], undefined, "/uploads/sha256-abc123?filename=bg.jpg")\nt = Text("hi")',
+    {},
+   );
+   expect(rendered.errors).to.deep.equal([]);
+   const card = (await fixture<HTMLElement>(rendered.template as never)) as HTMLElement;
+   expect(card.classList.contains('wiki-page-app-card')).to.equal(true);
+   expect(card.getAttribute('style')).to.include('url("/uploads/sha256-abc123?filename=bg.jpg")');
+  });
+
+  it('should drop unsafe scheme URLs instead of emitting them into CSS', async () => {
+   for (const unsafe of [
+    'javascript:alert(1)',
+    'data:image/png;base64,AAAA',
+    '//evil.example.com/bg.png',
+    'ftp://example.com/bg.png',
+   ]) {
+    const rendered = runtime.render(
+     `root = Card("T", [t], undefined, "${unsafe}")\nt = Text("hi")`,
+     {},
+    );
+    const card = (await fixture<HTMLElement>(rendered.template as never)) as HTMLElement;
+    expect(card.getAttribute('style'), unsafe).to.equal(null);
+    expect(card.getAttribute('data-bg-image'), unsafe).to.equal(null);
+   }
+  });
+
+  it('should render no background-image style when backgroundImage is unset', async () => {
+   const rendered = runtime.render('root = Card("T", [t])\nt = Text("hi")', {});
+   const card = (await fixture<HTMLElement>(rendered.template as never)) as HTMLElement;
+   expect(card.getAttribute('style')).to.equal(null);
+   expect(card.getAttribute('data-bg-image')).to.equal(null);
+  });
  });
 
  it('should render Progress with aria values and label', async () => {
@@ -985,6 +1037,27 @@ describe('Skeleton renderer', () => {
  });
 });
 
+describe('safeBackgroundImageUrl', () => {
+ it('should allow https URLs and wiki uploads URLs', () => {
+  expect(safeBackgroundImageUrl('https://example.com/bg.webp')).to.equal('https://example.com/bg.webp');
+  expect(safeBackgroundImageUrl('/uploads/sha256-abc123?filename=photo.png')).to.equal('/uploads/sha256-abc123?filename=photo.png');
+ });
+
+ it('should reject non-string, empty, and unsafe values', () => {
+  for (const unsafe of [
+   undefined,
+   42,
+   '',
+   'javascript:alert(1)',
+   'data:image/png;base64,AAAA',
+   '//evil.example.com/bg.png',
+   'http://insecure.example.com/bg.png',
+   'https://example.com/bg.png"); color: red; background-image:url("https://evil.test',
+  ]) {
+   expect(safeBackgroundImageUrl(unsafe), String(unsafe)).to.equal(undefined);
+  }
+ });
+});
 describe('List renderer', () => {
  const noopActions: PageAppActionContext = {
   setState() { },

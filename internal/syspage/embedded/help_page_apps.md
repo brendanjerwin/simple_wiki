@@ -335,7 +335,9 @@ root = Card("Routine", Stack([
 
 **Accessibility**: the `title` attribute is also set, so keyboard users and screen readers get the tooltip text natively. The CSS bubble appears on mouse hover; `title` covers the keyboard/touch path.
 
-**Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. (Background-image hero cards are coming later; request via issue if blocked on them today.)
+**Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. Include `undefined` as the third arg when you want a backdrop without a variant: `Card("title", children, undefined, url)`.
+
+**Card background image** (fourth positional prop): `Card("title", children, "elevated", "https://example.com/hero.jpg")` or with a wiki-uploaded file: `Card("title", children, undefined, "/uploads/<hash>?filename=photo.png")` (the URL you get from the FileStorageService upload tool). The image renders as a cover-fit backdrop behind the card with an automatic theme-tinted contrast layer (light scrim in light theme, dark in dark) so text stays readable. Only fully-qualified `https://` URLs or wiki `/uploads/` URLs are accepted — `http://`, `javascript:`, `data:`, and protocol-relative (`//…`) URLs are silently dropped, so a domain-restricted hero photo should be uploaded to the wiki first.
 
 ## Standalone app mode & install (PWA)
 
