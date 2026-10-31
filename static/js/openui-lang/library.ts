@@ -317,25 +317,42 @@ export const ICON_LIBRARY: Record<IconName, SVGTemplateResult> = {
 };
 
 /**
- * Render-time allowlist for Card's `backgroundImage`: only fully-qualified
- * https URLs or the wiki FileStorageService upload surface (`/uploads/<hash>?...`)
- * are accepted, and the value must be a bare token (no quotes, parens,
- * backslashes, braces, semicolons, angle brackets, or whitespace) so it can be
+ * Scheme-level allowlist for wiki image URLs (single source of truth, shared
+ * by every `<img>`/CSS surface): only fully-qualified `https://` URLs or the
+ * wiki FileStorageService upload surface (`/uploads/<hash>?...`) are safe.
+ * `http://`, `javascript:`, `data:`, protocol-relative (`//…`), and anything
+ * else are rejected.
+ */
+export function isSafeImageUrl(value: unknown): boolean {
+ if (typeof value !== 'string') {
+  return false;
+ }
+ const candidate = value.trim();
+ if (candidate === '') {
+  return false;
+ }
+ if (!/^(?:https:\/\/|\/uploads\/)/i.test(candidate)) {
+  return false;
+ }
+ // Scheme-qualified so protocol-relative URLs fall through.
+ return true;
+}
+
+/**
+ * Render-time allowlist for Card's `backgroundImage`: `isSafeImageUrl` first,
+ * then a bare-token check — no quotes, parens, backslashes, braces,
+ * semicolons, angle brackets, or whitespace — so the value can be
  * interpolated into a CSS `url("...")` layer without breaking out of it.
  * Returns undefined for anything else; callers skip the backdrop styling.
  */
 export function safeBackgroundImageUrl(value: unknown): string | undefined {
- if (typeof value !== 'string') {
+ if (!isSafeImageUrl(value)) {
   return undefined;
  }
- const candidate = value.trim();
- if (candidate === '') {
+ const candidate = (value as string).trim();
+ if (!/^[^"'()\\<>{};\s]*$/.test(candidate)) {
   return undefined;
  }
- if (!/^(?:https:\/\/[^"'()\\<>{};\s]*|\/uploads\/[^"'()\\<>{};\s]*)$/i.test(candidate)) {
-  return undefined;
- }
- // Allowlisted by constructor; scheme-qualified so protocol-relative URLs fall through.
  return candidate;
 }
 
@@ -675,8 +692,8 @@ function buildLibrary(): Library {
   title: z.string().optional(),
   children: z.union([z.string(), childrenSlot()]),
   // Variant LAST in key order so positional Card("title", [...]) is untouched.
-  // backgroundImage binds AFTER variant (fourth positional); the `Image` hero
-  // component from PR6 imagery is still separately planned.
+  // backgroundImage binds AFTER variant (fourth positional); the `Image`
+  // component (PLAN-1320 imagery) renders uploads as standalone content.
   variant: z.enum(['default', 'elevated', 'outlined', 'filled', 'accent']).optional(),
   // Only accepted through the render-time allowlist (safeBackgroundImageUrl);
   // the parse layer type-checks strings, the renderer drops unsafe schemes so
@@ -926,25 +943,25 @@ function buildLibrary(): Library {
   * takes its place — leave it unset and the shimmer shows
   * unconditionally. aria-hidden: it is decoration, not content.
   */
-const SkeletonSchema = z.object({
- kind: z.enum(['text', 'title', 'card', 'circle']).optional(),
- loading: z.boolean().optional(),
-});
-markReactive(SkeletonSchema.shape.loading);
-const Skeleton = defineComponent({
- name: 'Skeleton',
- props: SkeletonSchema,
- description:
-  'A shimmering placeholder block for content still loading. `kind` sets the shape: "text" (default, a full-width line), "title" (a shorter block), "card" (a full-width rounded block), or "circle" (a 32px circular placeholder sized to match Avatar md). Optional second positional `loading`: bind a `$boolean` (Query-friendly) and the block disappears while it is false; leave it unset and the shimmer always shows. Pure CSS, stateless, non-interactive.',
- component: (({ kind, loading }) => {
-  if (loading === false) return html`${nothing}`;
-  return html`<span
+ const SkeletonSchema = z.object({
+  kind: z.enum(['text', 'title', 'card', 'circle']).optional(),
+  loading: z.boolean().optional(),
+ });
+ markReactive(SkeletonSchema.shape.loading);
+ const Skeleton = defineComponent({
+  name: 'Skeleton',
+  props: SkeletonSchema,
+  description:
+   'A shimmering placeholder block for content still loading. `kind` sets the shape: "text" (default, a full-width line), "title" (a shorter block), "card" (a full-width rounded block), or "circle" (a 32px circular placeholder sized to match Avatar md). Optional second positional `loading`: bind a `$boolean` (Query-friendly) and the block disappears while it is false; leave it unset and the shimmer always shows. Pure CSS, stateless, non-interactive.',
+  component: (({ kind, loading }) => {
+   if (loading === false) return html`${nothing}`;
+   return html`<span
    class="wiki-page-app-skeleton"
    data-kind=${kind === 'title' || kind === 'card' || kind === 'circle' ? kind : 'text'}
    aria-hidden="true"
   ></span>`;
- }) as WikiRenderer,
-});
+  }) as WikiRenderer,
+ });
 
  /**
   * List renders a bulleted or numbered list (issue #1320, PLAN-1320 B5):
@@ -955,34 +972,114 @@ const Skeleton = defineComponent({
   * dropped at render time (an agent-authored program is untrusted data).
   * Non-interactive — purely visual, dispatches no action.
   */
-const List = defineComponent({
- name: 'List',
- props: z.object({
-  items: z.array(z.union([z.string(), childrenSlot()])),
-  ordered: z.boolean().optional(),
- }),
- description:
-  'A bulleted or numbered list of items. First positional `items` is an array of plain strings (or Text children); the optional second positional `ordered` renders a numbered list when true (bulleted by default). Non-interactive.',
- component: (({ items, ordered }) => {
-  // An agent-authored program is untrusted data: plain strings render as
-  // the bullet text and rendered component children (typically Text)
-  // render inside the li. Anything else — raw scalars, nested arrays —
-  // is dropped at render time rather than interpolated.
-  const entries = (Array.isArray(items) ? items : []).filter(
-   (item): item is string | TemplateResult =>
-    typeof item === 'string'
-    // The `_$litType$` probe is Lit's private template marker (the same
-    // discriminator renderer.ts's isTemplate uses); lit's class form can't
-    // be shared here without an import cycle (renderer imports this file).
-    || (typeof item === 'object' && item !== null && '_$litType$' in item),
-  );
-  if (entries.length === 0) return html`${nothing}`;
-  const bullets = entries.map((item) => html`<li>${item}</li>`);
-  return ordered === true
-   ? html`<ol class="wiki-page-app-list">${bullets}</ol>`
-   : html`<ul class="wiki-page-app-list">${bullets}</ul>`;
-}) as WikiRenderer,
-});
+ const List = defineComponent({
+  name: 'List',
+  props: z.object({
+   items: z.array(z.union([z.string(), childrenSlot()])),
+   ordered: z.boolean().optional(),
+  }),
+  description:
+   'A bulleted or numbered list of items. First positional `items` is an array of plain strings (or Text children); the optional second positional `ordered` renders a numbered list when true (bulleted by default). Non-interactive.',
+  component: (({ items, ordered }) => {
+   // An agent-authored program is untrusted data: plain strings render as
+   // the bullet text and rendered component children (typically Text)
+   // render inside the li. Anything else — raw scalars, nested arrays —
+   // is dropped at render time rather than interpolated.
+   const entries = (Array.isArray(items) ? items : []).filter(
+    (item): item is string | TemplateResult =>
+     typeof item === 'string'
+     // The `_$litType$` probe is Lit's private template marker (the same
+     // discriminator renderer.ts's isTemplate uses); lit's class form can't
+     // be shared here without an import cycle (renderer imports this file).
+     || (typeof item === 'object' && item !== null && '_$litType$' in item),
+   );
+   if (entries.length === 0) return html`${nothing}`;
+   const bullets = entries.map((item) => html`<li>${item}</li>`);
+   return ordered === true
+    ? html`<ol class="wiki-page-app-list">${bullets}</ol>`
+    : html`<ul class="wiki-page-app-list">${bullets}</ul>`;
+  }) as WikiRenderer,
+ });
+
+ /**
+  * Image renders a content image from a validated URL (issue #1320,
+  * PLAN-1320 B7 imagery): `src` accepts an uploaded-file
+  * (`FileStorageService` `/uploads/...`) URL or a fully-qualified https://
+  * URL; `http://`, `javascript:`, `data:`, and protocol-relative values are
+  * rejected by the shared `isSafeImageUrl` allowlist and render the broken
+  * fallback eagerly (no fetch is ever attempted). `alt` decides semantics —
+  * non-empty alt makes an informative image (real `alt` text on the `<img>`);
+  * an empty/absent alt makes a decorative one (`aria-hidden`, `alt=""`).
+  * `width`/`height` are optional CSS-pixel numbers emitted as native
+  * attributes; `fit` picks the object-fit: "cover" (default), "contain",
+  * or "fill". A failed upload fetch fires `error` and stamps the wrapper
+  * `data-broken` (mirroring Avatar's stamp-or-placeholder contract), which
+  * hides the `<img>` and reveals a curated `image`-glyph fallback; `@load`
+  * clears the stamp so a repaired src is not latched hidden.
+  * Non-interactive — purely visual, dispatches no action, no children.
+  */
+ const Image = defineComponent({
+  name: 'Image',
+  props: z.object({
+   src: z.string(),
+   alt: z.string().optional(),
+   width: z.number().optional(),
+   height: z.number().optional(),
+   fit: z.enum(['cover', 'contain', 'fill']).optional(),
+  }),
+  description:
+   'A content image. First positional `src` accepts an uploaded-file URL (a FileStorageService `/uploads/...` link) or a fully-qualified https:// URL; unsafe values (http://, javascript:, data:, protocol-relative) are rejected and render a broken-image fallback instead of fetching. Optional `alt` (decorative when empty or absent — pass real alt text for informative images), `width`/`height` in CSS pixels, and `fit`: "cover" (default), "contain", or "fill". Non-interactive.',
+  component: (({ src, alt, width, height, fit }) => {
+   // An agent-authored program is untrusted data: the shared scheme
+   // allowlist decides whether an <img> fetch may happen at all. An unsafe
+   // or non-string src renders the fallback eagerly (stamped data-broken,
+   // no <img>) rather than dropping the component.
+   const srcStr = typeof src === 'string' ? src : '';
+   const srcIsSafe = isSafeImageUrl(srcStr);
+   const safeUrl = srcIsSafe ? srcStr.trim() : undefined;
+   const altText = typeof alt === 'string' ? alt : '';
+   const decorative = altText === '';
+   const widthPx = typeof width === 'number' ? width : undefined;
+   const heightPx = typeof height === 'number' ? height : undefined;
+   const fitValue = fit === 'contain' || fit === 'fill' ? fit : 'cover';
+   // A failed `<img>` load fires `error`: stamp the wrapper so CSS hides
+   // the image and reveals the glyph fallback. `@load` clears the stamp
+   // again so a later re-render with a repaired `src` shows the image
+   // instead of latching on the stale fallback forever (same contract as
+   // Avatar's stamp-or-clear handlers).
+   const markBroken = (event: Event) => {
+    const image = event.currentTarget;
+    if (image instanceof HTMLElement) image.parentElement?.setAttribute('data-broken', 'true');
+   };
+   const clearBroken = (event: Event) => {
+    const image = event.currentTarget;
+    if (image instanceof HTMLElement) image.parentElement?.removeAttribute('data-broken');
+   };
+   const fallback = html`<span
+     class="wiki-page-app-image-fallback"
+     aria-hidden="true"
+    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_LIBRARY.image}</svg></span>`;
+   return html`<span
+     class="wiki-page-app-image"
+     data-fit=${fitValue}
+     data-broken=${srcIsSafe ? nothing : 'true'}
+     aria-hidden=${decorative ? 'true' : nothing}
+     role=${decorative ? nothing : 'img'}
+     aria-label=${decorative ? nothing : altText}
+    >${fallback}${safeUrl != null
+     ? html`<img
+        class="wiki-page-app-image-img"
+        src=${safeUrl}
+        alt=${altText}
+        width=${widthPx != null ? widthPx : nothing}
+        height=${heightPx != null ? heightPx : nothing}
+        loading="lazy"
+        @error=${markBroken}
+       @load=${clearBroken}
+       />`
+     : nothing}</span>`;
+  }) as WikiRenderer,
+ });
 
  /**
  * Tooltip wraps any children with a hover tooltip showing `text`.
@@ -1535,8 +1632,9 @@ const List = defineComponent({
   Badge.ref,
   Icon.ref,
   Avatar.ref,
- Skeleton.ref,
- List.ref,
+  Skeleton.ref,
+  List.ref,
+  Image.ref,
  ]);
 
  /**
@@ -1592,6 +1690,7 @@ const List = defineComponent({
    Avatar,
    Skeleton,
    List,
+   Image,
   ],
   actions: [Beep],
   root: WIKI_ROOT_COMPONENT,
