@@ -317,6 +317,34 @@ export const ICON_LIBRARY: Record<IconName, SVGTemplateResult> = {
 };
 
 /**
+ * Render-time allowlist for Card's `backgroundImage`: only fully-qualified
+ * https URLs or the wiki FileStorageService upload surface (`/uploads/<hash>?...`)
+ * are accepted, and the value must be a bare token (no quotes, parens,
+ * backslashes, braces, semicolons, angle brackets, or whitespace) so it can be
+ * interpolated into a CSS `url("...")` layer without breaking out of it.
+ * Returns undefined for anything else; callers skip the backdrop styling.
+ */
+export function safeBackgroundImageUrl(value: unknown): string | undefined {
+ if (typeof value !== 'string') {
+  return undefined;
+ }
+ const candidate = value.trim();
+ if (candidate === '') {
+  return undefined;
+ }
+ if (!/^(?:https:\/\/[^"'()\\<>{};\s]*|\/uploads\/[^"'()\\<>{};\s]*)$/i.test(candidate)) {
+  return undefined;
+ }
+ // Allowlisted by constructor; scheme-qualified so protocol-relative URLs fall through.
+ return candidate;
+}
+
+/** Compose the theme-tinted scrim + safe URL into the card's backdrop layers. */
+function cardBackgroundImageStyle(safeUrl: string): string {
+ return `background-image:var(--page-app-card-backdrop-scrim,transparent),url("${safeUrl}")`;
+}
+
+/**
  * Build the wiki library. Slot unions need every component's `.ref`, and
  * each component's own schema references those unions — refs are assembled
  * in dependency order, the full children union closes over all components
@@ -647,26 +675,36 @@ function buildLibrary(): Library {
   title: z.string().optional(),
   children: z.union([z.string(), childrenSlot()]),
   // Variant LAST in key order so positional Card("title", [...]) is untouched.
-  // Image/hero props land in PR6 (imagery) with sanitized URL handling.
+  // backgroundImage binds AFTER variant (fourth positional); the `Image` hero
+  // component from PR6 imagery is still separately planned.
   variant: z.enum(['default', 'elevated', 'outlined', 'filled', 'accent']).optional(),
+  // Only accepted through the render-time allowlist (safeBackgroundImageUrl);
+  // the parse layer type-checks strings, the renderer drops unsafe schemes so
+  // no javascript:/data:/protocol-relative value can reach a CSS url() token.
+  backgroundImage: z.string().optional(),
  });
+
  const Card = defineComponent({
   name: 'Card',
   props: CardSchema,
   description:
-   'A card with an optional title and content — a plain string or the card\'s children. The program entry is `root = Card(...)` with children as the second positional argument. Optional third positional `variant`: "elevated" (stronger shadow), "outlined" (flat border), "filled" (sunken bg), or "accent" (accent-tinted wash).',
-  component: (({ title, children, variant }) =>
-   html`<div
-      class="wiki-page-app-card"
-      data-variant=${typeof variant === 'string' ? variant : nothing}
-    >
-      ${typeof title === 'string'
+   'A card with an optional title and content — a plain string or the card\'s children. The program entry is `root = Card(...)` with children as the second positional argument. Optional third positional `variant`: "elevated" (stronger shadow), "outlined" (flat border), "filled" (sunken bg), or "accent" (accent-tinted wash). Optional fourth positional `backgroundImage`: a fully-qualified https:// URL or a wiki upload URL (/uploads/<hash>?filename=...) rendered as a cover-fit backdrop with an automatic theme-tinted contrast scrim; unsafe values (javascript:, data:, protocol-relative, http://) are silently dropped.',
+  component: (({ title, children, variant, backgroundImage }) => {
+   const safeCardBackgroundUrl = safeBackgroundImageUrl(backgroundImage);
+   return html`<div
+     class="wiki-page-app-card"
+     data-variant=${typeof variant === 'string' ? variant : nothing}
+     data-bg-image=${safeCardBackgroundUrl != null ? 'true' : nothing}
+     style=${safeCardBackgroundUrl != null ? cardBackgroundImageStyle(safeCardBackgroundUrl) : nothing}
+   >
+     ${typeof title === 'string'
      ? html`<h3 class="wiki-page-app-card-title">${title}</h3>`
      : nothing}
-      <div class="wiki-page-app-card-body">
-        ${children != null ? children : nothing}
-      </div>
-    </div>`) as WikiRenderer,
+     <div class="wiki-page-app-card-body">
+       ${children != null ? children : nothing}
+     </div>
+   </div>`;
+  }) as WikiRenderer,
  });
 
 
