@@ -936,6 +936,23 @@ export const wikiPageAppDesignSystem = css`
       animation: none;
     }
   }
+
+/* ── List ─────────────────────────────────────────────────────────── */
+  /* Semantic bulleted/numbered list (library List). Reuses the body
+     text token pair — no new tokens. em-based spacing scales with the
+     local font size, and the list inherits the surrounding surface. */
+  .wiki-page-app-list {
+    margin: 0 0 0.75rem 0;
+    padding-left: 1.25em;
+    color: var(--color-text-secondary, #666666);
+  }
+  .wiki-page-app-list > li {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .wiki-page-app-list > li + li {
+    margin-top: 0.25em;
+  }
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;

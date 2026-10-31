@@ -528,6 +528,68 @@ describe('when parsing Skeleton', () => {
  });
 });
 
+describe('when parsing List', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse List with plain string items', () => {
+  const result = parser.parse('root = Card("t", [l])\nl = List(["egg", "flour", "milk"])');
+  expect(result.meta.errors).to.deep.equal([]);
+  const list = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(list.typeName).to.equal('List');
+  const items = list.props['items'] as unknown[];
+  expect(items).to.deep.equal(['egg', 'flour', 'milk']);
+  expect(list.props['ordered']).to.satisfy((v: unknown) => v === undefined || v === null);
+ });
+
+ it('should parse a List with inline Text children via positional binding', () => {
+  const result = parser.parse('root = Card("t", [l])\nl = List([Text("egg"), "flour", Text("milk")])');
+  expect(result.meta.errors).to.deep.equal([]);
+  const list = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  const items = list.props['items'] as unknown[];
+  expect(items).to.have.lengthOf(3);
+  expect(items[1]).to.equal('flour');
+ });
+
+ it('should map the second positional arg to ordered', () => {
+  const result = parser.parse('root = Card("t", [l])\nl = List(["1. preheat"], true)');
+  expect(result.meta.errors).to.deep.equal([]);
+  const list = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(list.typeName).to.equal('List');
+  expect(list.props['ordered']).to.equal(true);
+ });
+
+ it('should accept items naming Text nodes defined earlier', () => {
+  const result = parser.parse('a = Text("one")\nb = Text("two")\nl = List([a, b])\nroot = Card("t", [l])');
+  expect(result.meta.errors).to.deep.equal([]);
+  const list = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(list.typeName).to.equal('List');
+ });
+
+ it('should reject a non-array items value at parse time', () => {
+  const result = parser.parse('root = Card("t", [l])\nl = List("egg")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should reject a non-boolean ordered value at parse time', () => {
+  const result = parser.parse('root = Card("t", [l])\nl = List(["egg"], "yes")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should drop an unknown component as an item rather than fail the parse', () => {
+  const result = parser.parse('root = Card("t", [l])\nl = List([Frobnicate, "egg"])');
+  // Unknown components are dropped, never fatal — the rest renders.
+  expect(result.meta.errors).to.deep.equal([]);
+  const list = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  const items = list.props['items'] as unknown[];
+  expect(items).to.deep.equal(['egg']);
+ });
+});
 describe('ICON_LIBRARY', () => {
  it('should cover exactly the curated icon names', () => {
   expect([...Object.keys(ICON_LIBRARY)].sort()).to.deep.equal([...ICON_NAMES].sort());

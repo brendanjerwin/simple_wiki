@@ -984,3 +984,60 @@ describe('Skeleton renderer', () => {
   expect(el.querySelector('.wiki-page-app-skeleton')).to.not.equal(null);
  });
 });
+
+describe('List renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ function listRuntime(): WikiPageAppRuntime {
+  return generateWikiPageAppRenderer(null, noopActions);
+ }
+
+ async function renderListProgram(program: string): Promise<HTMLElement> {
+  const rendered = listRuntime().render(program, {});
+  expect(rendered.errors).to.deep.equal([]);
+  return fixture<HTMLElement>(rendered.template as never);
+ }
+
+ it('should render string items as li children of an unordered list by default', async () => {
+  const el = await renderListProgram('root = Card("T", [l])\nl = List(["egg", "flour", "milk"])');
+  const list = el.querySelector('ul.wiki-page-app-list');
+  expect(list).not.to.equal(null);
+  expect(list?.tagName).to.equal('UL');
+  const items = el.querySelectorAll('.wiki-page-app-list > li');
+  expect(items).to.have.lengthOf(3);
+  expect([...items].map((li) => li.textContent)).to.deep.equal(['egg', 'flour', 'milk']);
+ });
+
+ it('should render an ol wrapper when ordered is true', async () => {
+  const el = await renderListProgram('root = Card("T", [l])\nl = List(["preheat", "bake"], true)');
+  const list = el.querySelector('.wiki-page-app-list');
+  expect(list).not.to.equal(null);
+  expect(list?.tagName).to.equal('OL');
+  expect(el.querySelectorAll('.wiki-page-app-list > li')).to.have.lengthOf(2);
+ });
+
+ it('should render Text children inside the li text', async () => {
+  const el = await renderListProgram('root = Card("T", [l])\nl = List([Text("low sodium"), "salt"])');
+  const items = el.querySelectorAll('.wiki-page-app-list > li');
+  expect(items).to.have.lengthOf(2);
+  expect(items[0]?.textContent).to.equal('low sodium');
+  expect(items[1]?.textContent).to.equal('salt');
+ });
+
+ it('should drop items that are neither strings nor component children', async () => {
+  const el = await renderListProgram('root = Card("T", [l])\nl = List([4, "flour"])');
+  const items = el.querySelectorAll('.wiki-page-app-list > li');
+  expect(items).to.have.lengthOf(1);
+  expect(items[0]?.textContent).to.equal('flour');
+ });
+
+ it('should render nothing when there are no valid items', async () => {
+  const el = await renderListProgram('root = Card("T", [l])\nl = List([])');
+  expect(el.querySelector('.wiki-page-app-list')).to.equal(null);
+ });
+});

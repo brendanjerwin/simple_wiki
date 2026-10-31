@@ -888,32 +888,70 @@ function buildLibrary(): Library {
   * takes its place — leave it unset and the shimmer shows
   * unconditionally. aria-hidden: it is decoration, not content.
   */
- const SkeletonSchema = z.object({
-  kind: z.enum(['text', 'title', 'card', 'circle']).optional(),
-  loading: z.boolean().optional(),
- });
- markReactive(SkeletonSchema.shape.loading);
- const Skeleton = defineComponent({
-  name: 'Skeleton',
-  props: SkeletonSchema,
-  description:
-   'A shimmering placeholder block for content still loading. `kind` sets the shape: "text" (default, a full-width line), "title" (a shorter block), "card" (a full-width rounded block), or "circle" (a 32px circular placeholder sized to match Avatar md). Optional second positional `loading`: bind a `$boolean` (Query-friendly) and the block disappears while it is false; leave it unset and the shimmer always shows. Pure CSS, stateless, non-interactive.',
-  component: (({ kind, loading }) => {
-   if (loading === false) return html`${nothing}`;
-   return html`<span
-    class="wiki-page-app-skeleton"
-    data-kind=${kind === 'title' || kind === 'card' || kind === 'circle' ? kind : 'text'}
-    aria-hidden="true"
-   ></span>`;
-  }) as WikiRenderer,
- });
+const SkeletonSchema = z.object({
+ kind: z.enum(['text', 'title', 'card', 'circle']).optional(),
+ loading: z.boolean().optional(),
+});
+markReactive(SkeletonSchema.shape.loading);
+const Skeleton = defineComponent({
+ name: 'Skeleton',
+ props: SkeletonSchema,
+ description:
+  'A shimmering placeholder block for content still loading. `kind` sets the shape: "text" (default, a full-width line), "title" (a shorter block), "card" (a full-width rounded block), or "circle" (a 32px circular placeholder sized to match Avatar md). Optional second positional `loading`: bind a `$boolean` (Query-friendly) and the block disappears while it is false; leave it unset and the shimmer always shows. Pure CSS, stateless, non-interactive.',
+ component: (({ kind, loading }) => {
+  if (loading === false) return html`${nothing}`;
+  return html`<span
+   class="wiki-page-app-skeleton"
+   data-kind=${kind === 'title' || kind === 'card' || kind === 'circle' ? kind : 'text'}
+   aria-hidden="true"
+  ></span>`;
+ }) as WikiRenderer,
+});
 
  /**
-  * Tooltip wraps any children with a hover tooltip showing `text`.
-  * Uses a CSS ::after pseudo-element driven by data-tooltip — no per-element
-  * IDs, no JS, no popover API. Works in any slot; composable with Button,
-  * Text, SectionHeader, etc.
+  * List renders a bulleted or numbered list (issue #1320, PLAN-1320 B5):
+  * `items` is an array of plain strings or Text children — strings render
+  * as the bullet text, and any component child (typically Text) renders in
+  * the bullet. `ordered` switches the semantic wrapper from `<ul>` to
+  * `<ol>`. Entries that are neither a string nor a rendered child are
+  * dropped at render time (an agent-authored program is untrusted data).
+  * Non-interactive — purely visual, dispatches no action.
   */
+const List = defineComponent({
+ name: 'List',
+ props: z.object({
+  items: z.array(z.union([z.string(), childrenSlot()])),
+  ordered: z.boolean().optional(),
+ }),
+ description:
+  'A bulleted or numbered list of items. First positional `items` is an array of plain strings (or Text children); the optional second positional `ordered` renders a numbered list when true (bulleted by default). Non-interactive.',
+ component: (({ items, ordered }) => {
+  // An agent-authored program is untrusted data: plain strings render as
+  // the bullet text and rendered component children (typically Text)
+  // render inside the li. Anything else — raw scalars, nested arrays —
+  // is dropped at render time rather than interpolated.
+  const entries = (Array.isArray(items) ? items : []).filter(
+   (item): item is string | TemplateResult =>
+    typeof item === 'string'
+    // The `_$litType$` probe is Lit's private template marker (the same
+    // discriminator renderer.ts's isTemplate uses); lit's class form can't
+    // be shared here without an import cycle (renderer imports this file).
+    || (typeof item === 'object' && item !== null && '_$litType$' in item),
+  );
+  if (entries.length === 0) return html`${nothing}`;
+  const bullets = entries.map((item) => html`<li>${item}</li>`);
+  return ordered === true
+   ? html`<ol class="wiki-page-app-list">${bullets}</ol>`
+   : html`<ul class="wiki-page-app-list">${bullets}</ul>`;
+}) as WikiRenderer,
+});
+
+ /**
+ * Tooltip wraps any children with a hover tooltip showing `text`.
+ * Uses a CSS ::after pseudo-element driven by data-tooltip — no per-element
+ * IDs, no JS, no popover API. Works in any slot; composable with Button,
+ * Text, SectionHeader, etc.
+ */
  const Tooltip = defineComponent({
   name: 'Tooltip',
   props: z.object({
@@ -1459,7 +1497,8 @@ function buildLibrary(): Library {
   Badge.ref,
   Icon.ref,
   Avatar.ref,
-  Skeleton.ref,
+ Skeleton.ref,
+ List.ref,
  ]);
 
  /**
@@ -1514,6 +1553,7 @@ function buildLibrary(): Library {
    Icon,
    Avatar,
    Skeleton,
+   List,
   ],
   actions: [Beep],
   root: WIKI_ROOT_COMPONENT,
