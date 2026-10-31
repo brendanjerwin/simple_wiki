@@ -119,4 +119,34 @@ test.describe.serial('List component', () => {
   await expect(items).toHaveCount(1);
   await expect(items).toHaveText(['flour']);
  });
+ test('keeps list markers and text inside the card at the mobile viewport', async ({ page }) => {
+  // Dual-viewport rule (1280×900 + 390×844): the mobile pass is
+  // computed-style based — markers must not clip (ul keeps its
+  // padding-left), and item text must not overflow the card.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${TEST_PAGE}/view`);
+
+  const host = page.locator('wiki-page-app-host');
+  await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+  await expect(host.locator('.wiki-page-app-list').first()).toBeVisible({
+   timeout: PAGE_LOAD_TIMEOUT_MS,
+  });
+
+  const cardOverflow = host.locator('.wiki-page-app-card').first();
+  expect(await cardOverflow.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+
+  for (let i = 0; i < 4; i++) {
+   const list = host.locator('.wiki-page-app-list').nth(i);
+   const metrics = await list.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+     padding: parseFloat(style.paddingLeft),
+     listStylePosition: style.listStylePosition,
+    };
+   });
+   expect(list.textContent ?? '', `list ${i}`).not.toBe('');
+   expect(metrics.padding, `list ${i} padding for markers`).toBeGreaterThan(12);
+   expect(metrics.listStylePosition, `list ${i} marker placement`).toBe('outside');
+  }
+ });
 });

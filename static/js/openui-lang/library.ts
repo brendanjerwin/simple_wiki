@@ -920,26 +920,29 @@ const Skeleton = defineComponent({
 const List = defineComponent({
  name: 'List',
  props: z.object({
-  items: z.array(childrenSlot()),
+  items: z.array(z.union([z.string(), childrenSlot()])),
   ordered: z.boolean().optional(),
  }),
  description:
   'A bulleted or numbered list of items. First positional `items` is an array of plain strings (or Text children); the optional second positional `ordered` renders a numbered list when true (bulleted by default). Non-interactive.',
  component: (({ items, ordered }) => {
- // An agent-authored program is untrusted data: plain strings render as
- // the bullet text and rendered component children (typically Text)
- // render inside the li. Anything else — raw scalars, nested arrays —
- // is dropped at render time rather than interpolated.
- const entries = (Array.isArray(items) ? items : []).filter(
-  (item): item is string | TemplateResult =>
-   typeof item === 'string'
-   || (typeof item === 'object' && item !== null && '_$litType$' in item),
- );
- if (entries.length === 0) return html`${nothing}`;
- const bullets = entries.map((item) => html`<li>${item}</li>`);
- return ordered === true
-  ? html`<ol class="wiki-page-app-list">${bullets}</ol>`
-  : html`<ul class="wiki-page-app-list">${bullets}</ul>`;
+  // An agent-authored program is untrusted data: plain strings render as
+  // the bullet text and rendered component children (typically Text)
+  // render inside the li. Anything else — raw scalars, nested arrays —
+  // is dropped at render time rather than interpolated.
+  const entries = (Array.isArray(items) ? items : []).filter(
+   (item): item is string | TemplateResult =>
+    typeof item === 'string'
+    // The `_$litType$` probe is Lit's private template marker (the same
+    // discriminator renderer.ts's isTemplate uses); lit's class form can't
+    // be shared here without an import cycle (renderer imports this file).
+    || (typeof item === 'object' && item !== null && '_$litType$' in item),
+  );
+  if (entries.length === 0) return html`${nothing}`;
+  const bullets = entries.map((item) => html`<li>${item}</li>`);
+  return ordered === true
+   ? html`<ol class="wiki-page-app-list">${bullets}</ol>`
+   : html`<ul class="wiki-page-app-list">${bullets}</ul>`;
 }) as WikiRenderer,
 });
 
