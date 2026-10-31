@@ -929,7 +929,7 @@ describe('Avatar renderer', () => {
    expect(avatar?.getAttribute('data-size'), size).to.equal(size);
   }
  });
-});<<<<<< <ours
+});
 
 describe('Skeleton renderer', () => {
  const noopActions: PageAppActionContext = {
