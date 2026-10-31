@@ -880,16 +880,16 @@ function buildLibrary(): Library {
  /**
   * Skeleton renders a stateless shimmer placeholder that marks content
   * still loading (issue #1320, PLAN-1302 PR5): pure CSS — the span's
-  * `data-kind` picks the shape ("text" line by default, "avatar" circle
-  * sized to match Avatar, "card" block) and the design system animates
-  * the sweep. The optional second positional `loading` is a reactive
-  * `$boolean` gate for Query-backed apps (PLAN-1320 "API alignment"):
+  * `data-kind` picks the shape ("text" line by default, "title" shorter
+  * block, "card" block, "circle" placeholder matching Avatar md). The
+  * optional second positional `loading` is a reactive `$boolean` gate for
+  * Query-backed apps (PLAN-1320 "API alignment"):
   * while it is bound `false` the block disappears so the real content
   * takes its place — leave it unset and the shimmer shows
   * unconditionally. aria-hidden: it is decoration, not content.
   */
  const SkeletonSchema = z.object({
-  kind: z.enum(['text', 'avatar', 'card']).optional(),
+  kind: z.enum(['text', 'title', 'card', 'circle']).optional(),
   loading: z.boolean().optional(),
  });
  markReactive(SkeletonSchema.shape.loading);
@@ -897,12 +897,12 @@ function buildLibrary(): Library {
   name: 'Skeleton',
   props: SkeletonSchema,
   description:
-   'A shimmering placeholder block for content still loading. `kind` sets the shape: "text" (default, a full-width line), "avatar" (a 32px circle matching Avatar md), or "card" (a full-width rounded block). Optional second positional `loading`: bind a `$boolean` (Query-friendly) and the block disappears while it is false; leave it unset and the shimmer always shows. Pure CSS, stateless, non-interactive.',
+   'A shimmering placeholder block for content still loading. `kind` sets the shape: "text" (default, a full-width line), "title" (a shorter block), "card" (a full-width rounded block), or "circle" (a 32px circular placeholder sized to match Avatar md). Optional second positional `loading`: bind a `$boolean` (Query-friendly) and the block disappears while it is false; leave it unset and the shimmer always shows. Pure CSS, stateless, non-interactive.',
   component: (({ kind, loading }) => {
    if (loading === false) return html`${nothing}`;
    return html`<span
     class="wiki-page-app-skeleton"
-    data-kind=${kind === 'avatar' || kind === 'card' ? kind : 'text'}
+    data-kind=${kind === 'title' || kind === 'card' || kind === 'circle' ? kind : 'text'}
     aria-hidden="true"
    ></span>`;
   }) as WikiRenderer,

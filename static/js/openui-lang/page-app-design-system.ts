@@ -909,7 +909,12 @@ export const wikiPageAppDesignSystem = css`
     background-repeat: no-repeat;
     animation: wiki-page-app-skeleton-shimmer 1.4s ease-in-out infinite;
   }
-  .wiki-page-app-skeleton[data-kind='avatar'] {
+  .wiki-page-app-skeleton[data-kind='title'] {
+    width: 60%;
+    height: 20px;
+    border-radius: 6px;
+  }
+  .wiki-page-app-skeleton[data-kind='circle'] {
     width: 32px;
     height: 32px;
     border-radius: 50%;

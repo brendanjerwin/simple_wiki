@@ -6,10 +6,8 @@
  * http(s) image URL; absent or failed images fall back to the `initials`
  * text (or a person glyph when there are none). This spec covers a REAL
  * uploaded image (no data-broken), an initials-only fallback, a broken-src
- * fallback (reveal via data-broken), the explicit size tokens, and the
- * Skeleton(kind?, loading?) shimmer placeholders (shape kinds, shimmer
- * CSS wiring, reduced-motion fallback, $loading gate).
- * (Skeleton has landed; List joins this spec file when it lands.)
+ * fallback (reveal via data-broken), and the explicit size tokens.
+ * (Skeleton/List components join this spec file as they land in this phase.)
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { callAPI, setupPage } from './page-app-helpers';
@@ -145,138 +143,6 @@ test.describe.serial('Avatar component', () => {
    const largeAvatar = host.locator('.wiki-page-app-avatar-fallback', { hasText: 'JJ' })
     .locator('xpath=..').nth(1);
    await expect(largeAvatar).toHaveAttribute('data-size', 'lg');
-  });
- });
-});
-
-/**
- * Skeleton(kind?, loading?) is a pure-CSS shimmer placeholder: a span
- * with .wiki-page-app-skeleton whose data-kind picks the shape ("text"
- * line by default, "avatar" 32px circle, "card" block). The optional
- * second positional `loading` binds a $boolean (Query-friendly): while
- * it is false the block disappears so real content takes its place. The
- * shimmer is design-system CSS — specs pin the animation wiring and the
- * prefers-reduced-motion fallback.
- */
-const SKELETON_TEST_PAGE = 'e2e_page_app_skeleton';
-
-const SKELETON_PROGRAM = [
- 'textSkeleton = Skeleton()',
- 'lineSkeleton = Skeleton("text")',
- 'avatarSkeleton = Skeleton("avatar")',
- 'cardSkeleton = Skeleton("card")',
- '$loading = true',
- 'gateSkeleton = Skeleton(undefined, $loading)',
- 'doneButton = Button("content ready", @Set($loading, false))',
- 'refetchButton = Button("refetch", @Set($loading, true))',
- 'root = Card("Skeleton test", Stack([Stack([avatarSkeleton, textSkeleton, lineSkeleton, gateSkeleton], "horizontal"), cardSkeleton, doneButton, refetchButton]))',
-].join('\n');
-
-test.describe.serial('Skeleton component', () => {
- test.setTimeout(90000);
-
- test.beforeEach(async ({ request }) => {
-  await callAPI(request, 'PageManagementService', 'DeletePage', { page: SKELETON_TEST_PAGE });
-  await setupPage(
-   request,
-   SKELETON_TEST_PAGE,
-   `Prose.\n\n\`\`\`wiki-page-app\n${SKELETON_PROGRAM}\n\`\`\`\n`,
-  );
- });
-
- test.afterAll(async ({ request }) => {
-  await callAPI(request, 'PageAppService', 'ClearPageApp', { page: SKELETON_TEST_PAGE });
-  await callAPI(request, 'PageManagementService', 'DeletePage', { page: SKELETON_TEST_PAGE });
- });
-
- test.describe('when a page renders skeleton placeholders', () => {
-  test('renders each shape kind as an aria-hidden span with its data-kind', async ({ page }) => {
-   await page.goto(`/${SKELETON_TEST_PAGE}/view`);
-
-   const host = page.locator('wiki-page-app-host');
-   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
-   await expect(host.locator('.wiki-page-app-card-title', { hasText: 'Skeleton test' })).toBeVisible({
-    timeout: PAGE_LOAD_TIMEOUT_MS,
-   });
-
-   const shapes = await page.evaluate(() => {
-    const host = document.querySelector('wiki-page-app-host');
-    const skeletons = Array.from(
-     host?.shadowRoot?.querySelectorAll('.wiki-page-app-skeleton') ?? [],
-    );
-    return skeletons.map((el) => ({
-     kind: el.getAttribute('data-kind'),
-     hidden: el.getAttribute('aria-hidden'),
-    }));
-   });
-   expect(shapes).toHaveLength(5);
-   expect(shapes.filter((s) => s.kind === 'text')).toHaveLength(3);
-   expect(shapes.filter((s) => s.kind === 'avatar')).toHaveLength(1);
-   expect(shapes.filter((s) => s.kind === 'card')).toHaveLength(1);
-   for (const shape of shapes) {
-    expect(shape.hidden, JSON.stringify(shape)).toBe('true');
-   }
-  });
-
-  test('animates the shimmer through the design-system CSS', async ({ page }) => {
-   await page.goto(`/${SKELETON_TEST_PAGE}/view`);
-
-   const host = page.locator('wiki-page-app-host');
-   await expect(host.locator('.wiki-page-app-card-title', { hasText: 'Skeleton test' })).toBeVisible({
-    timeout: PAGE_LOAD_TIMEOUT_MS,
-   });
-
-   const names = await page.evaluate(() => {
-    const host = document.querySelector('wiki-page-app-host');
-    const skeletons = Array.from(
-     host?.shadowRoot?.querySelectorAll('.wiki-page-app-skeleton') ?? [],
-    );
-    return skeletons.map((el) => getComputedStyle(el).animationName);
-   });
-   expect(names.length).toBeGreaterThan(0);
-   for (const name of names) {
-    expect(name).toBe('wiki-page-app-skeleton-shimmer');
-   }
-  });
-
-  test('stands still under prefers-reduced-motion instead of shimmering', async ({ page }) => {
-   await page.emulateMedia({ reducedMotion: 'reduce' });
-   await page.goto(`/${SKELETON_TEST_PAGE}/view`);
-
-   const host = page.locator('wiki-page-app-host');
-   await expect(host.locator('.wiki-page-app-card-title', { hasText: 'Skeleton test' })).toBeVisible({
-    timeout: PAGE_LOAD_TIMEOUT_MS,
-   });
-
-   const names = await page.evaluate(() => {
-    const host = document.querySelector('wiki-page-app-host');
-    const skeletons = Array.from(
-     host?.shadowRoot?.querySelectorAll('.wiki-page-app-skeleton') ?? [],
-    );
-    return skeletons.map((el) => getComputedStyle(el).animationName);
-   });
-   expect(names.length).toBeGreaterThan(0);
-   for (const name of names) {
-    expect(name).toBe('none');
-   }
-  });
-
-  test('disappears while a bound $loading is false and returns when true', async ({ page }) => {
-   await page.goto(`/${SKELETON_TEST_PAGE}/view`);
-
-   const host = page.locator('wiki-page-app-host');
-   await expect(host.locator('.wiki-page-app-card-title', { hasText: 'Skeleton test' })).toBeVisible({
-    timeout: PAGE_LOAD_TIMEOUT_MS,
-   });
-
-   // The gated skeleton renders while $loading is true…
-   await expect(host.locator('.wiki-page-app-skeleton')).toHaveCount(5);
-   // …vanishes once the action sets $loading = false…
-   await host.getByRole('button', { name: 'content ready' }).click();
-   await expect(host.locator('.wiki-page-app-skeleton')).toHaveCount(4);
-   // …and re-arms when the gate flips back to true (the Query contract).
-   await host.getByRole('button', { name: 'refetch' }).click();
-   await expect(host.locator('.wiki-page-app-skeleton')).toHaveCount(5);
   });
  });
 });

@@ -269,21 +269,20 @@ root = Card("Team", Stack([
 ], undefined, "md"))
 ```
 
-`Skeleton(kind?)` renders a **shimmer placeholder** that marks content still loading — the grey animated bars you see in feed and dashboard apps while data is on its way. `kind` sets the shape: `"text"` (default, a full-width line), `"avatar"` (a 32px circle sized to match `Avatar` md), or `"card"` (a full-width rounded block). It is **pure CSS and stateless**: the shimmer runs entirely in the wiki's design system, takes no children, dispatches no action, and is invisible to screen readers (it marks loading, it is not content). Standalone placeholders animate until the app is re-rendered without them; to drive the switch from real state, bind a `$boolean` as the second positional `loading` argument (Query-friendly): while it is `false` the block disappears and real content takes its place — flip it back to `true` and the skeleton returns.
+`Skeleton(kind?)` renders a **shimmer placeholder** that marks content still loading — the grey animated bars you see in feed and dashboard apps while data is on its way. `kind` sets the shape: `"text"` (default, a full-width line), `"title"` (a shorter block), `"card"` (a full-width rounded block), or `"circle"` (a 32px circular placeholder sized to match `Avatar` md). It is **pure CSS and stateless**: the shimmer runs entirely in the wiki's design system, takes no children, dispatches no action, and is invisible to screen readers (it marks loading, it is not content). Standalone placeholders animate until the app is re-rendered without them; to drive the switch from real state, bind a `$boolean` as the second positional `loading` argument (Query-friendly): while it is `false` the block disappears and real content takes its place — flip it back to `true` and the skeleton returns.
 
 ```
 $loading = true
 placeholderHeader = Skeleton("card")
-placeholderTeam = Stack([Skeleton("avatar"), Skeleton("text", $loading)], "horizontal", "sm")
+placeholderTeam = Stack([Skeleton("circle"), Skeleton("text", $loading)], "horizontal", "sm")
 root = Card("Feed", Stack([
   placeholderHeader,
-  Stack([Skeleton("avatar"), Skeleton("text")], "horizontal", "sm"),
+  Stack([Skeleton("title"), Skeleton("text")], "horizontal", "sm"),
   Button("content ready", @Set($loading, false)),
 ], undefined, "sm"))
 ```
 
-In the example the ungated `Skeleton("avatar")` inside `placeholderTeam` animates until a re-write of the app drops it, while the `$loading`-gated `Skeleton("text", $loading)` disappears (and returns) purely by flipping `$loading` — prefer the gate whenever a Button or `MergeState` can own the flip.
-
+In the example the ungated `Skeleton("circle")` inside `placeholderTeam` animates until a re-write of the app drops it, while the `$loading`-gated `Skeleton("text", $loading)` disappears (and returns) purely by flipping `$loading` — prefer the gate whenever a Button or `MergeState` can own the flip.
 
 ## Layout: `Grid`, `Span`, `Divider`, `SectionHeader`
 

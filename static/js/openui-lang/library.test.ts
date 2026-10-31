@@ -444,9 +444,12 @@ describe('when parsing Skeleton', () => {
   expect(skeleton.props['kind']).to.satisfy((v: unknown) => v === undefined || v === null);
  });
 
- it('should parse each shape kind as the first positional arg', () => {
-  for (const kind of ['text', 'avatar', 'card']) {
-   const result = parser.parse(`root = Card("t", [a])\na = Skeleton("${kind}")`);
+ it('should parse each contract kind as the first positional arg', () => {
+  // Contract vocabulary (coordinator msg_ba028bc2c940): text, title,
+  // card, circle. `circle` is the circular placeholder sized to match
+  // Avatar md.
+  for (const kind of ['text', 'title', 'card', 'circle']) {
+   const result = parser.parse('root = Card("t", [a])\na = Skeleton("' + kind + '")');
    expect(result.meta.errors, kind).to.deep.equal([]);
    const skeleton = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
    expect(skeleton.typeName, kind).to.equal('Skeleton');
@@ -468,7 +471,7 @@ describe('when parsing Skeleton', () => {
 
  it('should parse a bound $boolean as the second positional loading prop', () => {
   const result = parser.parse(
-   'root = Card("t", [a])\n$loading = true\na = Skeleton("avatar", $loading)',
+   'root = Card("t", [a])\n$loading = true\na = Skeleton("circle", $loading)',
   );
   expect(result.meta.errors).to.deep.equal([]);
   const skeleton = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
@@ -489,7 +492,7 @@ describe('when parsing Skeleton', () => {
 
  it('should parse the inline children form Stack([Skeleton(...)]) via the slot union', () => {
   const result = parser.parse(
-   'root = Card("t", [s])\ns = Stack([Skeleton("avatar"), Skeleton("text")])',
+   'root = Card("t", [s])\ns = Stack([Skeleton("circle"), Skeleton("text")])',
   );
   expect(result.meta.errors).to.deep.equal([]);
   const stack = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
