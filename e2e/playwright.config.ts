@@ -17,6 +17,13 @@ const getChromiumPath = (): string | undefined => {
 };
 
 /**
+ * E2E server port. Defaults to 8090 (chosen to avoid conflicts with the
+ * default dev server on 8050); parallel workers in a shared run can claim
+ * their own slot with e.g. `SW_E2E_PORT=8093` instead of colliding there.
+ */
+const WEB_SERVER_PORT = Number(process.env.SW_E2E_PORT ?? 8090);
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -34,7 +41,7 @@ export default defineConfig({
  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
  use: {
   /* Base URL to use in actions like `await page.goto('/')`. */
-  baseURL: 'http://localhost:8090',
+  baseURL: `http://localhost:${WEB_SERVER_PORT}`,
 
   /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
   trace: 'on-first-retry',
@@ -53,8 +60,8 @@ export default defineConfig({
   * Port 8090 is chosen to avoid conflicts with the default dev server (8050)
   * and its auto-assigned TLS port (8051) when Tailscale is detected. */
  webServer: {
-  command: 'cd .. && ./simple_wiki-linux-amd64 --port 8090 --tls-port 18092 --data e2e/test-data --debug --chat-persona "" --trust-test-identity-headers',
-  url: 'http://localhost:8090',
+  command: `cd .. && ./simple_wiki-linux-amd64 --port ${WEB_SERVER_PORT} --tls-port ${WEB_SERVER_PORT + 10002} --data e2e/test-data --debug --chat-persona "" --trust-test-identity-headers`,
+  url: `http://localhost:${WEB_SERVER_PORT}`,
   // Dev convenience: reuse an already-listening server (dev + manual
   // e2e-wiki-server sessions). In CI, never reuse — a stale/wrong
   // binary must fail loudly rather than produce a false green.
