@@ -1714,12 +1714,20 @@ describe('when parsing Image', () => {
   expect(codes).to.include('type-mismatch');
  });
 
- it('should accept an empty alt for decorative images', () => {
+ it('should accept an absent alt as a decorative image', () => {
   const result = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA?filename=dot.png")');
   expect(result.meta.errors).to.deep.equal([]);
   const image = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
   expect(image.typeName).to.equal('Image');
   expect(image.props['alt']).to.satisfy((v: unknown) => v === undefined || v === null);
+ });
+
+ it('should accept an explicitly empty alt for a decorative image', () => {
+  const result = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA?filename=dot.png", "")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const image = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(image.typeName).to.equal('Image');
+  expect(image.props['alt']).to.equal('');
  });
 
  it('should reject non-numeric width and height at parse time', () => {
@@ -1735,5 +1743,22 @@ describe('when parsing Image', () => {
   const result = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA", "a", 100, 100, "stretch")');
   const codes = result.meta.errors.map((e) => e.code);
   expect(codes).to.include('type-mismatch');
+ });
+
+ it('should parse the help-doc Image example with zero errors', () => {
+  // internal/syspage/embedded/help_page_apps.md ships this program as
+  // the Display: Image example; the help page advertises
+  // parse-verified programs, so pin it in the suite.
+  const result = parser.parse([
+   'hero = Image("/uploads/sha256-CU7VONBJPNC6XSXU2I3QT2WDP2ASRMHSEKJZPQEV4DI2ML6IXJBA===?filename=paprika-chicken.png", "paprika chicken fresh out of the oven", 720, 405, "cover")',
+   'chefBadge = Image("https://upload.wikimedia.org/wikipedia/commons/6/6a/Chef.png", "chef mascot", 96, 96, "contain")',
+   'ribbon = Image("/uploads/sha256-oBk2EDev81Ge2ce6saJlXuzvxW1gao6U0NVAXwboco6====?filename=ribbon.png")',
+   'root = Card("Paprika chicken", Stack([',
+   '  hero,',
+   '  Stack([chefBadge, Text("as made by you")], "horizontal", "sm"),',
+   '  ribbon,',
+   ']))',
+  ].join('\n'));
+  expect(result.meta.errors).to.deep.equal([]);
  });
 });

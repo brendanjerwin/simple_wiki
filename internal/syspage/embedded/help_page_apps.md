@@ -300,7 +300,6 @@ root = Card("Paprika chicken", Stack([
 `Image(src, alt?, width?, height?, fit?)` renders a content image inside the app — the direct target for the wiki's upload surface. `src` accepts an uploaded-file URL from `FileStorageService` (the `/uploads/...` link its upload returns) or a fully-qualified `https://` URL; unsafe values (`http://`, `javascript:`, `data:`, protocol-relative `//`) are rejected and render a broken-image fallback instead of fetching. `alt` decides semantics: real alt text makes an **informative** image (screen readers announce it); an empty or absent `alt` makes a **decorative** one (hidden from assistive tech). `width`/`height` are optional numbers in CSS pixels, emitted as native `<img>` attributes; `fit` sets how the image fills its box: `"cover"` (default), `"contain"`, or `"fill"`. If an upload later disappears, the image swaps to a muted broken-image glyph rather than an empty hole. Non-interactive.
 
 ```
-$holds = 0
 hero = Image("/uploads/sha256-CU7VONBJPNC6XSXU2I3QT2WDP2ASRMHSEKJZPQEV4DI2ML6IXJBA===?filename=paprika-chicken.png", "paprika chicken fresh out of the oven", 720, 405, "cover")
 chefBadge = Image("https://upload.wikimedia.org/wikipedia/commons/6/6a/Chef.png", "chef mascot", 96, 96, "contain")
 ribbon = Image("/uploads/sha256-oBk2EDev81Ge2ce6saJlXuzvxW1gao6U0NVAXwboco6====?filename=ribbon.png")

@@ -17,6 +17,7 @@ import {
 } from './renderer.js';
 import {
  ICON_NAMES,
+ isSafeImageUrl,
  safeBackgroundImageUrl,
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
@@ -1055,6 +1056,41 @@ describe('safeBackgroundImageUrl', () => {
    'https://example.com/bg.png"); color: red; background-image:url("https://evil.test',
   ]) {
    expect(safeBackgroundImageUrl(unsafe), String(unsafe)).to.equal(undefined);
+  }
+ });
+});
+describe('isSafeImageUrl', () => {
+ it('should accept fully-qualified https URLs', () => {
+  expect(isSafeImageUrl('https://example.com/hero.jpg')).to.equal(true);
+  // The scheme check is case-insensitive like the old combined regex.
+  expect(isSafeImageUrl('HTTPS://example.com/hero.jpg')).to.equal(true);
+ });
+
+ it('should accept wiki FileStorageService uploads URLs', () => {
+  expect(isSafeImageUrl('/uploads/sha256-abc123?filename=photo.png')).to.equal(true);
+ });
+
+ it('should trim surrounding whitespace before checking the scheme', () => {
+  expect(isSafeImageUrl('  https://example.com/hero.jpg  ')).to.equal(true);
+  expect(isSafeImageUrl('  /uploads/sha256-abc123  ')).to.equal(true);
+ });
+
+ it('should reject non-string, empty, and unsafe schemes', () => {
+  for (const unsafe of [
+   undefined,
+   null,
+   42,
+   '',
+   '   ',
+   'http://insecure.example.com/hero.jpg',
+   'javascript:alert(1)',
+   'data:image/png;base64,AAAA',
+   '//evil.example.com/hero.jpg',
+   'ftp://example.com/hero.jpg',
+   'uploads/sha256-abc123',
+   '/attachments/sha256-abc123',
+  ]) {
+   expect(isSafeImageUrl(unsafe), String(unsafe)).to.equal(false);
   }
  });
 });
