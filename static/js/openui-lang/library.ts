@@ -346,10 +346,10 @@ export function isSafeImageUrl(value: unknown): boolean {
  * Returns undefined for anything else; callers skip the backdrop styling.
  */
 export function safeBackgroundImageUrl(value: unknown): string | undefined {
- if (!isSafeImageUrl(value)) {
+ if (typeof value !== 'string' || !isSafeImageUrl(value)) {
   return undefined;
  }
- const candidate = (value as string).trim();
+ const candidate = value.trim();
  if (!/^[^"'()\\<>{};\s]*$/.test(candidate)) {
   return undefined;
  }
