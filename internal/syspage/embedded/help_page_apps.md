@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Image`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `DatePicker`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Image`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `DatePicker`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -233,7 +233,7 @@ root = Card("Routine", Stack([
 ]))
 ```
 
-## Display: `Avatar`, `Badge`, `Icon`
+## Display: `Avatar`, `Badge`, `Icon`, `Skeleton`
 
 `Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` sets emphasis: `"primary"` (default, accent-tinted), `"secondary"` (muted bordered chip), `"ghost"` (transparent), `"danger"` (error-tinted), or `"accent"` (accent-tinted with a matching outline).
 
@@ -268,6 +268,21 @@ root = Card("Team", Stack([
   Stack([ghost, Text("WX (no photo yet)")], "horizontal", "sm"),
 ], undefined, "md"))
 ```
+
+`Skeleton(kind?)` renders a **shimmer placeholder** that marks content still loading — the grey animated bars you see in feed and dashboard apps while data is on its way. `kind` sets the shape: `"text"` (default, a full-width line), `"avatar"` (a 32px circle sized to match `Avatar` md), or `"card"` (a full-width rounded block). It is **pure CSS and stateless**: the shimmer runs entirely in the wiki's design system, takes no children, dispatches no action, and is invisible to screen readers (it marks loading, it is not content). Standalone placeholders animate until the app is re-rendered without them; to drive the switch from real state, bind a `$boolean` as the second positional `loading` argument (Query-friendly): while it is `false` the block disappears and real content takes its place — flip it back to `true` and the skeleton returns.
+
+```
+$loading = true
+placeholderHeader = Skeleton("card")
+placeholderTeam = Stack([Skeleton("avatar"), Skeleton("text", $loading)], "horizontal", "sm")
+root = Card("Feed", Stack([
+  placeholderHeader,
+  Stack([Skeleton("avatar"), Skeleton("text")], "horizontal", "sm"),
+  Button("content ready", @Set($loading, false)),
+], undefined, "sm"))
+```
+
+In the example the ungated `Skeleton("avatar")` inside `placeholderTeam` animates until a re-write of the app drops it, while the `$loading`-gated `Skeleton("text", $loading)` disappears (and returns) purely by flipping `$loading` — prefer the gate whenever a Button or `MergeState` can own the flip.
 
 
 ## Layout: `Grid`, `Span`, `Divider`, `SectionHeader`
@@ -490,7 +505,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (`Image`, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a pipedream component", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`, `DatePicker`, `Dialog`, `Toast`, and `Drawer`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (`Image`, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a pipedream component", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`, `DatePicker`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 
