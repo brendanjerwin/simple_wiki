@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Image`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `DatePicker`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Sparkline`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `DatePicker`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`.)
 
 ## Time-based apps: `Countdown`
 
@@ -233,7 +233,7 @@ root = Card("Routine", Stack([
 ]))
 ```
 
-## Display: `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`
+## Display: `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`
 
 `Badge(label, variant?)` renders a small inline pill label — the right tool for statuses, counts, and tags that used to get faked with restyled Buttons. It is **non-interactive** and takes no action. The optional second positional `variant` sets emphasis: `"primary"` (default, accent-tinted), `"secondary"` (muted bordered chip), `"ghost"` (transparent), `"danger"` (error-tinted), or `"accent"` (accent-tinted with a matching outline).
 
@@ -294,6 +294,19 @@ root = Card("Paprika chicken", Stack([
   ingredients,
   SectionHeader("Steps", [Text("about 30 min", "caption")]),
   steps,
+]))
+```
+
+`Image(src, alt?, width?, height?, fit?)` renders a content image inside the app — the direct target for the wiki's upload surface. `src` accepts an uploaded-file URL from `FileStorageService` (the `/uploads/...` link its upload returns) or a fully-qualified `https://` URL; unsafe values (`http://`, `javascript:`, `data:`, protocol-relative `//`) are rejected and render a broken-image fallback instead of fetching. `alt` decides semantics: real alt text makes an **informative** image (screen readers announce it); an empty or absent `alt` makes a **decorative** one (hidden from assistive tech). `width`/`height` are optional numbers in CSS pixels, emitted as native `<img>` attributes; `fit` sets how the image fills its box: `"cover"` (default), `"contain"`, or `"fill"`. If an upload later disappears, the image swaps to a muted broken-image glyph rather than an empty hole. Non-interactive.
+
+```
+hero = Image("/uploads/sha256-CU7VONBJPNC6XSXU2I3QT2WDP2ASRMHSEKJZPQEV4DI2ML6IXJBA===?filename=paprika-chicken.png", "paprika chicken fresh out of the oven", 720, 405, "cover")
+chefBadge = Image("https://upload.wikimedia.org/wikipedia/commons/6/6a/Chef.png", "chef mascot", 96, 96, "contain")
+ribbon = Image("/uploads/sha256-oBk2EDev81Ge2ce6saJlXuzvxW1gao6U0NVAXwboco6====?filename=ribbon.png")
+root = Card("Paprika chicken", Stack([
+  hero,
+  Stack([chefBadge, Text("as made by you")], "horizontal", "sm"),
+  ribbon,
 ]))
 ```
 
@@ -519,7 +532,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (`Image`, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a pipedream component", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`, `DatePicker`, `Dialog`, `Toast`, and `Drawer`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (no `Sparkline`, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a pipedream component", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`, `DatePicker`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 

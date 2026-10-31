@@ -1672,3 +1672,93 @@ describe('WikiPageAppCountdown', () => {
   });
  });
 });
+
+describe('when parsing Image', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should map positional args to src, alt, width, height, fit in key order', () => {
+  const result = parser.parse(
+   'root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA?filename=hero.png", "a hero image", 480, 320, "contain")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const image = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(image.typeName).to.equal('Image');
+  expect(image.props['src']).to.equal('/uploads/sha256-AAAA?filename=hero.png');
+  expect(image.props['alt']).to.equal('a hero image');
+  expect(image.props['width']).to.equal(480);
+  expect(image.props['height']).to.equal(320);
+  expect(image.props['fit']).to.equal('contain');
+ });
+
+ it('should parse a fully-qualified https src without dimensions', () => {
+  const result = parser.parse(
+   'root = Card("t", [i])\ni = Image("https://example.com/hero.jpg", "hero")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const image = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(image.typeName).to.equal('Image');
+  expect(image.props['src']).to.equal('https://example.com/hero.jpg');
+  expect(image.props['alt']).to.equal('hero');
+  expect(image.props['width']).to.satisfy((v: unknown) => v === undefined || v === null);
+  expect(image.props['height']).to.satisfy((v: unknown) => v === undefined || v === null);
+  expect(image.props['fit']).to.satisfy((v: unknown) => v === undefined || v === null);
+ });
+
+ it('should reject a non-string src at parse time', () => {
+  const result = parser.parse('root = Card("t", [i])\ni = Image(42, "alt")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should accept an absent alt as a decorative image', () => {
+  const result = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA?filename=dot.png")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const image = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(image.typeName).to.equal('Image');
+  expect(image.props['alt']).to.satisfy((v: unknown) => v === undefined || v === null);
+ });
+
+ it('should accept an explicitly empty alt for a decorative image', () => {
+  const result = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA?filename=dot.png", "")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const image = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(image.typeName).to.equal('Image');
+  expect(image.props['alt']).to.equal('');
+ });
+
+ it('should reject non-numeric width and height at parse time', () => {
+  const widthBad = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA", "a", "wide")');
+  const heightBad = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA", "a", 100, "tall")');
+  for (const result of [widthBad, heightBad]) {
+   const codes = result.meta.errors.map((e) => e.code);
+   expect(codes).to.include('type-mismatch');
+  }
+ });
+
+ it('should reject an out-of-vocabulary fit value at parse time', () => {
+  const result = parser.parse('root = Card("t", [i])\ni = Image("/uploads/sha256-AAAA", "a", 100, 100, "stretch")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should parse the help-doc Image example with zero errors', () => {
+  // internal/syspage/embedded/help_page_apps.md ships this program as
+  // the Display: Image example; the help page advertises
+  // parse-verified programs, so pin it in the suite.
+  const result = parser.parse([
+   'hero = Image("/uploads/sha256-CU7VONBJPNC6XSXU2I3QT2WDP2ASRMHSEKJZPQEV4DI2ML6IXJBA===?filename=paprika-chicken.png", "paprika chicken fresh out of the oven", 720, 405, "cover")',
+   'chefBadge = Image("https://upload.wikimedia.org/wikipedia/commons/6/6a/Chef.png", "chef mascot", 96, 96, "contain")',
+   'ribbon = Image("/uploads/sha256-oBk2EDev81Ge2ce6saJlXuzvxW1gao6U0NVAXwboco6====?filename=ribbon.png")',
+   'root = Card("Paprika chicken", Stack([',
+   '  hero,',
+   '  Stack([chefBadge, Text("as made by you")], "horizontal", "sm"),',
+   '  ribbon,',
+   ']))',
+  ].join('\n'));
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+});

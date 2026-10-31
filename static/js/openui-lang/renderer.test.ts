@@ -17,6 +17,7 @@ import {
 } from './renderer.js';
 import {
  ICON_NAMES,
+ isSafeImageUrl,
  safeBackgroundImageUrl,
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
@@ -703,142 +704,6 @@ describe('mergePageAppPatch', () => {
  });
 });
 
-describe('renderer layout components', () => {
- const noopActions: PageAppActionContext = {
-  setState() { },
-  toAssistant() { },
-  openUrl() { },
-  rerun() { },
- };
- let runtime: WikiPageAppRuntime;
-
- beforeEach(() => {
-  runtime = generateWikiPageAppRenderer(null, noopActions);
- });
-
- it('should render Grid with data-cols and grid children', async () => {
-  const rendered = runtime.render(
-   'root = Card("T", [g])\ng = Grid([a, b], 2)\na = Text("left")\nb = Text("right")',
-   {},
-  );
-  expect(rendered.errors).to.deep.equal([]);
-  const el = await fixture<HTMLElement>(rendered.template as never);
-  const grid = el.querySelector('.wiki-page-app-grid');
-  expect(grid).not.to.equal(null);
-  expect(grid?.getAttribute('data-cols')).to.equal('2');
-  expect(el.textContent).to.include('left');
-  expect(el.textContent).to.include('right');
- });
-
- it('should render Span with inline grid-column inside Grid', async () => {
-  const rendered = runtime.render(
-   'root = Card("T", [g])\ng = Grid([sp], 2)\nsp = Span(2, [a])\na = Text("wide")',
-   {},
-  );
-  expect(rendered.errors).to.deep.equal([]);
-  const el = await fixture<HTMLElement>(rendered.template as never);
-  const span = el.querySelector('.wiki-page-app-grid > .wiki-page-app-span');
-  expect(span).not.to.equal(null);
-  expect(span?.getAttribute('style')).to.include('grid-column: span 2');
-  expect(el.textContent).to.include('wide');
- });
-
- it('should render a Span outside a Grid as a plain block', async () => {
-  const rendered = runtime.render(
-   'root = Card("T", [sp])\nsp = Span(2, [a])\na = Text("outside")',
-   {},
-  );
-  expect(rendered.errors).to.deep.equal([]);
-  const el = await fixture<HTMLElement>(rendered.template as never);
-  const span = el.querySelector('.wiki-page-app-span');
-  expect(span).not.to.equal(null);
-  expect(el.textContent).to.include('outside');
- });
-
- it('should render Divider as an hr', async () => {
-  const rendered = runtime.render('root = Card("T", [d])\nd = Divider()', {});
-  expect(rendered.errors).to.deep.equal([]);
-  const el = await fixture<HTMLElement>(rendered.template as never);
-  expect(el.querySelector('hr.wiki-page-app-divider')).not.to.equal(null);
- });
-
- it('should render SectionHeader with title and trailing slot', async () => {
-  const rendered = runtime.render(
-   'root = Card("T", [h])\nh = SectionHeader("Workout", [x])\nx = Text("4 sets")',
-   {},
-  );
-  expect(rendered.errors).to.deep.equal([]);
-  const el = await fixture<HTMLElement>(rendered.template as never);
-  const header = el.querySelector('.wiki-page-app-section-header');
-  expect(header).not.to.equal(null);
-  expect(header?.textContent).to.include('Workout');
-  expect(header?.textContent).to.include('4 sets');
- });
-
- it('should render Card with each variant as data-variant', async () => {
-  for (const variant of ['default', 'elevated', 'outlined', 'filled', 'accent']) {
-   const program = `root = Card("T", [x], "${variant}")\nx = Text("hi")`;
-   const rendered = runtime.render(program, {});
-   expect(rendered.errors, variant).to.deep.equal([]);
-   // Card is the program ROOT: fixture returns the card element itself, and
-   // querySelector does not match self — assert on the root directly.
-   const el = await fixture<HTMLElement>(rendered.template as never);
-   expect(el.classList.contains('wiki-page-app-card'), variant).to.equal(true);
-   expect(el.getAttribute('data-variant'), variant).to.equal(variant);
-  }
- });
-});
-
-describe('live store flush loop', () => {
- it('should expose the live store so a @Set followed by re-render from the snapshot increments', async () => {
-  const sets: Record<string, unknown>[] = [];
-  const runtime = generateWikiPageAppRenderer(null, {
-   setState: (snapshot) => sets.push({ ...snapshot }),
-   toAssistant() { },
-   openUrl() { },
-   rerun() { },
-  });
-  runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', {});
-  // Simulate a button @Set($count, 1): mutate the live store, then flush.
-  runtime.store.set('$count', 1);
-  runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', runtime.store.getSnapshot()['$count'] as number !== undefined ? { $count: (runtime.store.getSnapshot()['$count'] as number) } : {});
-  expect(sets.length).to.equal(0);
-  // Flush what the host would flush:
-  sets.push({ ...runtime.store.getSnapshot() });
-  // Re-render hydrating from the flushed state: value is incremented.
-  const rendered = runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', sets[0] as Record<string, unknown>);
-  const el = await fixture<HTMLElement>(rendered.template as never);
-  expect(el.innerHTML).to.include('count: 1');
- });
-});
-
-describe('renderNode', () => {
- let parser: Parser;
-
- beforeEach(() => {
-  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
- });
-
- it('should render known library components recursively into DOM', async () => {
-  const result = parser.parse('root = Card("T", [s])\ns = Stack([t])\nt = Text("deep")');
-  const el = await fixture<HTMLElement>(renderNode(result.root) as never);
-  expect(el.innerHTML).to.include('T');
-  expect(el.innerHTML).to.include('deep');
- });
-});
-
-describe('mergePageAppPatch', () => {
- it('should keep unpatched statements and apply the patch', () => {
-  const merged = mergePageAppPatch(
-   'root = Card([h, t2])\nh = Text("keep")\nt2 = Text("old")',
-   'root = Card([h, t3])\nt3 = Text("new")',
-  );
-  expect(merged).to.include('Text("keep")');
-  expect(merged).to.include('Text("new")');
-  expect(merged).to.not.include('Text("old")');
- });
-});
-
 describe('Icon renderer', () => {
  const noopActions: PageAppActionContext = {
   setState() { },
@@ -1058,6 +923,41 @@ describe('safeBackgroundImageUrl', () => {
   }
  });
 });
+describe('isSafeImageUrl', () => {
+ it('should accept fully-qualified https URLs', () => {
+  expect(isSafeImageUrl('https://example.com/hero.jpg')).to.equal(true);
+  // The scheme check is case-insensitive like the old combined regex.
+  expect(isSafeImageUrl('HTTPS://example.com/hero.jpg')).to.equal(true);
+ });
+
+ it('should accept wiki FileStorageService uploads URLs', () => {
+  expect(isSafeImageUrl('/uploads/sha256-abc123?filename=photo.png')).to.equal(true);
+ });
+
+ it('should trim surrounding whitespace before checking the scheme', () => {
+  expect(isSafeImageUrl('  https://example.com/hero.jpg  ')).to.equal(true);
+  expect(isSafeImageUrl('  /uploads/sha256-abc123  ')).to.equal(true);
+ });
+
+ it('should reject non-string, empty, and unsafe schemes', () => {
+  for (const unsafe of [
+   undefined,
+   null,
+   42,
+   '',
+   '   ',
+   'http://insecure.example.com/hero.jpg',
+   'javascript:alert(1)',
+   'data:image/png;base64,AAAA',
+   '//evil.example.com/hero.jpg',
+   'ftp://example.com/hero.jpg',
+   'uploads/sha256-abc123',
+   '/attachments/sha256-abc123',
+  ]) {
+   expect(isSafeImageUrl(unsafe), String(unsafe)).to.equal(false);
+  }
+ });
+});
 describe('List renderer', () => {
  const noopActions: PageAppActionContext = {
   setState() { },
@@ -1112,5 +1012,148 @@ describe('List renderer', () => {
  it('should render nothing when there are no valid items', async () => {
   const el = await renderListProgram('root = Card("T", [l])\nl = List([])');
   expect(el.querySelector('.wiki-page-app-list')).to.equal(null);
+ });
+});
+
+describe('Image renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ function imageRuntime() {
+  return generateWikiPageAppRenderer(null, noopActions);
+ }
+
+ async function renderImageProgram(program: string): Promise<HTMLElement> {
+  const rendered = imageRuntime().render(program, {});
+  expect(rendered.errors).to.deep.equal([]);
+  return fixture<HTMLElement>(rendered.template as never);
+ }
+
+ it('should render a safe upload src as an img with the file URL', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA?filename=hero.png", "hero")',
+  );
+  const image = el.querySelector('.wiki-page-app-image');
+  expect(image).not.to.equal(null);
+  const img = image?.querySelector('img.wiki-page-app-image-img');
+  expect(img?.getAttribute('src')).to.equal('/uploads/sha256-AAAA?filename=hero.png');
+  expect(image?.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should render a fully-qualified https src', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("https://example.com/hero.jpg", "hero")',
+  );
+  const img = el.querySelector('.wiki-page-app-image-img');
+  expect(img?.getAttribute('src')).to.equal('https://example.com/hero.jpg');
+ });
+
+ it('should emit width, height, and data-fit attributes when provided', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA", "a", 480, 320, "contain")',
+  );
+  const image = el.querySelector('.wiki-page-app-image');
+  expect(image?.getAttribute('data-fit')).to.equal('contain');
+  const img = image?.querySelector('img.wiki-page-app-image-img');
+  expect(img?.getAttribute('width')).to.equal('480');
+  expect(img?.getAttribute('height')).to.equal('320');
+ });
+
+ it('should default data-fit to cover', async () => {
+  const el = await renderImageProgram('root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA", "a")');
+  const image = el.querySelector('.wiki-page-app-image');
+  expect(image?.getAttribute('data-fit')).to.equal('cover');
+ });
+
+ it('should omit width and height attributes when not provided', async () => {
+  const el = await renderImageProgram('root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA", "a")');
+  const img = el.querySelector('.wiki-page-app-image-img');
+  expect(img?.hasAttribute('width')).to.equal(false);
+  expect(img?.hasAttribute('height')).to.equal(false);
+ });
+
+ it('should render real alt text as the accessible name for informative images', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA", "boardwalk at sunrise")',
+  );
+  const img = el.querySelector('.wiki-page-app-image-img');
+  expect(img?.getAttribute('alt')).to.equal('boardwalk at sunrise');
+  expect(img?.hasAttribute('aria-hidden')).to.equal(false);
+ });
+
+ it('should treat an empty alt as decoration: alt="" on the img and aria-hidden on the wrapper', async () => {
+  const el = await renderImageProgram('root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA")');
+  const image = el.querySelector('.wiki-page-app-image');
+  expect(image?.getAttribute('aria-hidden')).to.equal('true');
+  const img = image?.querySelector('img.wiki-page-app-image-img');
+  expect(img?.getAttribute('alt')).to.equal('');
+ });
+
+ it('should render nothing fetchable for unsafe scheme srcs and stamp an eager data-broken fallback', async () => {
+  for (const unsafe of [
+   'javascript:alert(1)',
+   'data:image/png;base64,AAAA',
+   '//evil.example.com/hero.png',
+   'http://insecure.example.com/hero.png',
+   'ftp://example.com/hero.png',
+  ]) {
+   const el = await renderImageProgram(`root = Card("T", [i])\ni = Image("${unsafe}", "hero")`);
+   const image = el.querySelector('.wiki-page-app-image');
+   expect(image, unsafe).not.to.equal(null);
+   expect(image?.querySelector('img'), unsafe).to.equal(null);
+   expect(image?.getAttribute('data-broken'), unsafe).to.equal('true');
+   expect(image?.querySelector('.wiki-page-app-image-fallback'), unsafe).not.to.equal(null);
+  }
+ });
+
+ it('should render the curated placeholder glyph inside the broken fallback', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("javascript:alert(1)", "hero")',
+  );
+  const fallback = el.querySelector('.wiki-page-app-image-fallback');
+  expect(fallback?.querySelectorAll('svg').length).to.be.greaterThan(0);
+  expect(fallback?.getAttribute('aria-hidden')).to.equal('true');
+ });
+
+ it('should mark the wrapper data-broken when the image errors out', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("/uploads/sha256-missing", "hero")',
+  );
+  const image = el.querySelector('.wiki-page-app-image') as HTMLElement | null;
+  expect(image).not.to.equal(null);
+  expect(image!.hasAttribute('data-broken')).to.equal(false);
+  const img = image!.querySelector('img.wiki-page-app-image-img');
+  expect(img).not.to.equal(null);
+  img!.dispatchEvent(new Event('error'));
+  expect(image!.hasAttribute('data-broken')).to.equal(true);
+  // The fallback shows underneath once the wrapper is stamped; the <img>
+  // stays in the DOM hidden by CSS, mirroring the Avatar contract.
+  expect(image!.querySelector('.wiki-page-app-image-fallback')).not.to.equal(null);
+ });
+
+ it('should clear data-broken on a successful load so a repaired src is not latched hidden', async () => {
+  const el = await renderImageProgram(
+   'root = Card("T", [i])\ni = Image("/uploads/sha256-missing", "hero")',
+  );
+  const image = el.querySelector('.wiki-page-app-image') as HTMLElement | null;
+  const img = image!.querySelector('img.wiki-page-app-image-img');
+  img!.dispatchEvent(new Event('error'));
+  expect(image!.hasAttribute('data-broken')).to.equal(true);
+  img!.dispatchEvent(new Event('load'));
+  expect(image!.hasAttribute('data-broken')).to.equal(false);
+ });
+
+ it('should accept each fit token at render time', async () => {
+  for (const fit of ['cover', 'contain', 'fill']) {
+   const el = await renderImageProgram(
+    `root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA", "a", 100, 100, "${fit}")`,
+   );
+   const image = el.querySelector('.wiki-page-app-image');
+   expect(image?.getAttribute('data-fit'), fit).to.equal(fit);
+  }
  });
 });

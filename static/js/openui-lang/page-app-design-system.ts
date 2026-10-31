@@ -961,6 +961,53 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-list > li + li {
     margin-top: 0.25em;
   }
+
+  /* ── Image ────────────────────────────────────────────────────────── */
+  /* Content image (library Image). Reuses the muted text color for the
+     broken-fallback glyph — no new tokens. The wrapper is a block that
+     sizes to its intrinsic image; data-fit maps onto object-fit on the
+     <img>, and a data-broken wrapper hides the <img> (failed fetch or
+     unsafe src that never fetched) and reveals the curated glyph. */
+  .wiki-page-app-image {
+    display: block;
+    position: relative;
+    max-width: 100%;
+    line-height: 0;
+  }
+  .wiki-page-app-image-img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  .wiki-page-app-image[data-fit='contain'] .wiki-page-app-image-img {
+    object-fit: contain;
+  }
+  .wiki-page-app-image[data-fit='fill'] .wiki-page-app-image-img {
+    object-fit: fill;
+  }
+  /* cover (default): needs an explicit box to fill, so a sized image
+     (width and/or height props set) crops to that box via object-fit. */
+  .wiki-page-app-image[data-fit='cover'] .wiki-page-app-image-img[width],
+  .wiki-page-app-image[data-fit='cover'] .wiki-page-app-image-img[height] {
+    object-fit: cover;
+  }
+  .wiki-page-app-image-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: var(--color-surface-sunken, #f8f9fa);
+    color: var(--color-text-muted, #707070);
+  }
+  .wiki-page-app-image[data-broken] .wiki-page-app-image-img {
+    display: none;
+  }
+  .wiki-page-app-image[data-broken] .wiki-page-app-image-fallback {
+    line-height: normal;
+  }
+
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;
