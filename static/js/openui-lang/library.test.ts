@@ -429,6 +429,105 @@ describe('when parsing Avatar', () => {
  });
 });
 
+describe('when parsing Skeleton', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse a childless Skeleton with the kind left unset', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Skeleton()');
+  expect(result.meta.errors).to.deep.equal([]);
+  const skeleton = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(skeleton.typeName).to.equal('Skeleton');
+  expect(skeleton.props['kind']).to.satisfy((v: unknown) => v === undefined || v === null);
+ });
+
+ it('should parse each contract kind as the first positional arg', () => {
+  // Contract vocabulary (coordinator msg_ba028bc2c940): text, title,
+  // card, circle. `circle` is the circular placeholder sized to match
+  // Avatar md.
+  for (const kind of ['text', 'title', 'card', 'circle']) {
+   const result = parser.parse('root = Card("t", [a])\na = Skeleton("' + kind + '")');
+   expect(result.meta.errors, kind).to.deep.equal([]);
+   const skeleton = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(skeleton.typeName, kind).to.equal('Skeleton');
+   expect(skeleton.props['kind'], kind).to.equal(kind);
+  }
+ });
+
+ it('should reject an unknown Skeleton kind at parse time', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Skeleton("banner")');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should emit the contract vocabulary in the unknown-kind message', () => {
+  // Contract msg_ba028bc2c940 names this message shape; pin the yielded
+  // values so a kind-set change surfaces in review (lang-core prefixes
+  // the schema path, so the real text is field "/kind" ...).
+  const result = parser.parse('root = Card("t", [a])\na = Skeleton("banner")');
+  const message = result.meta.errors[0]?.message ?? '';
+  expect(message).to.include('expects one of ["text", "title", "card", "circle"]');
+ });
+
+ it('should reject a non-string Skeleton kind', () => {
+  const result = parser.parse('root = Card("t", [a])\na = Skeleton(4)');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should parse a bound $boolean as the second positional loading prop', () => {
+  const result = parser.parse(
+   'root = Card("t", [a])\n$loading = true\na = Skeleton("circle", $loading)',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const skeleton = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(skeleton.typeName).to.equal('Skeleton');
+  expect(skeleton.props['loading']).to.deep.include({ k: 'StateRef', n: '$loading' });
+ });
+
+ it('should keep Skeleton reactive when loading comes from a $variable via the skip-arg form', () => {
+  const result = parser.parse(
+   'root = Card("t", [a])\n$loading = true\na = Skeleton(undefined, $loading)',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const skeleton = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(skeleton.typeName).to.equal('Skeleton');
+  expect(skeleton.props['kind']).to.satisfy((v: unknown) => v === undefined || v === null);
+  expect(skeleton.props['loading']).to.deep.include({ k: 'StateRef', n: '$loading' });
+ });
+
+ it('should parse the inline children form Stack([Skeleton(...)]) via the slot union', () => {
+  const result = parser.parse(
+   'root = Card("t", [s])\ns = Stack([Skeleton("circle"), Skeleton("text")])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const stack = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(stack.typeName).to.equal('Stack');
+  const kids = (stack.props['children'] ?? []) as ElementNode[];
+  expect(kids.map((child) => child.typeName)).to.deep.equal(['Skeleton', 'Skeleton']);
+ });
+
+ it('should parse the help-doc Skeleton example with zero errors', () => {
+  // internal/syspage/embedded/help_page_apps.md ships this program as
+  // the Display: Skeleton example; the help page advertises
+  // parse-verified programs, so pin it in the suite.
+  const result = parser.parse([
+   '$loading = true',
+   'placeholderHeader = Skeleton("card")',
+   'placeholderTeam = Stack([Skeleton("circle"), Skeleton("text", $loading)], "horizontal", "sm")',
+   'root = Card("Feed", Stack([',
+   '  placeholderHeader,',
+   '  Stack([Skeleton("title"), Skeleton("text")], "horizontal", "sm"),',
+   '  Button("content ready", @Set($loading, false)),',
+   '], undefined, "sm"))',
+  ].join('\n'));
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+});
+
 describe('ICON_LIBRARY', () => {
  it('should cover exactly the curated icon names', () => {
   expect([...Object.keys(ICON_LIBRARY)].sort()).to.deep.equal([...ICON_NAMES].sort());

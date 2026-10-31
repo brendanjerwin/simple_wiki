@@ -885,6 +885,57 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-avatar[data-broken] .wiki-page-app-avatar-img {
     display: none;
   }
+
+  /* ── Skeleton ──────────────────────────────────────────────────────── */
+  /* Shimmer placeholder (library Skeleton): a stateless, pure-CSS block
+     that marks content still loading. Base fill is the sunken surface;
+     the sweep brightens toward the elevated surface so the same rules
+     read in light and dark themes. aria-hidden decoration, no JS, no
+     state; the optional library-side $loading gate just unmounts it. */
+  .wiki-page-app-skeleton {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 14px;
+    border-radius: 4px;
+    background-color: var(--color-surface-sunken, #f8f9fa);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-surface-elevated, #ffffff) 65%, transparent),
+      transparent
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: wiki-page-app-skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+  .wiki-page-app-skeleton[data-kind='title'] {
+    width: 60%;
+    height: 20px;
+    border-radius: 6px;
+  }
+  .wiki-page-app-skeleton[data-kind='circle'] {
+    /* flex: none: inside a horizontal Stack this circle is a flex item
+       and must not shrink against a width:100% text-line sibling — same
+       guard .wiki-page-app-avatar uses for its md circle. */
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex: none;
+  }
+  .wiki-page-app-skeleton[data-kind='card'] {
+    height: 120px;
+    border-radius: 8px;
+  }
+  @keyframes wiki-page-app-skeleton-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wiki-page-app-skeleton {
+      animation: none;
+    }
+  }
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;

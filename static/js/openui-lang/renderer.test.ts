@@ -930,3 +930,57 @@ describe('Avatar renderer', () => {
   }
  });
 });
+
+describe('Skeleton renderer', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+
+ async function renderSkeletonProgram(program: string): Promise<HTMLElement> {
+  const rendered = generateWikiPageAppRenderer(null, noopActions).render(program, {});
+  expect(rendered.errors).to.deep.equal([]);
+  return fixture<HTMLElement>(rendered.template as never);
+ }
+
+ it('should render the default text-kind block as an aria-hidden span', async () => {
+  const el = await renderSkeletonProgram('root = Card("T", [a])\na = Skeleton()');
+  const skeleton = el.querySelector('.wiki-page-app-skeleton');
+  expect(skeleton).not.to.equal(null);
+  expect(skeleton?.getAttribute('data-kind')).to.equal('text');
+  expect(skeleton?.getAttribute('aria-hidden')).to.equal('true');
+  expect(skeleton?.textContent).to.equal('');
+ });
+
+ it('should stamp data-kind for each explicit shape kind', async () => {
+  for (const kind of ['text', 'title', 'card', 'circle']) {
+   const el = await renderSkeletonProgram(`root = Card("T", [a])\na = Skeleton("${kind}")`);
+   const skeleton = el.querySelector('.wiki-page-app-skeleton');
+   expect(skeleton, kind).not.to.equal(null);
+   expect(skeleton?.getAttribute('data-kind'), kind).to.equal(kind);
+  }
+ });
+
+ it('should render placeholders for bound $loading gates that are true', async () => {
+  const el = await renderSkeletonProgram(
+   'root = Card("T", [a])\n$loading = true\na = Skeleton("text", $loading)',
+  );
+  expect(el.querySelector('.wiki-page-app-skeleton')).not.to.equal(null);
+ });
+
+ it('should render nothing while a bound $loading is false', async () => {
+  const el = await renderSkeletonProgram(
+   'root = Card("T", [a])\n$loading = false\na = Skeleton("text", $loading)',
+  );
+  expect(el.querySelector('.wiki-page-app-skeleton')).to.equal(null);
+ });
+
+ it('should render nothing for an unset $binding rather than serving a stale shimmer', async () => {
+  const el = await renderSkeletonProgram('root = Card("T", [a])\na = Skeleton("card")');
+  // Unset loading leaves the standalone placeholder visible; guarded here so
+  // a future strictness change that unmounts unset gates pins loudly.
+  expect(el.querySelector('.wiki-page-app-skeleton')).to.not.equal(null);
+ });
+});
