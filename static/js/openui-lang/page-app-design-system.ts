@@ -915,9 +915,13 @@ export const wikiPageAppDesignSystem = css`
     border-radius: 6px;
   }
   .wiki-page-app-skeleton[data-kind='circle'] {
+    /* flex: none: inside a horizontal Stack this circle is a flex item
+       and must not shrink against a width:100% text-line sibling — same
+       guard .wiki-page-app-avatar uses for its md circle. */
     width: 32px;
     height: 32px;
     border-radius: 50%;
+    flex: none;
   }
   .wiki-page-app-skeleton[data-kind='card'] {
     height: 120px;

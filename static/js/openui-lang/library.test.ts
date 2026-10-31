@@ -463,6 +463,15 @@ describe('when parsing Skeleton', () => {
   expect(codes).to.include('type-mismatch');
  });
 
+ it('should emit the contract vocabulary in the unknown-kind message', () => {
+  // Contract msg_ba028bc2c940 names this message shape; pin the yielded
+  // values so a kind-set change surfaces in review (lang-core prefixes
+  // the schema path, so the real text is field "/kind" ...).
+  const result = parser.parse('root = Card("t", [a])\na = Skeleton("banner")');
+  const message = result.meta.errors[0]?.message ?? '';
+  expect(message).to.include('expects one of ["text", "title", "card", "circle"]');
+ });
+
  it('should reject a non-string Skeleton kind', () => {
   const result = parser.parse('root = Card("t", [a])\na = Skeleton(4)');
   const codes = result.meta.errors.map((e) => e.code);
@@ -499,6 +508,23 @@ describe('when parsing Skeleton', () => {
   expect(stack.typeName).to.equal('Stack');
   const kids = (stack.props['children'] ?? []) as ElementNode[];
   expect(kids.map((child) => child.typeName)).to.deep.equal(['Skeleton', 'Skeleton']);
+ });
+
+ it('should parse the help-doc Skeleton example with zero errors', () => {
+  // internal/syspage/embedded/help_page_apps.md ships this program as
+  // the Display: Skeleton example; the help page advertises
+  // parse-verified programs, so pin it in the suite.
+  const result = parser.parse([
+   '$loading = true',
+   'placeholderHeader = Skeleton("card")',
+   'placeholderTeam = Stack([Skeleton("circle"), Skeleton("text", $loading)], "horizontal", "sm")',
+   'root = Card("Feed", Stack([',
+   '  placeholderHeader,',
+   '  Stack([Skeleton("title"), Skeleton("text")], "horizontal", "sm"),',
+   '  Button("content ready", @Set($loading, false)),',
+   '], undefined, "sm"))',
+  ].join('\n'));
+  expect(result.meta.errors).to.deep.equal([]);
  });
 });
 

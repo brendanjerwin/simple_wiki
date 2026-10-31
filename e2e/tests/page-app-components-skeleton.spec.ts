@@ -64,6 +64,7 @@ test.describe.serial('Skeleton component', () => {
     return skeletons.map((el) => ({
      kind: el.getAttribute('data-kind'),
      hidden: el.getAttribute('aria-hidden'),
+     width: Math.round(el.getBoundingClientRect().width),
     }));
    });
    expect(shapes).toHaveLength(6);
@@ -74,6 +75,14 @@ test.describe.serial('Skeleton component', () => {
    for (const shape of shapes) {
     expect(shape.hidden, JSON.stringify(shape)).toBe('true');
    }
+   // Geometry guards: the circle must hold 32px inside the horizontal
+   // row (flex:none — no squash against the full-width text sibling),
+   // and the title block stays narrower than the full-width card.
+   const circle = shapes.find((s) => s.kind === 'circle');
+   expect(circle?.width, JSON.stringify(circle)).toBe(32);
+   const title = shapes.find((s) => s.kind === 'title');
+   const card = shapes.find((s) => s.kind === 'card');
+   expect(title?.width, JSON.stringify(title)).toBeLessThan(Number(card?.width ?? 0));
   });
 
   test('animates the shimmer through the design-system CSS', async ({ page }) => {
@@ -84,16 +93,20 @@ test.describe.serial('Skeleton component', () => {
     timeout: PAGE_LOAD_TIMEOUT_MS,
    });
 
-   const names = await page.evaluate(() => {
+   const styles = await page.evaluate(() => {
     const host = document.querySelector('wiki-page-app-host');
     const skeletons = Array.from(
      host?.shadowRoot?.querySelectorAll('.wiki-page-app-skeleton') ?? [],
     );
-    return skeletons.map((el) => getComputedStyle(el).animationName);
+    return skeletons.map((el) => getComputedStyle(el));
    });
-   expect(names.length).toBeGreaterThan(0);
-   for (const name of names) {
-    expect(name).toBe('wiki-page-app-skeleton-shimmer');
+   expect(styles.length).toBeGreaterThan(0);
+   for (const style of styles) {
+    expect(style.animationName).toBe('wiki-page-app-skeleton-shimmer');
+    // animationName alone can pass while the paint resolves to none —
+    // pin the sweep gradient so a broken color-mix/var fallback fails
+    // loudly instead of rendering a guaranteed flat grey block.
+    expect(style.backgroundImage).toContain('linear-gradient');
    }
   });
 
