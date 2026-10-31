@@ -1098,3 +1098,28 @@ ADRs should document significant architectural decisions that have long-term imp
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.
+
+## Orchestration Hardening for the wiki-core@3 Codebase (post-mortem of the #1320 run)
+
+### Multi-worker conflict hygiene
+- When multiple concurrent worker PRs each touch `static/js/openui-lang/library.ts` /
+  `library.test.ts` / `renderer.test.ts` / `page-app-design-system.ts` /
+  `internal/syspage/embedded/help_page_apps.md`, enforce APPEND-ONLY discipline per
+  worker: each worker owns its own `describe()` block, own component registry line,
+  own CSS banner section, own help-doc bullet. Explicit merge order is set by the
+  coordinator; later branches rebase and RE-RUN the fast gates before CI.
+- NEVER bulk-union duplicate headings or prose in `help_page_apps.md`. Enumerations
+  are shared; a union resolve duplicates the Overview. Verify the file after every
+  resolution round with `:conflicts` reads and a duplicate-heading sweep
+  (repeated `## ` headings must have unique names).
+- When a rebase is solved via mergiraf, re-diff the solved region against
+  `origin/main` normalized-whitespace before staging; a false deletion verdict comes
+  from whitespace realignment, not real loss. Watch for silently-reshuffled blocks
+  too — verify the intended blocks (Skeleton/List/Card `.ref` registry entries) exist
+  on the branch tip before pushing.
+- Gates: use `set -o pipefail` prefix; never gate via `cmd | tail -N && echo GREEN`
+  which returns tail's status, not the gate's.
+- Before pushing: `git status --short` CLEAN is required (an uncommitted local fix
+  will NOT ride the push and CI judges the committed tree — #1361 failure class).
+  Also `find static -name '*:*'` must be empty — Go `//go:embed` walk refuses
+  colon-filename strays (e.g. `library.test.ts:530-540`) and kills the build.
