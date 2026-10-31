@@ -144,7 +144,7 @@ test.describe.serial('Image component', () => {
     timeout: PAGE_LOAD_TIMEOUT_MS,
    });
 
-   const unsafe = host.locator('.wiki-page-app-image', { has: page.locator('img[alt="must never fetch"]') });
+   const unsafe = host.locator('.wiki-page-app-image[aria-label="must never fetch"]');
    await expect(unsafe).toHaveAttribute('data-broken', 'true', { timeout: PAGE_LOAD_TIMEOUT_MS });
    await expect(unsafe.locator('img')).toHaveCount(0);
    // No <img> anywhere fetched the javascript: URL (the fallback never
