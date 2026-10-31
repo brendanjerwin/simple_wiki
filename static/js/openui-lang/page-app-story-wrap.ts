@@ -21,11 +21,6 @@ try {
  // parse errors surface per-story below; no throw at module load
 }
 
-/** Runtime probe of the same template marker the renderer and library use. */
-function isTemplateResult(value: unknown): value is TemplateResult {
- return typeof value === 'object' && value !== null && '_$litType$' in value;
-}
-
 /**
  * The design-system CSS lives in <wiki-page-app-host>'s shadow root in the real
  * app. Stories render the library's raw templates, so this wrapper element
@@ -48,8 +43,7 @@ export class PageAppStoryWrap extends LitElement {
   if (result.meta.errors.length > 0 || !result.root) {
    return html`<pre style="color: red">parse errors: ${JSON.stringify(result.meta.errors, null, 1)}</pre>`;
   }
-  const inner = renderNode(result.root);
-  return isTemplateResult(inner) ? inner : html`<span>${String(inner)}</span>`;
+  return html`${renderNode(result.root)}`;
  }
 
  override render(): TemplateResult {
