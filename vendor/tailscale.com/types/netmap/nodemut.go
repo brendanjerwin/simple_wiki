@@ -29,7 +29,7 @@ func (m mutatingNodeID) NodeIDBeingMutated() tailcfg.NodeID { return tailcfg.Nod
 // has changed its DERP home region.
 type NodeMutationDERPHome struct {
 	mutatingNodeID
-	DERPRegion int
+	DERPRegion tailcfg.DERPRegionID
 }
 
 func (m NodeMutationDERPHome) Apply(n *tailcfg.Node) {
@@ -88,6 +88,13 @@ type NodeMutationRemove struct {
 }
 
 func (m NodeMutationRemove) Apply(*tailcfg.Node) {}
+
+// MakeNodeMutationRemove returns a NodeMutationRemove that targets nodeID.
+// It is the constructor for NodeMutationRemove for callers outside this
+// package, since the embedded ID field is unexported.
+func MakeNodeMutationRemove(nodeID tailcfg.NodeID) NodeMutationRemove {
+	return NodeMutationRemove{mutatingNodeID(nodeID)}
+}
 
 var peerChangeFields = sync.OnceValue(func() []reflect.StructField {
 	var fields []reflect.StructField

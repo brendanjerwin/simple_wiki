@@ -4,8 +4,10 @@
 package ipn
 
 import (
+	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,9 +17,9 @@ import (
 	"tailscale.com/tailcfg"
 	"tailscale.com/types/empty"
 	"tailscale.com/types/key"
-	"tailscale.com/types/netmap"
 	"tailscale.com/types/structs"
 	"tailscale.com/types/views"
+	"tailscale.com/util/syspolicy/policyclient"
 )
 
 type State int
@@ -83,9 +85,19 @@ const (
 	// each one via Engine.RequestStatus.
 	NotifyWatchEngineUpdates NotifyWatchOpt = 1 << 0
 
-	NotifyInitialState  NotifyWatchOpt = 1 << 1 // if set, the first Notify message (sent immediately) will contain the current State + BrowseToURL + SessionID
-	NotifyInitialPrefs  NotifyWatchOpt = 1 << 2 // if set, the first Notify message (sent immediately) will contain the current Prefs
-	NotifyInitialNetMap NotifyWatchOpt = 1 << 3 // if set, the first Notify message (sent immediately) will contain the current NetMap
+	NotifyInitialState NotifyWatchOpt = 1 << 1 // if set, the first Notify message (sent immediately) will contain the current State + BrowseToURL + SessionID
+	NotifyInitialPrefs NotifyWatchOpt = 1 << 2 // if set, the first Notify message (sent immediately) will contain the current Prefs
+
+	// ObsoleteNotifyInitialNetMap is a formerly valid bit (previously named
+	// NotifyInitialNetMap) that asked for the first Notify message to
+	// carry the full netmap in the since-removed Notify.NetMap field.
+	// Subscription requests that set it are now rejected by
+	// [ValidateNotifyWatchOpt]. Watchers seed their view from
+	// [NotifyInitialStatus] instead, and those that need more than the
+	// status fetch what they need via other LocalAPI methods. The bit
+	// value remains reserved so it is never reused with a different
+	// meaning.
+	ObsoleteNotifyInitialNetMap NotifyWatchOpt = 1 << 3
 
 	NotifyNoPrivateKeys        NotifyWatchOpt = 1 << 4 // (no-op) it used to redact private keys; now they always are and this does nothing
 	NotifyInitialDriveShares   NotifyWatchOpt = 1 << 5 // if set, the first Notify message (sent immediately) will contain the current Taildrive Shares
@@ -93,7 +105,14 @@ const (
 
 	NotifyInitialHealthState NotifyWatchOpt = 1 << 7 // if set, the first Notify message (sent immediately) will contain the current health.State of the client
 
-	NotifyRateLimit NotifyWatchOpt = 1 << 8 // if set, rate limit spammy netmap updates to every few seconds
+	// ObsoleteNotifyRateLimit is a formerly valid bit (previously named
+	// NotifyRateLimit) that asked tailscaled to rate limit spammy netmap
+	// updates to every few seconds. It became meaningless once tailscaled
+	// stopped emitting [Notify.NetMap] on runtime (non-initial) bus
+	// messages, so subscription requests that set it are now rejected by
+	// [ValidateNotifyWatchOpt]. The bit value remains reserved so it is
+	// never reused with a different meaning.
+	ObsoleteNotifyRateLimit NotifyWatchOpt = 1 << 8
 
 	NotifyHealthActions NotifyWatchOpt = 1 << 9 // if set, include PrimaryActions in health.State. Otherwise append the action URL to the text
 
@@ -107,7 +126,7 @@ const (
 	//
 	// Without this bit, peer adds/removes/replacements are not delivered
 	// over the bus at all (consumers fall back to fetching the netmap on
-	// demand or, on legacy-emit platforms, to watching [Notify.NetMap]).
+	// demand).
 	//
 	// Watchers that want narrower per-field updates as well (Online,
 	// LastSeen, DERPHome, Endpoints) should additionally set
@@ -118,28 +137,29 @@ const (
 	// observes every per-peer mutation; it just receives them as full
 	// Nodes rather than narrow patches. The cost is bus bandwidth.
 	//
-	// On platforms where the legacy [Notify.NetMap] is still emitted
-	// (Windows, macOS, iOS, Android), it is permitted to combine this
-	// with [NotifyInitialNetMap] for backwards compatibility. New code
-	// should pair this with [NotifyInitialStatus] instead.
+	// Watchers typically pair this with [NotifyInitialStatus] to seed
+	// their initial state.
 	NotifyPeerChanges NotifyWatchOpt = 1 << 12
 
-	// NotifyNoNetMap, if set, suppresses the legacy [Notify.NetMap] field on
-	// runtime (non-initial) Notify messages delivered to this watcher. It
-	// only matters on platforms where tailscaled still emits NetMap on the
-	// bus by default — Windows, macOS, and iOS — and is intended for GUI
-	// clients on those platforms that have migrated to read peers via
-	// [Notify.PeersChanged] / [LocalClient.NetMap]. The initial-state NetMap
-	// (sent when [NotifyInitialNetMap] is set) is unaffected.
+	// NotifyNoNetMap historically suppressed the legacy Notify.NetMap
+	// field on runtime (non-initial) Notify messages on platforms where
+	// tailscaled still emitted it by default. That field no longer
+	// exists, so this bit is now a no-op. It remains accepted for
+	// compatibility with clients that set it.
 	NotifyNoNetMap NotifyWatchOpt = 1 << 13
 
 	// NotifyInitialStatus, if set, causes the first Notify message (sent
 	// immediately) to contain the current [ipnstate.Status] in
 	// [Notify.InitialStatus]. Together with [Notify.SelfChange] and
 	// [Notify.PeersChanged] on subsequent messages, it lets a watcher
-	// stitch together a continuous view of the local node's state without
-	// fetching the netmap directly. Prefer this over [LocalClient.NetMap]
-	// for new code that wants a stable, client-facing snapshot type.
+	// stitch together a continuous view of the local node's state as a
+	// stable, client-facing snapshot type, without needing the netmap.
+	//
+	// The status is sized to the subscription: its per-peer entries
+	// (Status.Peer) are only populated if the watcher also set
+	// [NotifyPeerChanges] or [NotifyPeerPatches], since building them is
+	// O(peers) and only peer-delta subscribers need a peer baseline.
+	// Self-only watchers get Status.Self and the scalar fields.
 	NotifyInitialStatus NotifyWatchOpt = 1 << 14
 
 	// NotifyPeerPatches, if set, opts the watcher into narrow per-field
@@ -156,13 +176,138 @@ const (
 	// promotes any patch into a full-Node entry in [Notify.PeersChanged]
 	// for this session, at the cost of bandwidth.
 	NotifyPeerPatches NotifyWatchOpt = 1 << 15
+
+	// NotifyInProcessNoDisconnect, if set, marks this watcher as an
+	// in-process subscriber that must not be disconnected for falling behind
+	// on its notification queue. Instead, if its queue fills, Notify
+	// production blocks until the watcher catches up.
+	//
+	// Callers using this bit must receive and process notifications promptly.
+	// Their callbacks must not call back into LocalBackend or wait on work that
+	// might call back into LocalBackend, because the producer might be holding
+	// LocalBackend's mutex while waiting for the watcher to catch up.
+	//
+	// This bit is only valid for in-process callers of
+	// LocalBackend.WatchNotificationsAs. LocalAPI WatchIPNBus clients must
+	// not request it.
+	NotifyInProcessNoDisconnect NotifyWatchOpt = 1 << 16
+
+	// NotifySysPolicyChanges, if set, causes the first Notify message, which is sent
+	// immediately, to contain the current effective [setting.Snapshot] in
+	// [Notify.Policy]. [Notify.Policy] is included in subsequent messages whenever
+	// the effective policy changes.
+	//
+	// The snapshot is scoped to the connected user's identity (on Windows,
+	// derived from the named-pipe token's SID).
+	//
+	// The [setting.Snapshot] that is delivered is a full snapshot on every
+	// change.
+	NotifySysPolicyChanges NotifyWatchOpt = 1 << 17
+
+	// NotifyPeerWireGuardState, if set, opts the watcher into
+	// WireGuard session state notifications via [Notify.PeerState].
+	// The first Notify sent to the watcher includes a dump of current
+	// non-zero peer states, and subsequent Notifies include per-peer
+	// state changes.
+	NotifyPeerWireGuardState NotifyWatchOpt = 1 << 18
 )
+
+// String implements the [fmt.Stringer] interface.
+// Returns the string representation of all the bits joined by the bitwise-or "|" operator.
+func (o NotifyWatchOpt) String() string {
+	if o == NotifyWatchOpt(0) {
+		return fmt.Sprintf("%T(%#x)", o, uint64(o))
+	}
+
+	pkg, _, found := strings.Cut(fmt.Sprintf("%T", o), ".")
+
+	var bits []string
+	var mask NotifyWatchOpt
+	try := func(bit NotifyWatchOpt, s string) {
+		if o&bit == 0 {
+			return
+		}
+		if found {
+			bits = append(bits, pkg+"."+s)
+		} else {
+			bits = append(bits, s)
+		}
+		mask |= bit
+	}
+	try(NotifyWatchEngineUpdates, "NotifyWatchEngineUpdates")
+	try(NotifyInitialState, "NotifyInitialState")
+	try(NotifyInitialPrefs, "NotifyInitialPrefs")
+	try(ObsoleteNotifyInitialNetMap, "ObsoleteNotifyInitialNetMap")
+	try(NotifyNoPrivateKeys, "NotifyNoPrivateKeys")
+	try(NotifyInitialDriveShares, "NotifyInitialDriveShares")
+	try(NotifyInitialOutgoingFiles, "NotifyInitialOutgoingFiles")
+	try(NotifyInitialHealthState, "NotifyInitialHealthState")
+	try(ObsoleteNotifyRateLimit, "ObsoleteNotifyRateLimit")
+	try(NotifyHealthActions, "NotifyHealthActions")
+	try(NotifyInitialSuggestedExitNode, "NotifyInitialSuggestedExitNode")
+	try(NotifyInitialClientVersion, "NotifyInitialClientVersion")
+	try(NotifyPeerChanges, "NotifyPeerChanges")
+	try(NotifyNoNetMap, "NotifyNoNetMap")
+	try(NotifyInitialStatus, "NotifyInitialStatus")
+	try(NotifyPeerPatches, "NotifyPeerPatches")
+	try(NotifyInProcessNoDisconnect, "NotifyInProcessNoDisconnect")
+	try(NotifySysPolicyChanges, "NotifySysPolicyChanges")
+	try(NotifyPeerWireGuardState, "NotifyPeerWireGuardState")
+
+	if mask != o {
+		bits = append(bits, fmt.Sprintf("%T(%#x)", o, uint64(o^mask))) // unknown
+	}
+
+	if len(bits) == 1 {
+		return bits[0]
+	}
+	// Multiple values, so we need to wrap with parentheses.
+	return "(" + strings.Join(bits, " | ") + ")"
+}
+
+// AppendText implements the [encoding.TextAppender] interface
+// by encoding its textual representation.
+func (o NotifyWatchOpt) AppendText(b []byte) ([]byte, error) {
+	return strconv.AppendUint(b, uint64(o), 10), nil
+}
+
+// MarshalText implements the [encoding.TextMarshaler] interface
+// by encoding its textual representation.
+func (o NotifyWatchOpt) MarshalText() (text []byte, err error) {
+	return o.AppendText(nil)
+}
+
+// UnmarshalText implements the [encoding.TextUnmarshaler] interface
+// by decoding its textual representation.
+func (o *NotifyWatchOpt) UnmarshalText(text []byte) error {
+	v, err := strconv.ParseUint(string(text), 10, 64)
+	if err != nil {
+		return err
+	}
+	*o = NotifyWatchOpt(v)
+	return nil
+}
+
+// ValidateNotifyWatchOpt reports whether mask is a valid WatchIPNBus
+// subscription mask.
+func ValidateNotifyWatchOpt(mask NotifyWatchOpt) error {
+	if mask&ObsoleteNotifyRateLimit != 0 {
+		return errors.New("the NotifyRateLimit IPN bus subscription bit is no longer supported")
+	}
+	if mask&ObsoleteNotifyInitialNetMap != 0 {
+		return errors.New("the NotifyInitialNetMap IPN bus subscription bit is no longer supported; seed from NotifyInitialStatus instead")
+	}
+	return nil
+}
 
 // Notify is a communication from a backend (e.g. tailscaled) to a frontend
 // (cmd/tailscale, iOS, macOS, Win Tasktray).
 // In any given notification, any or all of these may be nil, meaning
 // that they have not changed.
 // They are JSON-encoded on the wire, despite the lack of struct tags.
+//
+// API maturity: this type is not considered a stable API and is
+// subject to change between releases.
 type Notify struct {
 	_       structs.Incomparable
 	Version string // version number of IPN backend
@@ -187,9 +332,15 @@ type Notify struct {
 	// sniproxy, etc.) can read the current self state without watching the
 	// full netmap.
 	//
-	// Consumers that need additional state (peers, DNS config, packet
-	// filter) should react to SelfChange by fetching the full netmap on
-	// demand via [LocalClient.NetMap].
+	// Runtime self changes are not gated by any subscription bit: every
+	// watcher receives them. There is no initial SelfChange; watchers
+	// that need the current self node at the start of a session should
+	// set [NotifyInitialStatus] and seed from InitialStatus.Self.
+	//
+	// Consumers that need additional state (peers, DNS config, etc.)
+	// should react to SelfChange by fetching what they need via other
+	// LocalAPI methods, such as LocalClient.Status or
+	// LocalClient.DNSConfig.
 	SelfChange *tailcfg.Node `json:",omitzero"`
 
 	// InitialStatus, if non-nil, is the current [ipnstate.Status]. It is
@@ -198,24 +349,6 @@ type Notify struct {
 	// and [Notify.PeerChanges] messages, it lets a watcher stitch together
 	// a continuous view of node state without fetching the netmap.
 	InitialStatus *ipnstate.Status `json:",omitzero"`
-
-	// NetMap, if non-nil, is the full network map. New consumers should prefer
-	// [LocalClient.NetMap] for one-shot fetches and [Notify.SelfChange] /
-	// [Notify.PeerChanges] for incremental reactive updates; NetMap on the bus
-	// is the legacy path retained for hosts whose GUIs have not yet finished
-	// migrating. It is delivered:
-	//
-	//   - On the initial Notify if the watcher requested
-	//     [NotifyInitialNetMap] (any platform).
-	//   - On subsequent Notify messages, only when tailscaled is running
-	//     on Windows, macOS, or iOS. On Linux and other platforms it is
-	//     always nil after the initial notify.
-	//
-	// Deprecated: this field is only populated on Windows, macOS, and iOS and
-	// is slated for removal in favor of [Notify.InitialStatus] +
-	// [Notify.SelfChange] / [Notify.PeerChanges], etc, as this field
-	// doesn't scale.
-	NetMap *netmap.NetworkMap
 
 	// PeerChangedPatch, if non-empty, lists narrow per-field peer patches
 	// since the last Notify (currently Online, LastSeen, DERPHome,
@@ -267,8 +400,8 @@ type Notify struct {
 	// The producer guarantees that any UserID referenced by a peer in
 	// a [Notify.PeersChanged] / [Notify.PeerChangedPatch] entry will
 	// have its profile delivered either earlier on this same session
-	// (e.g. via the initial NetMap or via an earlier Notify carrying
-	// UserProfiles) or in this same Notify. A consumer that sees a
+	// (via an earlier Notify carrying UserProfiles) or in this same
+	// Notify. A consumer that sees a
 	// UserID it doesn't recognize on a session that opted in to
 	// peer-change notifications can treat it as a bug; the
 	// [LocalClient.UserProfile] LocalAPI fallback exists for sessions
@@ -280,6 +413,10 @@ type Notify struct {
 	// them as read-only and use [tailcfg.UserProfileView.AsStruct] or
 	// the per-field accessors to read them.
 	UserProfiles map[tailcfg.UserID]tailcfg.UserProfileView `json:",omitzero"`
+
+	// PeerState, if non-empty, carries WireGuard session states keyed by stable
+	// node ID. Watchers must opt in via [NotifyPeerWireGuardState].
+	PeerState map[tailcfg.StableNodeID]PeerState `json:",omitzero"`
 
 	Engine      *EngineStatus // if non-nil, the new or current wireguard stats
 	BrowseToURL *string       // if non-nil, UI should open a browser right now
@@ -332,7 +469,79 @@ type Notify struct {
 	// be the best exit node for the current network conditions.
 	SuggestedExitNode *tailcfg.StableNodeID `json:",omitzero"`
 
+	// Policy, if non-nil, is the effective policy snapshot for the
+	// connected user. It is scoped per-user: per-user policy settings
+	// are merged with device-wide settings, with device-wide taking
+	// precedence. Sent initially when [NotifySysPolicyChanges] is set,
+	// and on change thereafter.
+	Policy *policyclient.PolicySnapshot `json:",omitzero"`
+
 	// type is mirrored in xcode/IPN/Core/LocalAPI/Model/LocalAPIModel.swift
+}
+
+// PeerWireGuardState is the WireGuard session state for a peer.
+//
+// It JSON-marshals as a lowercase string (e.g. "handshake", "established")
+// rather than its integer value, so the wire format does not depend on the
+// numeric constants below.
+type PeerWireGuardState uint8
+
+const (
+	PeerWireGuardStateNone        PeerWireGuardState = 0
+	PeerWireGuardStateHandshake   PeerWireGuardState = 1
+	PeerWireGuardStateEstablished PeerWireGuardState = 2
+	PeerWireGuardStateExpired     PeerWireGuardState = 3
+)
+
+// String returns the lowercase string form of s used by [PeerWireGuardState.MarshalText].
+func (s PeerWireGuardState) String() string {
+	switch s {
+	case PeerWireGuardStateNone:
+		return "none"
+	case PeerWireGuardStateHandshake:
+		return "handshake"
+	case PeerWireGuardStateEstablished:
+		return "established"
+	case PeerWireGuardStateExpired:
+		return "expired"
+	}
+	return fmt.Sprintf("PeerWireGuardState(%d)", uint8(s))
+}
+
+// MarshalText implements [encoding.TextMarshaler].
+func (s PeerWireGuardState) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+// UnmarshalText implements [encoding.TextUnmarshaler].
+func (s *PeerWireGuardState) UnmarshalText(b []byte) error {
+	switch string(b) {
+	case "none":
+		*s = PeerWireGuardStateNone
+	case "handshake":
+		*s = PeerWireGuardStateHandshake
+	case "established":
+		*s = PeerWireGuardStateEstablished
+	case "expired":
+		*s = PeerWireGuardStateExpired
+	default:
+		return fmt.Errorf("unknown PeerWireGuardState %q", b)
+	}
+	return nil
+}
+
+// PeerState is the per-peer WireGuard session state delivered in
+// [Notify.PeerState].
+type PeerState struct {
+	// PeerWireGuardState is the current WireGuard session state for the peer.
+	PeerWireGuardState PeerWireGuardState
+
+	// PeerWireGuardStateAt is the wall-clock time at which the peer entered
+	// [PeerState.PeerWireGuardState], as observed by tailscaled.
+	// It is tracked by [LocalBackend] even when no watchers are subscribed,
+	// so a later subscriber's initial snapshot reflects the true transition
+	// time rather than the subscription time.
+	PeerWireGuardStateAt time.Time
 }
 
 func (n Notify) String() string {
@@ -355,6 +564,9 @@ func (n Notify) String() string {
 	}
 	if n.PeerChangedPatch != nil {
 		fmt.Fprintf(&sb, "PeerChangedPatch(%d) ", len(n.PeerChangedPatch))
+	}
+	if len(n.PeerState) > 0 {
+		fmt.Fprintf(&sb, "PeerState(%d) ", len(n.PeerState))
 	}
 	if n.Engine != nil {
 		fmt.Fprintf(&sb, "wg=%v ", *n.Engine)
