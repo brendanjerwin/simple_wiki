@@ -9,3 +9,12 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    # connectrpc.com/vanguard 0.5.0 is a rewrite onto connect-go v2: every API
+    # this repo uses (Service, NewTranscoder, ServiceOption, WithTargetProtocols,
+    # WithTargetCodecs, WithUnknownHandler) was removed, so the bump cannot
+    # compile (see #1375). Migrating is tracked in #1379; until that lands, do
+    # not re-file the bump every week. Remove this rule with that migration.
+    ignore:
+      - dependency-name: "connectrpc.com/vanguard"
+        versions:
+          - ">= 0.5.0"
