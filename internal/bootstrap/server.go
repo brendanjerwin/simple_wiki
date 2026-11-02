@@ -290,7 +290,7 @@ func startFullTLSListeners(
 	cfg TailscaleHTTPConfig,
 	handler http.Handler,
 	identityResolver tailscale.IdentityResolver,
-) (net.Listener, net.Listener, *http.Server, error) {
+) (tlsListener net.Listener, httpListener net.Listener, redirectServer *http.Server, err error) {
 	// Parse host from cfg.HTTPAddr
 	host := ""
 	if idx := strings.LastIndex(cfg.HTTPAddr, ":"); idx != -1 {
@@ -300,17 +300,21 @@ func startFullTLSListeners(
 	tlsConfig := tailscale.NewTLSProvider().GetTLSConfig()
 	httpsAddr := fmt.Sprintf("%s:%d", host, cfg.TLSPort)
 
-	tlsListener, err := tls.Listen(networkTCP, httpsAddr, tlsConfig)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create TLS listener: %w", err)
+	// Keep a local handle for the cleanup defer: the named results are zeroed
+	// by any explicit `return nil, ...`, and deferred functions run AFTER those
+	// assignments — closing through the named result would deref nil on every
+	// error path.
+	boundTLS, listenErr := tls.Listen(networkTCP, httpsAddr, tlsConfig)
+	if listenErr != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create TLS listener: %w", listenErr)
 	}
-
+	tlsListener = boundTLS
 	handedOff := false
 	defer func() {
 		if handedOff {
 			return
 		}
-		if closeErr := tlsListener.Close(); closeErr != nil {
+		if closeErr := boundTLS.Close(); closeErr != nil {
 			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
 		}
 	}()
@@ -332,14 +336,14 @@ func startFullTLSListeners(
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
 	}
-	httpListener, err := net.Listen(networkTCP, cfg.HTTPAddr)
+	httpListener, err = net.Listen(networkTCP, cfg.HTTPAddr)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
 	cfg.Logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", cfg.HTTPAddr)
 
-	redirectServer := newCleartextHTTP2Server(redirector)
+	redirectServer = newCleartextHTTP2Server(redirector)
 	redirectServer.Addr = cfg.HTTPAddr
 	handedOff = true
 
