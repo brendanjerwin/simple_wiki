@@ -1054,6 +1054,8 @@ function buildLibrary(): Library {
    const widthPx = typeof width === 'number' ? width : undefined;
    const heightPx = typeof height === 'number' ? height : undefined;
    const fitValue = fit === 'contain' || fit === 'fill' ? fit : 'cover';
+   const widthAttr = widthPx ?? nothing;
+   const heightAttr = heightPx ?? nothing;
    const fallback = html`<span
      class="wiki-page-app-image-fallback"
      aria-hidden="true"
@@ -1070,8 +1072,8 @@ function buildLibrary(): Library {
         class="wiki-page-app-image-img"
         src=${safeUrl}
         alt=${altText}
-        width=${widthPx != null ? widthPx : nothing}
-        height=${heightPx != null ? heightPx : nothing}
+        width=${widthAttr}
+        height=${heightAttr}
         loading="lazy"
         @error=${markImgBroken}
        @load=${clearImgBroken}
@@ -1216,6 +1218,18 @@ function buildLibrary(): Library {
  });
 
  /**
+  * Shared boolean-change dispatcher for Switch and Checkbox. Reads the
+  * live `.checked` from the input element when available; falls back to
+  * inverting `isChecked` (e.g. for programmatic toggles).
+  */
+ function dispatchBooleanChange(event: Event, onChange: unknown, isChecked: boolean): void {
+  dispatchArtifactAction(event, {
+   plan: asPlan(onChange),
+   value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
+  });
+ }
+
+ /**
   * Switch renders a boolean toggle control bound to a $variable. Unlike
   * restyled Buttons, Switch communicates a binary on/off state visually.
   * Positional order: label, checked, onChange — mirrors Input/Select.
@@ -1233,12 +1247,7 @@ function buildLibrary(): Library {
    'A toggle switch bound to a boolean $variable. `label` is the display label; `checked` the boolean state (bind a $variable); `onChange` the action that runs when the toggle fires — use @Set($var, $value) where $value is the new boolean. Example: `Switch("Struggled", $struggled, @Set($struggled, $value))`.',
   component: (({ label, checked, onChange }) => {
    const isChecked = checked === true;
-   const fire = (event: Event) => {
-    dispatchArtifactAction(event, {
-     plan: asPlan(onChange),
-     value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
-    });
-   };
+   const fire = (event: Event) => dispatchBooleanChange(event, onChange, isChecked);
    return html`<label class="wiki-page-app-switch-field">
      <span class="wiki-page-app-switch-track" aria-hidden="true">
        <input
@@ -1273,12 +1282,7 @@ function buildLibrary(): Library {
    'A checkbox bound to a boolean $variable. `label` is the display label; `checked` the boolean state (bind a $variable); `onChange` the action that runs when the checkbox toggles — use @Set($var, $value) where $value is the new boolean. Example: `Checkbox("Done", $done, @Set($done, $value))`.',
   component: (({ label, checked, onChange }) => {
    const isChecked = checked === true;
-   const fire = (event: Event) => {
-    dispatchArtifactAction(event, {
-     plan: asPlan(onChange),
-     value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
-    });
-   };
+   const fire = (event: Event) => dispatchBooleanChange(event, onChange, isChecked);
    return html`<label class="wiki-page-app-checkbox-field">
      <input
        class="wiki-page-app-checkbox-input"
