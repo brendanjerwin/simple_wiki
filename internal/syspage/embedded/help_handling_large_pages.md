@@ -33,6 +33,8 @@ Use `api_v1_PageManagementService_ReadPage` only when you truly need the whole m
 
 When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. The `old_content_markdown` should come from `ReadPageSection` when possible. That keeps the edit small and avoids rewriting unrelated content.
 
+To **append or prepend** (for example, adding a bullet to a log or register section, including the page's final section), use `api_v1_PageManagementService_WritePageSection`. It addresses a byte range exactly like `ReadPageSection` (`byte_offset`, `byte_length`), takes a `mode` of `replace`, `append`, or `prepend`, the text in `content_markdown` (only the added text for append/prepend), and a **required** `expected_version_hash`. Because `UpdatePageContent` rejects a `new_content_markdown` that contains `old_content_markdown`, appends cannot be expressed there. Guards: `replace` rejects content more than 3x the range size, append/prepend reject additions over 64 KiB, and the shrink breaker applies.
+
 ## Snippet replacement guards on find-and-replace writes
 
 When using `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown` must be **only the replacement snippet** — never the full page body. A common agent mistake is to pass the entire intended page body as `new_content_markdown`, which splices the full body into the match point and silently doubles the page content. Two server-side guards (issue #1339) reject this:

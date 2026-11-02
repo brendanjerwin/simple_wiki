@@ -37,6 +37,7 @@ const (
 	PageManagementService_RenderMarkdown_FullMethodName     = "/api.v1.PageManagementService/RenderMarkdown"
 	PageManagementService_ReadPageOutline_FullMethodName    = "/api.v1.PageManagementService/ReadPageOutline"
 	PageManagementService_ReadPageSection_FullMethodName    = "/api.v1.PageManagementService/ReadPageSection"
+	PageManagementService_WritePageSection_FullMethodName   = "/api.v1.PageManagementService/WritePageSection"
 )
 
 // PageManagementServiceClient is the client API for PageManagementService service.
@@ -81,6 +82,8 @@ type PageManagementServiceClient interface {
 	ReadPageOutline(ctx context.Context, in *ReadPageOutlineRequest, opts ...grpc.CallOption) (*ReadPageOutlineResponse, error)
 	// ReadPageSection — see (api.v1.description).
 	ReadPageSection(ctx context.Context, in *ReadPageSectionRequest, opts ...grpc.CallOption) (*ReadPageSectionResponse, error)
+	// WritePageSection — see (api.v1.description).
+	WritePageSection(ctx context.Context, in *WritePageSectionRequest, opts ...grpc.CallOption) (*WritePageSectionResponse, error)
 }
 
 type pageManagementServiceClient struct {
@@ -294,6 +297,16 @@ func (c *pageManagementServiceClient) ReadPageSection(ctx context.Context, in *R
 	return out, nil
 }
 
+func (c *pageManagementServiceClient) WritePageSection(ctx context.Context, in *WritePageSectionRequest, opts ...grpc.CallOption) (*WritePageSectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WritePageSectionResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_WritePageSection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PageManagementServiceServer is the server API for PageManagementService service.
 // All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
@@ -336,6 +349,8 @@ type PageManagementServiceServer interface {
 	ReadPageOutline(context.Context, *ReadPageOutlineRequest) (*ReadPageOutlineResponse, error)
 	// ReadPageSection — see (api.v1.description).
 	ReadPageSection(context.Context, *ReadPageSectionRequest) (*ReadPageSectionResponse, error)
+	// WritePageSection — see (api.v1.description).
+	WritePageSection(context.Context, *WritePageSectionRequest) (*WritePageSectionResponse, error)
 	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
@@ -396,6 +411,9 @@ func (UnimplementedPageManagementServiceServer) ReadPageOutline(context.Context,
 }
 func (UnimplementedPageManagementServiceServer) ReadPageSection(context.Context, *ReadPageSectionRequest) (*ReadPageSectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadPageSection not implemented")
+}
+func (UnimplementedPageManagementServiceServer) WritePageSection(context.Context, *WritePageSectionRequest) (*WritePageSectionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WritePageSection not implemented")
 }
 func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
@@ -737,6 +755,24 @@ func _PageManagementService_ReadPageSection_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PageManagementService_WritePageSection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WritePageSectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).WritePageSection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_WritePageSection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).WritePageSection(ctx, req.(*WritePageSectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -811,6 +847,10 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReadPageSection",
 			Handler:    _PageManagementService_ReadPageSection_Handler,
+		},
+		{
+			MethodName: "WritePageSection",
+			Handler:    _PageManagementService_WritePageSection_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

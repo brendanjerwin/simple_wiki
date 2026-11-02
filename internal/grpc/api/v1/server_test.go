@@ -7017,6 +7017,132 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("WritePageSection", func() {
+		var (
+			req                   *apiv1.WritePageSectionRequest
+			resp                  *apiv1.WritePageSectionResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+			pageMarkdown          string
+		)
+
+		BeforeEach(func() {
+			pageMarkdown = "# Intro\n\nintro body\n\n# Decision log\n\n- first decision\n"
+			mockPageReaderMutator = &MockPageReaderMutator{Markdown: wikipage.Markdown(pageMarkdown)}
+			finalSection := "- first decision\n"
+			req = &apiv1.WritePageSectionRequest{
+				Page:                "test-page",
+				ByteOffset:          int64(len(pageMarkdown) - len(finalSection)),
+				ByteLength:          int64(len(finalSection)),
+				Mode:                apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_APPEND,
+				ContentMarkdown:     "- second decision\n",
+				ExpectedVersionHash: computeExpectedPageHash(nil, pageMarkdown),
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.WritePageSection(ctx, req)
+		})
+
+		When("appending to the final section with a matching hash", func() {
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add the text at the end of the section", func() {
+				Expect(string(mockPageReaderMutator.WrittenMarkdown)).To(Equal(pageMarkdown + "- second decision\n"))
+			})
+
+			It("should return the hash of the new content", func() {
+				Expect(resp.VersionHash).To(Equal(computeExpectedPageHash(nil, string(mockPageReaderMutator.WrittenMarkdown))))
+			})
+		})
+
+		When("prepending to a mid-page section", func() {
+			BeforeEach(func() {
+				req.Mode = apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_PREPEND
+				req.ByteOffset = int64(len("# Intro\n\n"))
+				req.ByteLength = int64(len("intro body\n\n"))
+				req.ContentMarkdown = "lead\n"
+			})
+
+			It("should insert the text at the start of the section", func() {
+				Expect(string(mockPageReaderMutator.WrittenMarkdown)).To(Equal("# Intro\n\nlead\nintro body\n\n# Decision log\n\n- first decision\n"))
+			})
+		})
+
+		When("replacing a section with similarly sized content", func() {
+			BeforeEach(func() {
+				req.Mode = apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE
+				req.ContentMarkdown = "- changed decision\n"
+			})
+
+			It("should replace only the addressed range", func() {
+				Expect(string(mockPageReaderMutator.WrittenMarkdown)).To(Equal("# Intro\n\nintro body\n\n# Decision log\n\n- changed decision\n"))
+			})
+		})
+
+		When("the expected version hash is stale", func() {
+			BeforeEach(func() {
+				req.ExpectedVersionHash = "stale"
+			})
+
+			It("should return an aborted error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry"))
+			})
+
+			It("should not write", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("the expected version hash is missing", func() {
+			BeforeEach(func() {
+				req.ExpectedVersionHash = ""
+			})
+
+			It("should return a failed precondition error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "expected_version_hash is required"))
+			})
+		})
+
+		When("mode=replace is given an oversized whole-page body", func() {
+			BeforeEach(func() {
+				req.Mode = apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE
+				req.ContentMarkdown = pageMarkdown + pageMarkdown + pageMarkdown
+			})
+
+			It("should return an invalid argument error from the section write guard", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "section write guard"))
+			})
+
+			It("should not write", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("an append exceeds the size cap", func() {
+			BeforeEach(func() {
+				req.ContentMarkdown = strings.Repeat("x", 64*1024+1)
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "exceeds the"))
+			})
+		})
+
+		When("mode is unspecified", func() {
+			BeforeEach(func() {
+				req.Mode = apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_UNSPECIFIED
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "mode is required"))
+			})
+		})
+	})
+
 	Describe("ReadPageSection", func() {
 		var (
 			req                   *apiv1.ReadPageSectionRequest

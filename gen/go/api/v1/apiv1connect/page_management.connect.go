@@ -87,6 +87,9 @@ const (
 	// PageManagementServiceReadPageSectionProcedure is the fully-qualified name of the
 	// PageManagementService's ReadPageSection RPC.
 	PageManagementServiceReadPageSectionProcedure = "/api.v1.PageManagementService/ReadPageSection"
+	// PageManagementServiceWritePageSectionProcedure is the fully-qualified name of the
+	// PageManagementService's WritePageSection RPC.
+	PageManagementServiceWritePageSectionProcedure = "/api.v1.PageManagementService/WritePageSection"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -110,6 +113,7 @@ var (
 	pageManagementServiceRenderMarkdownMethodDescriptor     = pageManagementServiceServiceDescriptor.Methods().ByName("RenderMarkdown")
 	pageManagementServiceReadPageOutlineMethodDescriptor    = pageManagementServiceServiceDescriptor.Methods().ByName("ReadPageOutline")
 	pageManagementServiceReadPageSectionMethodDescriptor    = pageManagementServiceServiceDescriptor.Methods().ByName("ReadPageSection")
+	pageManagementServiceWritePageSectionMethodDescriptor   = pageManagementServiceServiceDescriptor.Methods().ByName("WritePageSection")
 )
 
 // PageManagementServiceClient is a client for the api.v1.PageManagementService service.
@@ -150,6 +154,8 @@ type PageManagementServiceClient interface {
 	ReadPageOutline(context.Context, *connect.Request[v1.ReadPageOutlineRequest]) (*connect.Response[v1.ReadPageOutlineResponse], error)
 	// ReadPageSection — see (api.v1.description).
 	ReadPageSection(context.Context, *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error)
+	// WritePageSection — see (api.v1.description).
+	WritePageSection(context.Context, *connect.Request[v1.WritePageSectionRequest]) (*connect.Response[v1.WritePageSectionResponse], error)
 }
 
 // NewPageManagementServiceClient constructs a client for the api.v1.PageManagementService service.
@@ -270,6 +276,12 @@ func NewPageManagementServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(pageManagementServiceReadPageSectionMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		writePageSection: connect.NewClient[v1.WritePageSectionRequest, v1.WritePageSectionResponse](
+			httpClient,
+			baseURL+PageManagementServiceWritePageSectionProcedure,
+			connect.WithSchema(pageManagementServiceWritePageSectionMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -293,6 +305,7 @@ type pageManagementServiceClient struct {
 	renderMarkdown     *connect.Client[v1.RenderMarkdownRequest, v1.RenderMarkdownResponse]
 	readPageOutline    *connect.Client[v1.ReadPageOutlineRequest, v1.ReadPageOutlineResponse]
 	readPageSection    *connect.Client[v1.ReadPageSectionRequest, v1.ReadPageSectionResponse]
+	writePageSection   *connect.Client[v1.WritePageSectionRequest, v1.WritePageSectionResponse]
 }
 
 // CreatePage calls api.v1.PageManagementService.CreatePage.
@@ -385,6 +398,11 @@ func (c *pageManagementServiceClient) ReadPageSection(ctx context.Context, req *
 	return c.readPageSection.CallUnary(ctx, req)
 }
 
+// WritePageSection calls api.v1.PageManagementService.WritePageSection.
+func (c *pageManagementServiceClient) WritePageSection(ctx context.Context, req *connect.Request[v1.WritePageSectionRequest]) (*connect.Response[v1.WritePageSectionResponse], error) {
+	return c.writePageSection.CallUnary(ctx, req)
+}
+
 // PageManagementServiceHandler is an implementation of the api.v1.PageManagementService service.
 type PageManagementServiceHandler interface {
 	// CreatePage — see (api.v1.description).
@@ -423,6 +441,8 @@ type PageManagementServiceHandler interface {
 	ReadPageOutline(context.Context, *connect.Request[v1.ReadPageOutlineRequest]) (*connect.Response[v1.ReadPageOutlineResponse], error)
 	// ReadPageSection — see (api.v1.description).
 	ReadPageSection(context.Context, *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error)
+	// WritePageSection — see (api.v1.description).
+	WritePageSection(context.Context, *connect.Request[v1.WritePageSectionRequest]) (*connect.Response[v1.WritePageSectionResponse], error)
 }
 
 // NewPageManagementServiceHandler builds an HTTP handler from the service implementation. It
@@ -539,6 +559,12 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 		connect.WithSchema(pageManagementServiceReadPageSectionMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	pageManagementServiceWritePageSectionHandler := connect.NewUnaryHandler(
+		PageManagementServiceWritePageSectionProcedure,
+		svc.WritePageSection,
+		connect.WithSchema(pageManagementServiceWritePageSectionMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.PageManagementService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PageManagementServiceCreatePageProcedure:
@@ -577,6 +603,8 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 			pageManagementServiceReadPageOutlineHandler.ServeHTTP(w, r)
 		case PageManagementServiceReadPageSectionProcedure:
 			pageManagementServiceReadPageSectionHandler.ServeHTTP(w, r)
+		case PageManagementServiceWritePageSectionProcedure:
+			pageManagementServiceWritePageSectionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -656,4 +684,8 @@ func (UnimplementedPageManagementServiceHandler) ReadPageOutline(context.Context
 
 func (UnimplementedPageManagementServiceHandler) ReadPageSection(context.Context, *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.ReadPageSection is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) WritePageSection(context.Context, *connect.Request[v1.WritePageSectionRequest]) (*connect.Response[v1.WritePageSectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.WritePageSection is not implemented"))
 }
