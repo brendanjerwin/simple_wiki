@@ -15,15 +15,12 @@
 package vanguard
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	httpbody "google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/genproto/googleapis/rpc/status"
@@ -55,7 +52,7 @@ var httpStatusCodeFromRPCIndex = [...]int{
 }
 
 func httpStatusCodeFromRPC(code connect.Code) int {
-	if int(code) > len(httpStatusCodeFromRPCIndex) {
+	if int(code) >= len(httpStatusCodeFromRPCIndex) {
 		return http.StatusInternalServerError
 	}
 	return httpStatusCodeFromRPCIndex[code]
@@ -84,11 +81,15 @@ func httpStatusCodeToRPC(code int) connect.Code {
 }
 
 func httpWriteError(rsp http.ResponseWriter, err error) {
+	cerr := asConnectError(err)
+	httpWriteStatus(rsp, httpStatusCodeFromRPC(cerr.Code()), cerr)
+}
+
+// httpWriteStatus writes cerr as a google.rpc.Status body with statusCode.
+func httpWriteStatus(rsp http.ResponseWriter, statusCode int, cerr *connect.Error) {
 	codec := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}
-	cerr := asConnectError(err)
-	statusCode := httpStatusCodeFromRPC(cerr.Code())
 	stat := grpcStatusFromError(cerr)
 
 	hdr := rsp.Header()
@@ -104,33 +105,39 @@ func httpWriteError(rsp http.ResponseWriter, err error) {
 	_, _ = rsp.Write(bin) //nolint:gosec // writing error response, not user-tainted data
 }
 
-func httpErrorFromResponse(statusCode int, contentType string, src *bytes.Buffer) *connect.Error {
+func httpErrorFromResponse(statusCode int, contentType string, src []byte) *connect.Error {
 	if statusCode == http.StatusOK {
 		return nil
 	}
 	codec := protojson.UnmarshalOptions{}
 	var stat status.Status
-	if err := codec.Unmarshal(src.Bytes(), &stat); err != nil {
+	if err := codec.Unmarshal(src, &stat); err != nil {
 		body, err := anypb.New(&httpbody.HttpBody{
 			ContentType: contentType,
-			Data:        src.Bytes(),
+			Data:        src,
 		})
 		if err != nil {
-			return connect.NewError(connect.CodeInternal, err)
+			return connect.NewError(connect.CodeInternal, err.Error())
 		}
 		stat.Details = append(stat.Details, body)
 		stat.Code = int32(httpStatusCodeToRPC(statusCode)) //nolint:gosec
 		stat.Message = http.StatusText(statusCode)
 	}
-	connectErr := connect.NewWireError(
+	connectErr := connect.NewError(
 		connect.Code(stat.GetCode()), //nolint:gosec // No information loss.
-		errors.New(stat.GetMessage()),
-	)
+		stat.GetMessage(),
+	).WithRemote()
 	for _, msg := range stat.GetDetails() {
-		errDetail, _ := connect.NewErrorDetail(msg)
-		connectErr.AddDetail(errDetail)
+		connectErr = connectErr.WithDetail(&connect.ErrorDetail{
+			Type:  typeNameFromURL(msg.GetTypeUrl()),
+			Value: msg.GetValue(),
+		})
 	}
 	return connectErr
+}
+
+func typeNameFromURL(url string) string {
+	return url[strings.LastIndexByte(url, '/')+1:]
 }
 
 func httpSplitVar(variable string, multi bool) []string {
@@ -149,9 +156,9 @@ func httpSplitVar(variable string, multi bool) []string {
 func httpEncodePathValues(input protoreflect.Message, target *routeTarget) (
 	path string, query url.Values, err error,
 ) {
-	// Copy segments to build URL
-	segments := make([]string, len(target.path))
-	copy(segments, target.path)
+	// Split segments to build URL
+	templatePath, verb := splitVerb(target.template)
+	segments := strings.Split(templatePath[1:], "/")
 
 	// Count the number of times each field path is used.
 	// Singular fields can be referenced multiple times.
@@ -211,9 +218,9 @@ func httpEncodePathValues(input protoreflect.Message, target *routeTarget) (
 		pathURL.WriteByte('/')
 		pathURL.WriteString(segment)
 	}
-	if target.verb != "" {
+	if verb != "" {
 		pathURL.WriteByte(':')
-		pathURL.WriteString(target.verb)
+		pathURL.WriteString(verb)
 	}
 	path = pathURL.String()
 
@@ -301,56 +308,6 @@ func httpEncodePathValues(input protoreflect.Message, target *routeTarget) (
 		return "", nil, fieldError
 	}
 	return path, query, nil
-}
-
-func httpExtractTrailers(headers http.Header, knownTrailerKeys headerKeys) http.Header {
-	var trailers http.Header
-	for key, vals := range headers {
-		if strings.HasPrefix(key, http.TrailerPrefix) {
-			if trailers == nil {
-				trailers = make(http.Header, len(knownTrailerKeys))
-			}
-			trailers[strings.TrimPrefix(key, http.TrailerPrefix)] = vals
-			delete(headers, key)
-			continue
-		}
-		if _, expected := knownTrailerKeys[key]; expected {
-			if trailers == nil {
-				trailers = make(http.Header, len(knownTrailerKeys))
-			}
-			trailers[key] = vals
-			delete(headers, key)
-			continue
-		}
-	}
-	return trailers
-}
-
-func httpMergeTrailers(header http.Header, trailer http.Header) {
-	for key, vals := range trailer {
-		if !strings.HasPrefix(key, http.TrailerPrefix) {
-			key = http.TrailerPrefix + key
-		}
-		for _, val := range vals {
-			header.Add(key, val)
-		}
-	}
-}
-
-func httpExtractContentLength(headers http.Header) (int, error) {
-	contentLenStr := headers.Get("Content-Length")
-	if contentLenStr == "" {
-		return -1, nil
-	}
-	i, err := strconv.Atoi(contentLenStr)
-	if err != nil {
-		return 0, fmt.Errorf("could not parse content-length %q: %w", contentLenStr, err)
-	}
-	if i < 0 {
-		return 0, fmt.Errorf("content-length %d should not be negative", i)
-	}
-	headers.Del("Content-Length")
-	return i, nil
 }
 
 func getHTTPRuleExtension(desc protoreflect.MethodDescriptor) (*annotations.HttpRule, bool) {

@@ -7,6 +7,7 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-print-directory
 BIN := .tmp/bin
+export PATH := $(abspath $(BIN)):$(PATH)
 COPYRIGHT_YEARS := 2023-2026
 LICENSE_IGNORE := -e testdata/
 BUF_VERSION ?= 1.66.0
@@ -30,17 +31,15 @@ clean: ## Delete intermediate build artifacts
 .PHONY: test
 test: build ## Run unit tests
 	$(GO) test -vet=off -race -cover ./...
-	cd internal/examples/pets && $(GO) test -vet=off -race -cover ./...
-	cd internal/examples/connect-grpc && $(GO) test -vet=off -race -cover ./...
 
 .PHONY: build
 build: generate ## Build all packages
 	$(GO) build ./...
 
 .PHONY: generate
-generate: $(BIN)/buf $(BIN)/license-header ## Regenerate code and licenses
+generate: $(BIN)/buf $(BIN)/license-header $(BIN)/protoc-gen-connect-go $(BIN)/protoc-gen-go $(BIN)/protoc-gen-go-grpc ## Regenerate code and licenses
 	$(BIN)/buf generate internal/proto
-	cd internal/examples/pets && ../../../$(BIN)/buf generate internal/proto
+	$(GO) mod tidy
 	@# We want to operate on a list of modified and new files, excluding
 	@# deleted and ignored files. git-ls-files can't do this alone. comm -23 takes
 	@# two files and prints the union, dropping lines common to both (-3) and
@@ -89,6 +88,26 @@ $(BIN)/license-header: Makefile
 	GOBIN=$(abspath $(@D)) $(GO) install \
 		  github.com/bufbuild/buf/private/pkg/licenseheader/cmd/license-header@v$(BUF_VERSION)
 
+$(BIN)/protoc-gen-connect-go: Makefile go.mod
+	@mkdir -p $(@D)
+	@# The version of protoc-gen-connect-go is determined by the version in go.mod
+	GOBIN=$(abspath $(@D)) $(GO) install \
+		  connectrpc.com/connect/v2/cmd/protoc-gen-connect-go
+
+$(BIN)/protoc-gen-go: Makefile go.mod
+	@mkdir -p $(@D)
+	@# The version of protoc-gen-go is determined by the version in go.mod
+	GOBIN=$(abspath $(@D)) $(GO) install \
+		  google.golang.org/protobuf/cmd/protoc-gen-go
+
+$(BIN)/protoc-gen-go-grpc: Makefile go.mod
+	@mkdir -p $(@D)
+	@# The version of protoc-gen-go-grpc is determined by the tool
+	@# directive in go.mod; it ships as its own module, separate from
+	@# google.golang.org/grpc.
+	GOBIN=$(abspath $(@D)) $(GO) install \
+		  google.golang.org/grpc/cmd/protoc-gen-go-grpc
+
 $(BIN)/golangci-lint: Makefile
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.1
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0

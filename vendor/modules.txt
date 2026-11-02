@@ -6,12 +6,19 @@ buf.build/gen/go/redpandadata/common/protocolbuffers/go/redpanda/api/common/v1al
 ## explicit; go 1.26.0
 connectrpc.com/connect
 connectrpc.com/connect/internal/gen/connectext/grpc/status/v1
+# connectrpc.com/connect/v2 v2.0.0
+## explicit; go 1.26.0
+connectrpc.com/connect/v2
+connectrpc.com/connect/v2/connectgzip
+connectrpc.com/connect/v2/connecthttp
+connectrpc.com/connect/v2/connectproto
+connectrpc.com/connect/v2/internal/bufferpool
 # connectrpc.com/grpcreflect v1.3.0
 ## explicit; go 1.21
 connectrpc.com/grpcreflect
 connectrpc.com/grpcreflect/internal/gen/go/connectext/grpc/reflection/v1
-# connectrpc.com/vanguard v0.4.0
-## explicit; go 1.25.0
+# connectrpc.com/vanguard v0.5.0
+## explicit; go 1.26.0
 connectrpc.com/vanguard
 # filippo.io/edwards25519 v1.2.0
 ## explicit; go 1.24.0

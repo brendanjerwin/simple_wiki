@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	connectrpc.com/connect v1.21.1
 	connectrpc.com/grpcreflect v1.3.0
-	connectrpc.com/vanguard v0.4.0
+	connectrpc.com/vanguard v0.5.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/coder/acp-go-sdk v0.13.5
@@ -53,6 +53,7 @@ require (
 
 require (
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.34.2-20240917150400-3f349e63f44a.2 // indirect
+	connectrpc.com/connect/v2 v2.0.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
