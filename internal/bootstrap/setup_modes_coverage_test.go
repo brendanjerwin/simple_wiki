@@ -180,7 +180,7 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 		BeforeEach(func() {
 			result, setupErr = SetupFullTLS(TailscaleHTTPConfig{
 				HTTPAddr:  "127.0.0.1:0",
-				TLSPort:   44445,
+				TLSPort:   0,
 				TSDNSName: "",
 				Site:      site,
 				Logger:    logger,
@@ -205,12 +205,10 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 
 		BeforeEach(func() {
 			var err error
-			// Fixed high port: tlsPort 0 is rejected (must be 1-65535) and
-			// unprivileged ports >1024 need no root. Collision risk is nil
-			// for a short-lived test listener.
+			// TLSPort 0 lets the OS pick a free port, avoiding collisions.
 			result, err = SetupFullTLS(TailscaleHTTPConfig{
 				HTTPAddr:  "127.0.0.1:0",
-				TLSPort:   44443,
+				TLSPort:   0,
 				TSDNSName: "wiki.test.ts.net",
 				Site:      site,
 				Logger:    logger,

@@ -271,28 +271,42 @@ func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 
 	tlsListener, err := tls.Listen(networkTCP, httpsAddr, tlsConfig)
 	if err != nil {
+		composeCleanup(metricsCleanup, nil)()
 		return nil, fmt.Errorf("failed to create TLS listener: %w", err)
 	}
 
-	cfg.Logger.Info("HTTPS server listening on %s", httpsAddr)
+	// Release the listener (and metrics) on every error return until ownership
+	// is handed to the ServerResult.
+	handedOff := false
+	defer func() {
+		if handedOff {
+			return
+		}
+		if closeErr := tlsListener.Close(); closeErr != nil {
+			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
+		}
+		composeCleanup(metricsCleanup, nil)()
+	}()
+
+	// A TLSPort of 0 asks the OS for a free port; the redirector needs the real one.
+	tlsPort := cfg.TLSPort
+	if tcpAddr, ok := tlsListener.Addr().(*net.TCPAddr); ok {
+		tlsPort = tcpAddr.Port
+	}
+
+	cfg.Logger.Info("HTTPS server listening on %s", tlsListener.Addr())
 
 	// Create HTTP redirect server. The fallback handler is the bare app
 	// handler; the redirect server itself enables cleartext HTTP/2 via
 	// http.Server.Protocols below so non-tailnet HTTP callers that speak
 	// h2c still get HTTP/2 service (replaces the deprecated h2c.NewHandler
 	// wrap).
-	redirector, err := tailscale.NewTailnetRedirector(cfg.TSDNSName, cfg.TLSPort, identityResolver, handler, false, cfg.Logger)
+	redirector, err := tailscale.NewTailnetRedirector(cfg.TSDNSName, tlsPort, identityResolver, handler, false, cfg.Logger)
 	if err != nil {
-		if closeErr := tlsListener.Close(); closeErr != nil {
-			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
-		}
 		return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
 	}
 	httpListener, err := net.Listen(networkTCP, cfg.HTTPAddr)
 	if err != nil {
-		if closeErr := tlsListener.Close(); closeErr != nil {
-			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
-		}
 		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
@@ -309,6 +323,7 @@ func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 		Cleanup:        composeCleanup(metricsCleanup, composeCleanup(drainScheduledTurns(cfg.Site), stopSiteCron(cfg.Site))),
 		RedirectServer: redirectServer,
 	}
+	handedOff = true
 
 	// Start redirect server in background
 	go func() {
