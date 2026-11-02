@@ -207,6 +207,24 @@ service PageManagementService {
         "must align with UTF-8 character boundaries.";
     option (api.v1.read_only) = true;
   }
+
+  // WritePageSection — see (api.v1.description).
+  rpc WritePageSection(WritePageSectionRequest) returns (WritePageSectionResponse) {
+    option (api.v1.description) =
+        "Write to a byte range of a page's raw markdown body, addressed the "
+        "same way as ReadPageSection (byte_offset and byte_length from "
+        "ReadPageOutline). mode=append inserts content_markdown at the END of "
+        "the range (the supported way to add a bullet to a log or register "
+        "section, including the page's final section); mode=prepend inserts it "
+        "at the START of the range; mode=replace replaces the range. For "
+        "append/prepend, content_markdown is ONLY the added text — do not "
+        "restate the section. expected_version_hash is REQUIRED: pass the "
+        "version_hash from ReadPageOutline or ReadPageSection; a stale hash is "
+        "rejected with ABORTED. Guards: replace rejects content more than 3x "
+        "the size of the range, append/prepend reject additions larger than "
+        "64 KiB, and the shrink breaker applies as on UpdatePageContent. "
+        "Returns the new version_hash and page_byte_size.";
+  }
 }
 
 // Create Page
@@ -545,4 +563,37 @@ message ReadPageSectionResponse {
   int64 total_bytes = 4;
   // version_hash is the SHA-256 hash of the full page markdown body.
   string version_hash = 5;
+}
+
+// Write Page Section
+enum WritePageSectionMode {
+  WRITE_PAGE_SECTION_MODE_UNSPECIFIED = 0;
+  // Replace the addressed byte range with content_markdown.
+  WRITE_PAGE_SECTION_MODE_REPLACE = 1;
+  // Insert content_markdown at the end of the addressed byte range.
+  WRITE_PAGE_SECTION_MODE_APPEND = 2;
+  // Insert content_markdown at the start of the addressed byte range.
+  WRITE_PAGE_SECTION_MODE_PREPEND = 3;
+}
+
+message WritePageSectionRequest {
+  string page = 1;
+  int64 byte_offset = 2;
+  int64 byte_length = 3;
+  WritePageSectionMode mode = 4;
+  // content_markdown is the replacement (replace) or the added text (append/prepend).
+  string content_markdown = 5;
+  // expected_version_hash is REQUIRED. If it does not match the current page
+  // version, the server returns ABORTED.
+  string expected_version_hash = 6;
+  // allow_shrink overrides the shrink circuit breaker.
+  bool allow_shrink = 7;
+}
+
+message WritePageSectionResponse {
+  bool success = 1;
+  // version_hash is the hash of the newly written page.
+  string version_hash = 2;
+  // page_byte_size is the byte size of the page after the write.
+  int64 page_byte_size = 3;
 }

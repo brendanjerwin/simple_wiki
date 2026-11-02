@@ -83,6 +83,9 @@ func checkContentVersionHashString(currentHash string, expectedHash *string) err
 // caller passed a whole-page body instead of just the replacement snippet.
 const snippetReplacementMaxRatio = 3
 
+// wholePageRewriteHint is the shared tail of the snippet and section write guard messages.
+const wholePageRewriteHint = "For full-page rewrites, use UpdateWholePage with expected_version_hash."
+
 // resolveMarkdownContent computes the markdown to write.
 // When oldContentMarkdown is provided, performs a find-and-replace within originalMarkdown.
 // Otherwise returns newContentMarkdown as the full replacement.
@@ -111,7 +114,8 @@ func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdo
 			"snippet replacement guard: new_content_markdown contains old_content_markdown verbatim — "+
 				"this usually means the entire page body was passed as the replacement instead of just the snippet. "+
 				"new_content_markdown must be ONLY the replacement for the matched snippet. "+
-				"For full-page rewrites, use UpdateWholePage with expected_version_hash.")
+				"To append or prepend to a section, use WritePageSection (mode=append or mode=prepend) with expected_version_hash. "+
+				wholePageRewriteHint)
 	}
 
 	// Size-ratio guard: a replacement far larger than the matched snippet is a strong
@@ -122,7 +126,8 @@ func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdo
 		return "", status.Errorf(codes.InvalidArgument,
 			"snippet replacement guard: new_content_markdown (%d bytes) is more than %dx the size of "+
 				"old_content_markdown (%d bytes) — new_content_markdown must be ONLY the replacement for the matched snippet, "+
-				"not a full page body. For full-page rewrites, use UpdateWholePage with expected_version_hash.",
+				"not a full page body. To append or prepend to a section, use WritePageSection (mode=append or mode=prepend). "+
+				wholePageRewriteHint,
 			newLen, snippetReplacementMaxRatio, oldLen)
 	}
 
@@ -794,44 +799,61 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// handles it (validation + placement guard + version restamp), so the
 	// wiki.page_app frontmatter stays in sync with the body.
 	var capturedFM wikipage.FrontMatter
-	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
+	versionHash, pageByteSize, err := s.writeMarkdownAndVerify(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
+		originalMarkdown,
 		updatePageContentModifier(req, &capturedFM),
+		&capturedFM,
 	)
-	if modifyErr != nil {
-		if _, ok := status.FromError(modifyErr); ok {
-			return nil, modifyErr
-		}
-		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, modifyErr)
-	}
-
-	// Invariant check: read back the stored content to ensure the write did not blank the page.
-	// If the content is missing or empty after a successful write, attempt to restore the
-	// original content to prevent data loss.
-	storedMarkdown, err := s.verifyStoredContent(ctx, wikipage.PageIdentifier(req.Page), originalMarkdown)
 	if err != nil {
 		return nil, err
-	}
-
-	// Response hash derives from the frontmatter the funnel actually wrote
-	// (post artifact restamp), so the returned OCC handle matches disk.
-	if funnelFM != nil {
-		capturedFM = funnelFM
-	}
-
-	// page_byte_size mirrors the history service's ByteSize unit: the whole
-	// page text (frontmatter + markdown) as combined on disk, so agents can
-	// compare a write's outcome directly against PageHistoryService entries.
-	versionHash, pageByteSize, sizeErr := computePageSizeAndHash(capturedFM, storedMarkdown)
-	if sizeErr != nil {
-		return nil, sizeErr
 	}
 	return &apiv1.UpdatePageContentResponse{
 		Success:      true,
 		VersionHash:  versionHash,
 		PageByteSize: pageByteSize,
 	}, nil
+}
+
+// writeMarkdownAndVerify applies a markdown modifier under the funnel's write
+// lock, reads the stored content back to ensure the write did not blank the
+// page (restoring originalMarkdown if it did), and returns the version hash and
+// byte size of the page as written. capturedFM must be the pointer the modifier
+// fills with the current frontmatter.
+func (s *Server) writeMarkdownAndVerify(
+	ctx context.Context,
+	pageID wikipage.PageIdentifier,
+	originalMarkdown wikipage.Markdown,
+	modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
+	capturedFM *wikipage.FrontMatter,
+) (string, int64, error) {
+	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(ctx, pageID, modifier)
+	if modifyErr != nil {
+		if _, ok := status.FromError(modifyErr); ok {
+			return "", 0, modifyErr
+		}
+		return "", 0, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, modifyErr)
+	}
+
+	// Invariant check: read back the stored content to ensure the write did not blank the page.
+	// If the content is missing or empty after a successful write, attempt to restore the
+	// original content to prevent data loss.
+	storedMarkdown, err := s.verifyStoredContent(ctx, pageID, originalMarkdown)
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Response hash derives from the frontmatter the funnel actually wrote
+	// (post artifact restamp), so the returned OCC handle matches disk.
+	if funnelFM != nil {
+		*capturedFM = funnelFM
+	}
+
+	// page_byte_size mirrors the history service's ByteSize unit: the whole
+	// page text (frontmatter + markdown) as combined on disk, so agents can
+	// compare a write's outcome directly against PageHistoryService entries.
+	return computePageSizeAndHash(*capturedFM, storedMarkdown)
 }
 
 // updatePageContentModifier builds the atomic modifier for UpdatePageContent:
@@ -896,19 +918,26 @@ func (s *Server) validateUpdatePageContentPrequest(ctx context.Context, req *api
 		return "", status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
 	}
 
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+	return s.guardAuthorizeAndReadMarkdown(ctx, wikipage.PageIdentifier(req.Page))
+}
+
+// guardAuthorizeAndReadMarkdown runs the system-page guard, ACL check and page
+// existence check shared by the content-writing RPCs, returning the current
+// markdown for the post-write rollback check.
+func (s *Server) guardAuthorizeAndReadMarkdown(ctx context.Context, pageID wikipage.PageIdentifier) (wikipage.Markdown, error) {
+	if guardErr := requireUserMutable(s.pageReaderMutator, pageID); guardErr != nil {
 		return "", guardErr
 	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, pageID); authErr != nil {
 		return "", authErr
 	}
 
 	// Read current content for: (1) page existence check, and (2) rollback data if the
 	// post-write invariant check fails.
-	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
+	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(pageID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
+			return "", status.Errorf(codes.NotFound, pageNotFoundErrFmt, pageID)
 		}
 		return "", status.Errorf(codes.Internal, "failed to read current content: %v", err)
 	}
@@ -1459,4 +1488,142 @@ func isUTF8Boundary(content string, index int) bool {
 	}
 
 	return index > 0 && index < len(content) && utf8.RuneStart(content[index])
+}
+
+// writePageSectionMaxAddedBytes caps the text a single WritePageSection
+// append/prepend may add, so one call cannot balloon a page unnoticed.
+const writePageSectionMaxAddedBytes = 64 * 1024
+
+// WritePageSection implements the WritePageSection RPC.
+// It addresses a byte range exactly like ReadPageSection and replaces, appends
+// to, or prepends to that range. expected_version_hash is mandatory.
+func (s *Server) WritePageSection(ctx context.Context, req *apiv1.WritePageSectionRequest) (*apiv1.WritePageSectionResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+	if req.ExpectedVersionHash == "" {
+		return nil, status.Error(codes.FailedPrecondition,
+			"expected_version_hash is required for WritePageSection; pass the version_hash from a prior ReadPageOutline or ReadPageSection call")
+	}
+	if req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "mode is required: replace, append, or prepend")
+	}
+	if strings.TrimSpace(req.ContentMarkdown) == "" {
+		return nil, status.Error(codes.InvalidArgument, "content_markdown cannot be empty")
+	}
+	if err := templating.ValidateTemplate(req.ContentMarkdown); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
+	}
+
+	originalMarkdown, preErr := s.guardAuthorizeAndReadMarkdown(ctx, wikipage.PageIdentifier(req.Page))
+	if preErr != nil {
+		return nil, preErr
+	}
+
+	var capturedFM wikipage.FrontMatter
+	versionHash, pageByteSize, err := s.writeMarkdownAndVerify(
+		ctx,
+		wikipage.PageIdentifier(req.Page),
+		originalMarkdown,
+		writePageSectionModifier(req, &capturedFM),
+		&capturedFM,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &apiv1.WritePageSectionResponse{
+		Success:      true,
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
+	}, nil
+}
+
+// writePageSectionModifier builds the atomic modifier for WritePageSection:
+// version-hash check, range validation, mode application and the shrink
+// circuit breaker, all under the funnel's write lock.
+func writePageSectionModifier(req *apiv1.WritePageSectionRequest, capturedFM *wikipage.FrontMatter) func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	return func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		*capturedFM = currentFM
+
+		if err := checkContentVersionHash(currentFM, currentMarkdown, &req.ExpectedVersionHash); err != nil {
+			return nil, "", err
+		}
+
+		candidate, err := applyPageSectionWrite(string(currentMarkdown), req)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if err := checkShrinkBreaker(currentMarkdown, candidate, req.AllowShrink); err != nil {
+			return nil, "", err
+		}
+		return currentFM, candidate, nil
+	}
+}
+
+// applyPageSectionWrite validates the requested byte range and applies the
+// write mode, enforcing the size guards for each mode.
+func applyPageSectionWrite(markdown string, req *apiv1.WritePageSectionRequest) (wikipage.Markdown, error) {
+	if err := validatePageSectionWriteRange(markdown, req); err != nil {
+		return "", err
+	}
+	start := int(req.ByteOffset)
+	end := int(req.ByteOffset + req.ByteLength)
+	addedLen := len(req.ContentMarkdown)
+
+	switch req.Mode {
+	case apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE:
+		sectionLen := end - start
+		if addedLen > snippetReplacementMaxRatio*sectionLen {
+			return "", status.Errorf(codes.InvalidArgument,
+				"section write guard: content_markdown (%d bytes) is more than %dx the size of the addressed section (%d bytes) — "+
+					"content_markdown must be ONLY the replacement for that section, not a full page body. "+
+					"To add text without restating the section, use mode=append or mode=prepend. "+
+					wholePageRewriteHint,
+				addedLen, snippetReplacementMaxRatio, sectionLen)
+		}
+		return wikipage.Markdown(markdown[:start] + req.ContentMarkdown + markdown[end:]), nil
+	case apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_APPEND, apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_PREPEND:
+		if addedLen > writePageSectionMaxAddedBytes {
+			return "", status.Errorf(codes.InvalidArgument,
+				"section write guard: content_markdown (%d bytes) exceeds the %d byte limit for append/prepend; "+
+					"split the addition across several calls",
+				addedLen, writePageSectionMaxAddedBytes)
+		}
+		if req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_APPEND {
+			return wikipage.Markdown(markdown[:end] + req.ContentMarkdown + markdown[end:]), nil
+		}
+		return wikipage.Markdown(markdown[:start] + req.ContentMarkdown + markdown[start:]), nil
+	default:
+		return "", status.Errorf(codes.InvalidArgument, "unsupported mode %v", req.Mode)
+	}
+}
+
+// validatePageSectionWriteRange validates the addressed byte range. REPLACE
+// genuinely slices the range, so it gets the strict ReadPageSection checks.
+// APPEND/PREPEND only use an offset, so an empty section (byte_length 0, e.g. a
+// final heading with nothing under it yet) is allowed.
+func validatePageSectionWriteRange(markdown string, req *apiv1.WritePageSectionRequest) error {
+	totalBytes := int64(len(markdown))
+	isInsertion := req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_APPEND ||
+		req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_PREPEND
+	if req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE && req.ByteLength == 0 {
+		return status.Error(codes.InvalidArgument,
+			"section write guard: mode=replace needs a non-empty addressed section (byte_length > 0); "+
+				"to add text to an empty section, use mode=append or mode=prepend")
+	}
+	if !isInsertion || req.ByteLength != 0 {
+		_, err := slicePageSection(markdown, req.ByteOffset, req.ByteLength, totalBytes)
+		return err
+	}
+	if req.ByteOffset < 0 {
+		return status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
+	}
+	if req.ByteOffset > totalBytes {
+		return status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length 0 total %d", req.ByteOffset, totalBytes)
+	}
+	if !isUTF8Boundary(markdown, int(req.ByteOffset)) {
+		return status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
+	}
+	return nil
 }
