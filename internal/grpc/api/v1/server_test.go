@@ -7083,6 +7083,40 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("appending with byte_length 0 to a page ending in an empty heading", func() {
+			BeforeEach(func() {
+				pageMarkdown = "# Intro\n\nbody\n\n## Log\n"
+				mockPageReaderMutator.Markdown = wikipage.Markdown(pageMarkdown)
+				req.ByteOffset = int64(len(pageMarkdown))
+				req.ByteLength = 0
+				req.ContentMarkdown = "- first entry\n"
+				req.ExpectedVersionHash = computeExpectedPageHash(nil, pageMarkdown)
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add the text at the offset", func() {
+				Expect(string(mockPageReaderMutator.WrittenMarkdown)).To(Equal(pageMarkdown + "- first entry\n"))
+			})
+		})
+
+		When("replacing with byte_length 0", func() {
+			BeforeEach(func() {
+				req.Mode = apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE
+				req.ByteLength = 0
+			})
+
+			It("should return an invalid argument error pointing at append/prepend", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "mode=append or mode=prepend"))
+			})
+
+			It("should not write", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
 		When("the expected version hash is stale", func() {
 			BeforeEach(func() {
 				req.ExpectedVersionHash = "stale"

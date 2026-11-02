@@ -1564,8 +1564,7 @@ func writePageSectionModifier(req *apiv1.WritePageSectionRequest, capturedFM *wi
 // applyPageSectionWrite validates the requested byte range and applies the
 // write mode, enforcing the size guards for each mode.
 func applyPageSectionWrite(markdown string, req *apiv1.WritePageSectionRequest) (wikipage.Markdown, error) {
-	totalBytes := int64(len(markdown))
-	if _, err := slicePageSection(markdown, req.ByteOffset, req.ByteLength, totalBytes); err != nil {
+	if err := validatePageSectionWriteRange(markdown, req); err != nil {
 		return "", err
 	}
 	start := int(req.ByteOffset)
@@ -1598,4 +1597,33 @@ func applyPageSectionWrite(markdown string, req *apiv1.WritePageSectionRequest) 
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "unsupported mode %v", req.Mode)
 	}
+}
+
+// validatePageSectionWriteRange validates the addressed byte range. REPLACE
+// genuinely slices the range, so it gets the strict ReadPageSection checks.
+// APPEND/PREPEND only use an offset, so an empty section (byte_length 0, e.g. a
+// final heading with nothing under it yet) is allowed.
+func validatePageSectionWriteRange(markdown string, req *apiv1.WritePageSectionRequest) error {
+	totalBytes := int64(len(markdown))
+	isInsertion := req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_APPEND ||
+		req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_PREPEND
+	if req.Mode == apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE && req.ByteLength == 0 {
+		return status.Error(codes.InvalidArgument,
+			"section write guard: mode=replace needs a non-empty addressed section (byte_length > 0); "+
+				"to add text to an empty section, use mode=append or mode=prepend")
+	}
+	if !isInsertion || req.ByteLength != 0 {
+		_, err := slicePageSection(markdown, req.ByteOffset, req.ByteLength, totalBytes)
+		return err
+	}
+	if req.ByteOffset < 0 {
+		return status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
+	}
+	if req.ByteOffset > totalBytes {
+		return status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length 0 total %d", req.ByteOffset, totalBytes)
+	}
+	if !isUTF8Boundary(markdown, int(req.ByteOffset)) {
+		return status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
+	}
+	return nil
 }
