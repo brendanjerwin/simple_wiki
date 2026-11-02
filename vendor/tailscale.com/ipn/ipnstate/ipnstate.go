@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"tailscale.com/tailcfg"
+	"tailscale.com/tailcfg/nodecap"
 	"tailscale.com/tka"
 	"tailscale.com/types/key"
 	"tailscale.com/types/views"
@@ -107,10 +108,10 @@ type TKAPeer struct {
 	NodeKeySignature tka.NodeKeySignature
 }
 
-// NetworkLockStatus represents whether tailnet-lock is enabled,
+// TailnetLockStatus represents whether tailnet-lock is enabled,
 // along with details about the locally-known state of the tailnet
 // key authority.
-type NetworkLockStatus struct {
+type TailnetLockStatus struct {
 	// Enabled is true if tailnet lock is enabled.
 	Enabled bool
 
@@ -137,7 +138,7 @@ type NetworkLockStatus struct {
 	TrustedKeys []TKAKey
 
 	// VisiblePeers describes peers which are visible in the netmap that
-	// have valid Tailnet Lock signatures signatures.
+	// have valid Tailnet Lock signatures.
 	VisiblePeers []*TKAPeer
 
 	// FilteredPeers describes peers which were removed from the netmap
@@ -151,8 +152,11 @@ type NetworkLockStatus struct {
 	StateID uint64
 }
 
-// NetworkLockUpdate describes a change to tailnet-lock state.
-type NetworkLockUpdate struct {
+// Deprecated: use [TailnetLockStatus] instead.
+type NetworkLockStatus = TailnetLockStatus
+
+// TailnetLockUpdate describes a change to tailnet-lock state.
+type TailnetLockUpdate struct {
 	Hash   [32]byte
 	Change string // values of tka.AUMKind.String()
 
@@ -161,10 +165,17 @@ type NetworkLockUpdate struct {
 	Raw []byte
 }
 
+// Deprecated: use [TailnetLockUpdate] instead.
+type NetworkLockUpdate = TailnetLockUpdate
+
 // TailnetStatus is information about a Tailscale network ("tailnet").
 type TailnetStatus struct {
 	// Name is the name of the network that's currently in use.
 	Name string
+
+	// StableID is the stable, unique identifier of the tailnet, as used to
+	// identify the tailnet in the Tailscale API.
+	StableID tailcfg.StableTailnetID
 
 	// MagicDNSSuffix is the network's MagicDNS suffix for nodes
 	// in the network such as "userfoo.tailscale.net".
@@ -296,7 +307,7 @@ type PeerStatus struct {
 	// Deprecated: use CapMap instead. See https://github.com/tailscale/tailscale/issues/11508
 	// Every value is Capabilities is also a key in CapMap, even if it
 	// has no values in that map.
-	Capabilities []tailcfg.NodeCapability `json:",omitempty"`
+	Capabilities []nodecap.Cap `json:",omitempty"`
 
 	// CapMap is a map of capabilities to their values.
 	CapMap tailcfg.NodeCapMap `json:",omitempty"`
@@ -350,8 +361,26 @@ const (
 )
 
 // HasCap reports whether ps has the given capability.
-func (ps *PeerStatus) HasCap(cap tailcfg.NodeCapability) bool {
+func (ps *PeerStatus) HasCap(cap nodecap.Cap) bool {
 	return ps.CapMap.Contains(cap)
+}
+
+// IsRouter reports whether ps describes a router:
+// a node that routes addresses besides its own.
+// Examples: an exit node, a subnet router, an app connector, etc.
+// It is the analogue of [tailcfg.Node.IsRouter].
+func (ps *PeerStatus) IsRouter() bool {
+	// TODO(sfllaw): Keep this aligned with dbx.Node.IsSubnetRouter.
+	if ps.AllowedIPs == nil {
+		return false
+	}
+
+	for _, r := range ps.AllowedIPs.All() {
+		if !r.IsSingleIP() || !slices.Contains(ps.TailscaleIPs, r.Addr()) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsTagged reports whether ps is tagged.
@@ -721,7 +750,7 @@ type PingResult struct {
 
 	// DERPRegionID is non-zero DERP region ID if DERP was used.
 	// It is not currently set for TSMP pings.
-	DERPRegionID int
+	DERPRegionID tailcfg.DERPRegionID
 
 	// DERPRegionCode is the three-letter region code
 	// corresponding to DERPRegionID.
