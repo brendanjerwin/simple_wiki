@@ -259,47 +259,11 @@ func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
 
-	// Parse host from cfg.HTTPAddr
-	host := ""
-	if idx := strings.LastIndex(cfg.HTTPAddr, ":"); idx != -1 {
-		host = cfg.HTTPAddr[:idx]
-	}
-
-	tlsProvider := tailscale.NewTLSProvider()
-	tlsConfig := tlsProvider.GetTLSConfig()
-	httpsAddr := fmt.Sprintf("%s:%d", host, cfg.TLSPort)
-
-	tlsListener, err := tls.Listen(networkTCP, httpsAddr, tlsConfig)
+	tlsListener, httpListener, redirectServer, err := startFullTLSListeners(cfg, handler, identityResolver)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create TLS listener: %w", err)
+		composeCleanup(metricsCleanup, nil)()
+		return nil, err
 	}
-
-	cfg.Logger.Info("HTTPS server listening on %s", httpsAddr)
-
-	// Create HTTP redirect server. The fallback handler is the bare app
-	// handler; the redirect server itself enables cleartext HTTP/2 via
-	// http.Server.Protocols below so non-tailnet HTTP callers that speak
-	// h2c still get HTTP/2 service (replaces the deprecated h2c.NewHandler
-	// wrap).
-	redirector, err := tailscale.NewTailnetRedirector(cfg.TSDNSName, cfg.TLSPort, identityResolver, handler, false, cfg.Logger)
-	if err != nil {
-		if closeErr := tlsListener.Close(); closeErr != nil {
-			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
-		}
-		return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
-	}
-	httpListener, err := net.Listen(networkTCP, cfg.HTTPAddr)
-	if err != nil {
-		if closeErr := tlsListener.Close(); closeErr != nil {
-			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
-		}
-		return nil, fmt.Errorf(errCreateListenerFmt, err)
-	}
-
-	cfg.Logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", cfg.HTTPAddr)
-
-	redirectServer := newCleartextHTTP2Server(redirector)
-	redirectServer.Addr = cfg.HTTPAddr
 
 	result := &ServerResult{
 		MainServer: &http.Server{
@@ -309,7 +273,6 @@ func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 		Cleanup:        composeCleanup(metricsCleanup, composeCleanup(drainScheduledTurns(cfg.Site), stopSiteCron(cfg.Site))),
 		RedirectServer: redirectServer,
 	}
-
 	// Start redirect server in background
 	go func() {
 		if err := result.RedirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
@@ -318,6 +281,73 @@ func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 	}()
 
 	return result, nil
+}
+
+// startFullTLSListeners binds the TLS listener and the HTTP listener and builds
+// the redirect server. The TLS listener is closed on every error return, so a
+// failed setup never leaks a port; on success the caller owns both listeners.
+func startFullTLSListeners(
+	cfg TailscaleHTTPConfig,
+	handler http.Handler,
+	identityResolver tailscale.IdentityResolver,
+) (tlsListener net.Listener, httpListener net.Listener, redirectServer *http.Server, err error) {
+	// Parse host from cfg.HTTPAddr
+	host := ""
+	if idx := strings.LastIndex(cfg.HTTPAddr, ":"); idx != -1 {
+		host = cfg.HTTPAddr[:idx]
+	}
+
+	tlsConfig := tailscale.NewTLSProvider().GetTLSConfig()
+	httpsAddr := fmt.Sprintf("%s:%d", host, cfg.TLSPort)
+
+	// Keep a local handle for the cleanup defer: the named results are zeroed
+	// by any explicit `return nil, ...`, and deferred functions run AFTER those
+	// assignments — closing through the named result would deref nil on every
+	// error path.
+	boundTLS, listenErr := tls.Listen(networkTCP, httpsAddr, tlsConfig)
+	if listenErr != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create TLS listener: %w", listenErr)
+	}
+	tlsListener = boundTLS
+	handedOff := false
+	defer func() {
+		if handedOff {
+			return
+		}
+		if closeErr := boundTLS.Close(); closeErr != nil {
+			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
+		}
+	}()
+
+	// A TLSPort of 0 asks the OS for a free port; the redirector needs the real one.
+	tlsPort := cfg.TLSPort
+	if tcpAddr, ok := tlsListener.Addr().(*net.TCPAddr); ok {
+		tlsPort = tcpAddr.Port
+	}
+
+	cfg.Logger.Info("HTTPS server listening on %s", tlsListener.Addr())
+
+	// Create HTTP redirect server. The fallback handler is the bare app
+	// handler; the redirect server itself enables cleartext HTTP/2 via
+	// http.Server.Protocols below so non-tailnet HTTP callers that speak
+	// h2c still get HTTP/2 service (replaces the deprecated h2c.NewHandler
+	// wrap).
+	redirector, err := tailscale.NewTailnetRedirector(cfg.TSDNSName, tlsPort, identityResolver, handler, false, cfg.Logger)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
+	}
+	httpListener, err = net.Listen(networkTCP, cfg.HTTPAddr)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf(errCreateListenerFmt, err)
+	}
+
+	cfg.Logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", cfg.HTTPAddr)
+
+	redirectServer = newCleartextHTTP2Server(redirector)
+	redirectServer.Addr = cfg.HTTPAddr
+	handedOff = true
+
+	return tlsListener, httpListener, redirectServer, nil
 }
 
 // createHTTPObservabilityMiddleware creates HTTP observability middleware.
