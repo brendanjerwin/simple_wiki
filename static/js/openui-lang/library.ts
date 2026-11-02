@@ -382,6 +382,18 @@ function clearImgBroken(event: Event): void {
 }
 
 /**
+ * Shared boolean-change dispatcher for Switch and Checkbox. Reads the
+ * live `.checked` from the input element when available; falls back to
+ * inverting `isChecked` (e.g. for programmatic toggles).
+ */
+function dispatchBooleanChange(event: Event, onChange: unknown, isChecked: boolean): void {
+ dispatchArtifactAction(event, {
+  plan: asPlan(onChange),
+  value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
+ });
+}
+
+/**
  * Build the wiki library. Slot unions need every component's `.ref`, and
  * each component's own schema references those unions — refs are assembled
  * in dependency order, the full children union closes over all components
@@ -1216,18 +1228,6 @@ function buildLibrary(): Library {
    </div>`;
   }) as WikiRenderer,
  });
-
- /**
-  * Shared boolean-change dispatcher for Switch and Checkbox. Reads the
-  * live `.checked` from the input element when available; falls back to
-  * inverting `isChecked` (e.g. for programmatic toggles).
-  */
- function dispatchBooleanChange(event: Event, onChange: unknown, isChecked: boolean): void {
-  dispatchArtifactAction(event, {
-   plan: asPlan(onChange),
-   value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
-  });
- }
 
  /**
   * Switch renders a boolean toggle control bound to a $variable. Unlike
