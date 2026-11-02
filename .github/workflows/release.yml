@@ -116,19 +116,58 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Determine release ownership
+        id: release-owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          git fetch --force --tags origin
+          this_sha="$(git rev-parse --verify --end-of-options "${RELEASE_TAG}^{commit}")"
+          releases="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '.[] | select(.draft == false) | [.created_at, .tag_name] | @tsv')"
+
+          owner="$(while IFS=$'\t' read -r created_at tag; do
+            [ -n "$tag" ] || continue
+            release_sha="$(git rev-parse --verify --end-of-options "${tag}^{commit}" 2>/dev/null)" || continue
+            if [ "$release_sha" = "$this_sha" ]; then
+              printf '%s\t%s\n' "$created_at" "$tag"
+            fi
+          done <<< "$releases" | sort -t $'\t' -k1,1 -k2,2 | sed -n '1p')"
+
+          owner_created_at="${owner%%$'\t'*}"
+          owner_tag="${owner#*$'\t'}"
+          if [ -z "$owner" ] || [ "$owner_tag" = "$owner" ]; then
+            echo "Could not determine the published release that owns commit $this_sha." >&2
+            exit 1
+          fi
+
+          if [ "$owner_tag" = "$RELEASE_TAG" ]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Release $RELEASE_TAG is the earliest-created release for commit $this_sha; deployment will proceed."
+          else
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping deployment for tag $RELEASE_TAG at commit $this_sha; tag $owner_tag (created $owner_created_at) owns this SHA. If deployment failed, re-run the deploy job of the owning release; do not mint a new tag."
+          fi
+
       - name: Download linux/amd64 binary
+        if: steps.release-owner.outputs.should_deploy == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: simple_wiki-linux-amd64
           path: .
 
       - name: Verify binary
+        if: steps.release-owner.outputs.should_deploy == 'true'
         run: |
           ls -la simple_wiki-linux-amd64
           file simple_wiki-linux-amd64
           chmod +x simple_wiki-linux-amd64
 
       - name: Setup Tailscale
+        if: steps.release-owner.outputs.should_deploy == 'true'
         uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -136,6 +175,7 @@ jobs:
           tags: tag:github-actions
 
       - name: Prepare deployment files
+        if: steps.release-owner.outputs.should_deploy == 'true'
         env:
           SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID }}
           SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET }}
@@ -156,6 +196,7 @@ jobs:
             < deployment/simple_wiki.service > deployment-package/simple_wiki.service
 
       - name: Deploy to server
+        if: steps.release-owner.outputs.should_deploy == 'true'
         uses: FarisZR/tailscale-ssh-deploy@8bd320c7dfaa9d766843564c47d5ce67f46e17b4 # v1
         with:
           remote_host: brendanjerwin@wiki
@@ -166,7 +207,9 @@ jobs:
       - name: Report deployment status
         if: always()
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
+          if [ "${{ steps.release-owner.outputs.should_deploy }}" != "true" ] && [ "${{ steps.release-owner.outcome }}" == "success" ]; then
+            echo "Deployment of ${{ github.event.release.tag_name }} skipped by the release ownership guard"
+          elif [ "${{ job.status }}" == "success" ]; then
             echo "Deployed ${{ github.event.release.tag_name }} to wiki"
           else
             echo "Deployment of ${{ github.event.release.tag_name }} to wiki failed"
