@@ -128,18 +128,21 @@ jobs:
 
           git fetch --force --tags origin
           this_sha="$(git rev-parse --verify --end-of-options "${RELEASE_TAG}^{commit}")"
+          # Release IDs increase monotonically with creation, so the lowest ID
+          # per commit is the earliest-created release. created_at cannot break
+          # ties: v3.112.0 and v3.113.0 both report 2026-10-31T16:14:35Z.
           releases="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq '.[] | select(.draft == false) | [.created_at, .tag_name] | @tsv')"
+            --jq '.[] | select(.draft == false) | [.id, .tag_name] | @tsv')"
 
-          owner="$(while IFS=$'\t' read -r created_at tag; do
+          owner="$(while IFS=$'\t' read -r release_id tag; do
             [ -n "$tag" ] || continue
             release_sha="$(git rev-parse --verify --end-of-options "${tag}^{commit}" 2>/dev/null)" || continue
             if [ "$release_sha" = "$this_sha" ]; then
-              printf '%s\t%s\n' "$created_at" "$tag"
+              printf '%s\t%s\n' "$release_id" "$tag"
             fi
-          done <<< "$releases" | sort -t $'\t' -k1,1 -k2,2 | sed -n '1p')"
+          done <<< "$releases" | sort -t $'\t' -k1,1n | sed -n '1p')"
 
-          owner_created_at="${owner%%$'\t'*}"
+          owner_id="${owner%%$'\t'*}"
           owner_tag="${owner#*$'\t'}"
           if [ -z "$owner" ] || [ "$owner_tag" = "$owner" ]; then
             echo "Could not determine the published release that owns commit $this_sha." >&2
@@ -148,10 +151,10 @@ jobs:
 
           if [ "$owner_tag" = "$RELEASE_TAG" ]; then
             echo "should_deploy=true" >> "$GITHUB_OUTPUT"
-            echo "Release $RELEASE_TAG is the earliest-created release for commit $this_sha; deployment will proceed."
+            echo "Release $RELEASE_TAG (id $owner_id) is the earliest-created release for commit $this_sha; deployment will proceed."
           else
             echo "should_deploy=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping deployment for tag $RELEASE_TAG at commit $this_sha; tag $owner_tag (created $owner_created_at) owns this SHA. If deployment failed, re-run the deploy job of the owning release; do not mint a new tag."
+            echo "Skipping deployment for tag $RELEASE_TAG at commit $this_sha; release $owner_tag (id $owner_id) owns this SHA. If deployment failed, re-run the deploy job of the owning release; do not mint a new tag."
           fi
 
       - name: Download linux/amd64 binary
