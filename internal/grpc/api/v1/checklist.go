@@ -68,6 +68,9 @@ func (s *Server) UpdateItem(ctx context.Context, req *apiv1.UpdateItemRequest) (
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
+	if req.GetUid() == "" {
+		return nil, status.Error(codes.InvalidArgument, "uid is required")
+	}
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
 		return nil, guardErr
 	}
