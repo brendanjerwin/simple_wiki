@@ -198,8 +198,8 @@ github.com/gabriel-vasile/mimetype/internal/magic
 github.com/gabriel-vasile/mimetype/internal/markup
 github.com/gabriel-vasile/mimetype/internal/mp3
 github.com/gabriel-vasile/mimetype/internal/scan
-# github.com/gin-contrib/multitemplate v1.1.4
-## explicit; go 1.26.0
+# github.com/gin-contrib/multitemplate v1.1.5
+## explicit; go 1.26.10
 github.com/gin-contrib/multitemplate
 # github.com/gin-contrib/sessions v1.1.3
 ## explicit; go 1.26.10
