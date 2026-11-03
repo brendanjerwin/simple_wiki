@@ -151,8 +151,8 @@ github.com/gabriel-vasile/mimetype v1.4.16 h1:5izNFuvA37st1dDRAcA7TtmngBmRgiIPDm
 github.com/gabriel-vasile/mimetype v1.4.16/go.mod h1:3oFFwxX8kTklZwzIl2aQEDZT0lKY8xH92ST88bAwba4=
 github.com/gaissmai/bart v0.29.0 h1:wO6HGE8g9YE0Wm0bCpYxwRzfQ4+fbJKOhL64e5ACGCI=
 github.com/gaissmai/bart v0.29.0/go.mod h1:GREWQfTLRWz/c5FTOsIw+KkscuFkIV5t8Rp7Nd1Td5c=
-github.com/gin-contrib/multitemplate v1.1.4 h1:2FWMNvcnwcm8dcfg9SUIy8JrkhPsOvKX65OD49Rd1rM=
-github.com/gin-contrib/multitemplate v1.1.4/go.mod h1:jrv4FTq2xIDQ9/S2SpnishO14iikE4j74jLgh2q59iM=
+github.com/gin-contrib/multitemplate v1.1.5 h1:ysskdBwBpEUmgArwJeK+7l6kiTooTERbOwMgvlFOURA=
+github.com/gin-contrib/multitemplate v1.1.5/go.mod h1:/lmewmjvr07Pr4EMyad7qNLCZzWGyHmdWJBZC3wBDsc=
 github.com/gin-contrib/sessions v1.1.3 h1:jTd6RietfxB/0brE36W6Q7XTl9die/gwD5orFZQZfh0=
 github.com/gin-contrib/sessions v1.1.3/go.mod h1:4As481wI7g3rsRf6RnQYc0pS/IqBjp8vpz1Y4wudHek=
 github.com/gin-contrib/sse v1.1.1 h1:uGYpNwTacv5R68bSGMapo62iLTRa9l5zxGCps4hK6ko=
