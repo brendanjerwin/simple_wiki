@@ -13,8 +13,12 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"connectrpc.com/grpcreflect"
 	"connectrpc.com/vanguard"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	historyindex "github.com/brendanjerwin/simple_wiki/index/history"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
@@ -551,7 +555,10 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		ginRouter.ServeHTTP(w, r)
 	})
 
-	transcoder, err := vanguard.NewTranscoder(services, vanguard.WithUnknownHandler(fallback))
+	transcoder, err := vanguard.NewTranscoder(services,
+		vanguard.WithUnknownHandler(fallback),
+		vanguard.WithCodec(newStrictJSONCodec),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -566,6 +573,41 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	mux.Handle("/", transcoder)
 
 	return mux, nil
+}
+
+// strictJSONCodec wraps Vanguard's JSONCodec and promotes JSON unmarshal errors
+// to connect.CodeInvalidArgument. The default codec silently discards unknown
+// fields (DiscardUnknown: true), which allowed callers to send misnamed fields
+// like "item_uid" and receive a 200 success response. With DiscardUnknown: false,
+// protojson returns an error for unknown fields, and this wrapper ensures that
+// error surfaces to the client as INVALID_ARGUMENT (HTTP 400) rather than the
+// opaque INTERNAL (HTTP 500) that Vanguard would produce for a raw codec error.
+type strictJSONCodec struct {
+	vanguard.JSONCodec
+}
+
+func (c strictJSONCodec) Unmarshal(data []byte, msg proto.Message) error {
+	if err := c.JSONCodec.Unmarshal(data, msg); err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return nil
+}
+
+func (c strictJSONCodec) UnmarshalField(data []byte, msg proto.Message, field protoreflect.FieldDescriptor) error {
+	if err := c.JSONCodec.UnmarshalField(data, msg, field); err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return nil
+}
+
+// newStrictJSONCodec is the vanguard.WithCodec factory for strictJSONCodec.
+func newStrictJSONCodec(res vanguard.TypeResolver) vanguard.Codec {
+	return strictJSONCodec{
+		JSONCodec: vanguard.JSONCodec{
+			MarshalOptions:   protojson.MarshalOptions{Resolver: res, EmitUnpopulated: true},
+			UnmarshalOptions: protojson.UnmarshalOptions{Resolver: res, DiscardUnknown: false},
+		},
+	}
 }
 
 // keepOutboundSyncQueueDepth bounds the per-worker queue for Keep

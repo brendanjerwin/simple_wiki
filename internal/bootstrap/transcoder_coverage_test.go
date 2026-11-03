@@ -2,6 +2,7 @@
 package bootstrap_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -133,6 +134,55 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 			Expect(missingServices).To(BeEmpty(),
 				"these services are registered with the grpc.Server but the vanguard transcoder is not routing to them — likely missing from BuildVanguardTranscoder's serviceNames list: %v",
 				missingServices)
+		})
+	})
+})
+
+var _ = Describe("BuildVanguardTranscoder strict JSON codec", func() {
+	var (
+		handler http.Handler
+	)
+
+	BeforeEach(func() {
+		grpcServer := grpc.NewServer()
+		apiv1.RegisterChecklistServiceServer(grpcServer, apiv1.UnimplementedChecklistServiceServer{})
+
+		ginRouter := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.NotFound(w, &http.Request{})
+		})
+
+		var err error
+		handler, err = bootstrap.BuildVanguardTranscoder(grpcServer, ginRouter)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("ChecklistService/UpdateItem", func() {
+		When("the request JSON contains an unknown field (e.g. item_uid instead of uid)", func() {
+			var (
+				resp *httptest.ResponseRecorder
+				body string
+			)
+
+			BeforeEach(func() {
+				req := httptest.NewRequest(http.MethodPost, "/api.v1.ChecklistService/UpdateItem",
+					strings.NewReader(`{"page":"p","list_name":"l","item_uid":"01MFAKEUID000000000000000"}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Connect-Protocol-Version", "1")
+				resp = httptest.NewRecorder()
+				handler.ServeHTTP(resp, req)
+
+				raw, err := io.ReadAll(resp.Body)
+				Expect(err).NotTo(HaveOccurred())
+				body = string(raw)
+			})
+
+			It("should return HTTP 400 (INVALID_ARGUMENT)", func() {
+				Expect(resp.Code).To(Equal(http.StatusBadRequest))
+			})
+
+			It("should name the unknown field in the error response", func() {
+				Expect(body).To(ContainSubstring("item_uid"))
+			})
 		})
 	})
 })

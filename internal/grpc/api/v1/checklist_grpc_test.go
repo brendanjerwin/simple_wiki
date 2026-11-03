@@ -237,6 +237,18 @@ var _ = Describe("ChecklistService handlers — page required validation", func(
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
 			})
 		})
+
+		When("uid is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.UpdateItem(ctx, &apiv1.UpdateItemRequest{Page: "p", ListName: "l", Uid: ""})
+			})
+
+			It("should return InvalidArgument naming uid", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "uid"))
+			})
+		})
 	})
 
 	Describe("ToggleItem", func() {
@@ -646,3 +658,120 @@ func expectPublicChecklist(checklist *apiv1.Checklist) {
 	Expect(checklist.GetTombstones()).To(BeEmpty())
 	Expect(checklist.GetMaxSeq()).To(BeZero())
 }
+
+var _ = Describe("ChecklistService handlers — UpdateItem field persistence", func() {
+	var (
+		ctx     context.Context
+		mock    *MockPageReaderMutator
+		server  *v1.Server
+		mutator *checklistmutator.Mutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mock = &MockPageReaderMutator{Frontmatter: wikipage.FrontMatter{}}
+		cl := &checklistSteadyClock{}
+		ug := ulid.NewSequenceGenerator("01HXCCCCCCCCCCCCCCCCCCCCCC")
+		mutator = checklistmutator.New(mock, cl, ug)
+		server = mustNewServer(mock, nil, nil).WithChecklistMutator(mutator)
+	})
+
+	Describe("UpdateItem", func() {
+		When("a valid uid is supplied with updated text and description", func() {
+			var (
+				itemUID   string
+				listItems *apiv1.ListItemsResponse
+				listErr   error
+			)
+
+			BeforeEach(func() {
+				addResp, addErr := server.AddItem(ctx, &apiv1.AddItemRequest{
+					Page:     "persistence-page",
+					ListName: "plist",
+					Text:     "original text",
+				})
+				Expect(addErr).NotTo(HaveOccurred())
+				itemUID = addResp.GetItem().GetUid()
+
+				updatedText := "updated text"
+				updatedDesc := "updated description"
+				_, updateErr := server.UpdateItem(ctx, &apiv1.UpdateItemRequest{
+					Page:        "persistence-page",
+					ListName:    "plist",
+					Uid:         itemUID,
+					Text:        &updatedText,
+					Description: &updatedDesc,
+				})
+				Expect(updateErr).NotTo(HaveOccurred())
+
+				listItems, listErr = server.ListItems(ctx, &apiv1.ListItemsRequest{
+					Page:     "persistence-page",
+					ListName: "plist",
+				})
+			})
+
+			It("should return no error from ListItems", func() {
+				Expect(listErr).NotTo(HaveOccurred())
+			})
+
+			It("should persist the updated text (verified via ListItems, not the UpdateItem response)", func() {
+				Expect(listItems.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(listItems.GetChecklist().GetItems()[0].GetText()).To(Equal("updated text"))
+			})
+
+			It("should persist the updated description (verified via ListItems, not the UpdateItem response)", func() {
+				Expect(listItems.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(listItems.GetChecklist().GetItems()[0].GetDescription()).To(Equal("updated description"))
+			})
+
+			It("should update the correct item (uid matches)", func() {
+				Expect(listItems.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(listItems.GetChecklist().GetItems()[0].GetUid()).To(Equal(itemUID))
+			})
+		})
+
+		When("uid is empty", func() {
+			var (
+				listItemsBefore *apiv1.ListItemsResponse
+				updateErr       error
+				listItemsAfter  *apiv1.ListItemsResponse
+			)
+
+			BeforeEach(func() {
+				_, addErr := server.AddItem(ctx, &apiv1.AddItemRequest{
+					Page:     "nowrite-page",
+					ListName: "nlist",
+					Text:     "sentinel",
+				})
+				Expect(addErr).NotTo(HaveOccurred())
+
+				listItemsBefore, _ = server.ListItems(ctx, &apiv1.ListItemsRequest{
+					Page:     "nowrite-page",
+					ListName: "nlist",
+				})
+
+				updatedText := "should not be written"
+				_, updateErr = server.UpdateItem(ctx, &apiv1.UpdateItemRequest{
+					Page:     "nowrite-page",
+					ListName: "nlist",
+					Uid:      "",
+					Text:     &updatedText,
+				})
+
+				listItemsAfter, _ = server.ListItems(ctx, &apiv1.ListItemsRequest{
+					Page:     "nowrite-page",
+					ListName: "nlist",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(updateErr).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "uid"))
+			})
+
+			It("should not mutate any item text", func() {
+				Expect(listItemsAfter.GetChecklist().GetItems()[0].GetText()).To(
+					Equal(listItemsBefore.GetChecklist().GetItems()[0].GetText()))
+			})
+		})
+	})
+})
