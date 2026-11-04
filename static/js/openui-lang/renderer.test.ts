@@ -248,16 +248,16 @@ describe('renderer component output', () => {
      {},
     );
     const card = (await fixture<HTMLElement>(rendered.template as never)) as HTMLElement;
-    expect(card.getAttribute('style'), unsafe).to.equal(null);
-    expect(card.getAttribute('data-bg-image'), unsafe).to.equal(null);
+    expect(card.getAttribute('style'), unsafe).to.be.null;
+    expect(card.getAttribute('data-bg-image'), unsafe).to.be.null;
    }
   });
 
   it('should render no background-image style when backgroundImage is unset', async () => {
    const rendered = runtime.render('root = Card("T", [t])\nt = Text("hi")', {});
    const card = (await fixture<HTMLElement>(rendered.template as never)) as HTMLElement;
-   expect(card.getAttribute('style')).to.equal(null);
-   expect(card.getAttribute('data-bg-image')).to.equal(null);
+   expect(card.getAttribute('style')).to.be.null;
+   expect(card.getAttribute('data-bg-image')).to.be.null;
   });
  });
 
@@ -290,7 +290,7 @@ describe('renderer component output', () => {
   const rendered = runtime.render('root = Card("T", [s])\ns = Steps($i, 5)\n$i = 2', {});
   const el = await fixture<HTMLElement>(rendered.template as never);
   const buttons = el.querySelectorAll('.wiki-page-app-steps button.wiki-page-app-button');
-  expect(buttons.length).to.equal(0);
+  expect(buttons).to.have.lengthOf(0);
  });
 
  it('should dispatch a defined plan when a Steps next button is clicked', async () => {
@@ -305,7 +305,7 @@ describe('renderer component output', () => {
   });
   const next = el.querySelector<HTMLButtonElement>('.wiki-page-app-steps button.wiki-page-app-button[data-variant="primary"]');
   next?.click();
-  expect(dispatched.length).to.equal(1);
+  expect(dispatched).to.have.lengthOf(1);
   const detail = dispatched[0] as PageAppActionEventDetail;
   expect(detail.plan, 'Steps must dispatch an executable plan, not fallback chat').to.exist;
   expect(detail.plan?.steps.length).to.equal(1);
@@ -340,7 +340,7 @@ describe('renderer component output', () => {
   const slider = el.querySelector('input.wiki-page-app-slider') as HTMLInputElement;
   slider.value = '65';
   slider.dispatchEvent(new Event('change'));
-  expect(dispatched.length).to.equal(1);
+  expect(dispatched).to.have.lengthOf(1);
   const detail = dispatched[0] as PageAppActionEventDetail;
   expect(detail.value, 'Slider must dispatch the new numeric value').to.equal(65);
  });
@@ -384,7 +384,7 @@ describe('renderer component output', () => {
   const num = el.querySelector('input.wiki-page-app-number-input') as HTMLInputElement;
   num.value = '42';
   num.dispatchEvent(new Event('change'));
-  expect(dispatched.length).to.equal(1);
+  expect(dispatched).to.have.lengthOf(1);
   const detail = dispatched[0] as PageAppActionEventDetail;
   expect(detail.value, 'NumberInput must dispatch the coerced numeric value').to.equal(42);
  });
@@ -406,7 +406,7 @@ describe('renderer component output', () => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(num, 'abc');
   expect(num.value).to.equal('');
   num.dispatchEvent(new Event('change'));
-  expect(dispatched.length, 'non-numeric commit must not dispatch').to.equal(0);
+  expect(dispatched, 'non-numeric commit must not dispatch').to.have.lengthOf(0);
  });
 
  it('should default step to 1 and leave min/max unrestricted when omitted', async () => {
@@ -449,7 +449,7 @@ describe('renderer component output', () => {
   const ta = el.querySelector('textarea.wiki-page-app-textarea') as HTMLTextAreaElement;
   ta.value = 'new text';
   ta.dispatchEvent(new Event('change'));
-  expect(dispatched.length).to.equal(1);
+  expect(dispatched).to.have.lengthOf(1);
   const detail = dispatched[0] as PageAppActionEventDetail;
   expect(detail.value, 'Textarea must dispatch the committed string value').to.equal('new text');
  });
@@ -491,7 +491,7 @@ describe('renderer component output', () => {
   const picker = el.querySelector('input.wiki-page-app-datepicker') as HTMLInputElement;
   picker.value = '2026-03-02';
   picker.dispatchEvent(new Event('change'));
-  expect(dispatched.length).to.equal(1);
+  expect(dispatched).to.have.lengthOf(1);
   const detail = dispatched[0] as PageAppActionEventDetail;
   expect(detail.value, 'DatePicker must dispatch the committed ISO date string').to.equal('2026-03-02');
  });
@@ -504,7 +504,7 @@ describe('renderer component output', () => {
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
   const pickers = el.querySelectorAll('input.wiki-page-app-datepicker');
-  expect(pickers.length).to.equal(2);
+  expect(pickers).to.have.lengthOf(2);
   expect((pickers[0] as HTMLInputElement).value).to.equal('');
   expect((pickers[1] as HTMLInputElement).value).to.equal('');
  });
@@ -522,7 +522,7 @@ describe('renderer component output', () => {
   const picker = el.querySelector('input.wiki-page-app-datepicker') as HTMLInputElement;
   picker.value = '';
   picker.dispatchEvent(new Event('change'));
-  expect(dispatched.length, 'empty commit must not dispatch').to.equal(0);
+  expect(dispatched, 'empty commit must not dispatch').to.have.lengthOf(0);
  });
 
 });
@@ -548,7 +548,7 @@ describe('renderer layout components', () => {
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
   const grid = el.querySelector('.wiki-page-app-grid');
-  expect(grid).not.to.equal(null);
+  expect(grid).to.exist;
   expect(grid?.getAttribute('data-cols')).to.equal('2');
   expect(el.textContent).to.include('left');
   expect(el.textContent).to.include('right');
@@ -562,7 +562,7 @@ describe('renderer layout components', () => {
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
   const span = el.querySelector('.wiki-page-app-grid > .wiki-page-app-span');
-  expect(span).not.to.equal(null);
+  expect(span).to.exist;
   expect(span?.getAttribute('style')).to.include('grid-column: span 2');
   expect(el.textContent).to.include('wide');
  });
@@ -575,7 +575,7 @@ describe('renderer layout components', () => {
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
   const span = el.querySelector('.wiki-page-app-span');
-  expect(span).not.to.equal(null);
+  expect(span).to.exist;
   expect(el.textContent).to.include('outside');
  });
 
@@ -583,7 +583,7 @@ describe('renderer layout components', () => {
   const rendered = runtime.render('root = Card("T", [d])\nd = Divider()', {});
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
-  expect(el.querySelector('hr.wiki-page-app-divider')).not.to.equal(null);
+  expect(el.querySelector('hr.wiki-page-app-divider')).to.exist;
  });
 
  it('should render SectionHeader with title and trailing slot', async () => {
@@ -594,7 +594,7 @@ describe('renderer layout components', () => {
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
   const header = el.querySelector('.wiki-page-app-section-header');
-  expect(header).not.to.equal(null);
+  expect(header).to.exist;
   expect(header?.textContent).to.include('Workout');
   expect(header?.textContent).to.include('4 sets');
  });
@@ -619,7 +619,7 @@ describe('renderer layout components', () => {
   const el = await fixture<HTMLElement>(rendered.template as never);
   const badge = el.querySelector('.wiki-page-app-badge');
   expect(badge?.getAttribute('aria-label')).to.equal('4 sets');
-  expect(badge?.getAttribute('data-variant')).to.equal(null);
+  expect(badge?.getAttribute('data-variant')).to.be.null;
   expect(badge?.textContent).to.equal('4 sets');
  });
 
@@ -647,9 +647,9 @@ describe('renderer layout components', () => {
   const el = await fixture<HTMLElement>(rendered.template as never);
   const header = el.querySelector('.wiki-page-app-section-header');
   const badge = header?.querySelector('.wiki-page-app-badge');
-  expect(header).not.to.equal(null);
-  expect(badge).not.to.equal(null);
-  expect(badge?.getAttribute('data-variant')).to.equal(null);
+  expect(header).to.exist;
+  expect(badge).to.exist;
+  expect(badge?.getAttribute('data-variant')).to.be.null;
   expect(header?.textContent).to.include('4 sets');
  });
 });
@@ -667,7 +667,7 @@ describe('live store flush loop', () => {
   // Simulate a button @Set($count, 1): mutate the live store, then flush.
   runtime.store.set('$count', 1);
   runtime.render('root = Card("T", [t])\n$count = 0\nt = Text("count: " + $count)', runtime.store.getSnapshot()['$count'] as number !== undefined ? { $count: (runtime.store.getSnapshot()['$count'] as number) } : {});
-  expect(sets.length).to.equal(0);
+  expect(sets).to.have.lengthOf(0);
   // Flush what the host would flush:
   sets.push({ ...runtime.store.getSnapshot() });
   // Re-render hydrating from the flushed state: value is incremented.
@@ -719,11 +719,11 @@ describe('Icon renderer', () => {
    expect(rendered.errors, name).to.deep.equal([]);
    const el = await fixture<HTMLElement>(rendered.template as never);
    const span = el.querySelector('span.wiki-page-app-icon') as HTMLElement | null;
-   expect(span, name).not.to.equal(null);
+   expect(span, name).to.exist;
    expect(span?.getAttribute('aria-hidden'), name).to.equal('true');
    expect(span?.getAttribute('data-icon'), name).to.equal(name);
    const svg = span?.querySelector('svg') ?? null;
-   expect(svg, name).not.to.equal(null);
+   expect(svg, name).to.exist;
    expect(svg?.getAttribute('viewBox'), name).to.equal('0 0 24 24');
    expect(svg?.getAttribute('stroke'), name).to.equal('currentColor');
    const shapes = svg?.querySelectorAll('path,circle,rect,line,polygon').length ?? 0;
@@ -764,7 +764,7 @@ describe('Avatar renderer', () => {
    'root = Card("T", [a])\na = Avatar("/uploads/sha256-AAAA", "BJ")',
   );
   const avatar = el.querySelector('.wiki-page-app-avatar');
-  expect(avatar).not.to.equal(null);
+  expect(avatar).to.exist;
   expect(avatar?.getAttribute('data-size')).to.equal('md');
   const img = avatar?.querySelector('img.wiki-page-app-avatar-img');
   expect(img?.getAttribute('src')).to.equal('/uploads/sha256-AAAA');
@@ -778,8 +778,8 @@ describe('Avatar renderer', () => {
    'root = Card("T", [a])\na = Avatar(undefined, "BJ")',
   );
   const avatar = el.querySelector('.wiki-page-app-avatar');
-  expect(avatar).not.to.equal(null);
-  expect(avatar?.querySelector('img')).to.equal(null);
+  expect(avatar).to.exist;
+  expect(avatar?.querySelector('img')).to.not.exist;
   expect(avatar?.textContent).to.include('BJ');
   expect(avatar?.hasAttribute('data-broken')).to.equal(false);
  });
@@ -795,8 +795,8 @@ describe('Avatar renderer', () => {
  it('should render the curated person glyph when neither src nor initials is present', async () => {
   const el = await renderAvatarProgram('root = Card("T", [a])\na = Avatar()');
   const avatar = el.querySelector('.wiki-page-app-avatar');
-  expect(avatar).not.to.equal(null);
-  expect(avatar?.querySelector('img')).to.equal(null);
+  expect(avatar).to.exist;
+  expect(avatar?.querySelector('img')).to.not.exist;
   expect(avatar?.querySelectorAll('svg').length).to.be.greaterThan(0);
  });
 
@@ -806,7 +806,7 @@ describe('Avatar renderer', () => {
     `root = Card("T", [a])\na = Avatar("${unsafe}", "BJ")`,
    );
    const avatar = el.querySelector('.wiki-page-app-avatar');
-   expect(avatar?.querySelector('img'), unsafe).to.equal(null);
+   expect(avatar?.querySelector('img'), unsafe).to.not.exist;
    expect(avatar?.textContent, unsafe).to.include('BJ');
   }
  });
@@ -816,10 +816,10 @@ describe('Avatar renderer', () => {
    'root = Card("T", [a])\na = Avatar("/uploads/sha256-missing", "BJ")',
   );
   const avatar = el.querySelector('.wiki-page-app-avatar') as HTMLElement | null;
-  expect(avatar).not.to.equal(null);
+  expect(avatar).to.exist;
   expect(avatar!.hasAttribute('data-broken')).to.equal(false);
   const img = avatar!.querySelector('img.wiki-page-app-avatar-img');
-  expect(img).not.to.equal(null);
+  expect(img).to.exist;
   img!.dispatchEvent(new Event('error'));
   expect(avatar!.hasAttribute('data-broken')).to.equal(true);
  });
@@ -829,7 +829,7 @@ describe('Avatar renderer', () => {
    'root = Card("T", [a])\na = Avatar("/uploads/sha256-missing", "BJ")',
   );
   const avatar = el.querySelector('.wiki-page-app-avatar') as HTMLElement | null;
-  expect(avatar).not.to.equal(null);
+  expect(avatar).to.exist;
   const img = avatar!.querySelector('img.wiki-page-app-avatar-img');
   img!.dispatchEvent(new Event('error'));
   expect(avatar!.hasAttribute('data-broken')).to.equal(true);
@@ -865,7 +865,7 @@ describe('Skeleton renderer', () => {
  it('should render the default text-kind block as an aria-hidden span', async () => {
   const el = await renderSkeletonProgram('root = Card("T", [a])\na = Skeleton()');
   const skeleton = el.querySelector('.wiki-page-app-skeleton');
-  expect(skeleton).not.to.equal(null);
+  expect(skeleton).to.exist;
   expect(skeleton?.getAttribute('data-kind')).to.equal('text');
   expect(skeleton?.getAttribute('aria-hidden')).to.equal('true');
   expect(skeleton?.textContent).to.equal('');
@@ -875,7 +875,7 @@ describe('Skeleton renderer', () => {
   for (const kind of ['text', 'title', 'card', 'circle']) {
    const el = await renderSkeletonProgram(`root = Card("T", [a])\na = Skeleton("${kind}")`);
    const skeleton = el.querySelector('.wiki-page-app-skeleton');
-   expect(skeleton, kind).not.to.equal(null);
+   expect(skeleton, kind).to.exist;
    expect(skeleton?.getAttribute('data-kind'), kind).to.equal(kind);
   }
  });
@@ -884,21 +884,21 @@ describe('Skeleton renderer', () => {
   const el = await renderSkeletonProgram(
    'root = Card("T", [a])\n$loading = true\na = Skeleton("text", $loading)',
   );
-  expect(el.querySelector('.wiki-page-app-skeleton')).not.to.equal(null);
+  expect(el.querySelector('.wiki-page-app-skeleton')).to.exist;
  });
 
  it('should render nothing while a bound $loading is false', async () => {
   const el = await renderSkeletonProgram(
    'root = Card("T", [a])\n$loading = false\na = Skeleton("text", $loading)',
   );
-  expect(el.querySelector('.wiki-page-app-skeleton')).to.equal(null);
+  expect(el.querySelector('.wiki-page-app-skeleton')).to.not.exist;
  });
 
  it('should render nothing for an unset $binding rather than serving a stale shimmer', async () => {
   const el = await renderSkeletonProgram('root = Card("T", [a])\na = Skeleton("card")');
   // Unset loading leaves the standalone placeholder visible; guarded here so
   // a future strictness change that unmounts unset gates pins loudly.
-  expect(el.querySelector('.wiki-page-app-skeleton')).to.not.equal(null);
+  expect(el.querySelector('.wiki-page-app-skeleton')).to.exist;
  });
 });
 
@@ -919,7 +919,7 @@ describe('safeBackgroundImageUrl', () => {
    'http://insecure.example.com/bg.png',
    'https://example.com/bg.png"); color: red; background-image:url("https://evil.test',
   ]) {
-   expect(safeBackgroundImageUrl(unsafe), String(unsafe)).to.equal(undefined);
+   expect(safeBackgroundImageUrl(unsafe), String(unsafe)).to.be.undefined;
   }
  });
 });
@@ -979,7 +979,7 @@ describe('List renderer', () => {
  it('should render string items as li children of an unordered list by default', async () => {
   const el = await renderListProgram('root = Card("T", [l])\nl = List(["egg", "flour", "milk"])');
   const list = el.querySelector('ul.wiki-page-app-list');
-  expect(list).not.to.equal(null);
+  expect(list).to.exist;
   expect(list?.tagName).to.equal('UL');
   const items = el.querySelectorAll('.wiki-page-app-list > li');
   expect(items).to.have.lengthOf(3);
@@ -989,7 +989,7 @@ describe('List renderer', () => {
  it('should render an ol wrapper when ordered is true', async () => {
   const el = await renderListProgram('root = Card("T", [l])\nl = List(["preheat", "bake"], true)');
   const list = el.querySelector('.wiki-page-app-list');
-  expect(list).not.to.equal(null);
+  expect(list).to.exist;
   expect(list?.tagName).to.equal('OL');
   expect(el.querySelectorAll('.wiki-page-app-list > li')).to.have.lengthOf(2);
  });
@@ -1011,7 +1011,7 @@ describe('List renderer', () => {
 
  it('should render nothing when there are no valid items', async () => {
   const el = await renderListProgram('root = Card("T", [l])\nl = List([])');
-  expect(el.querySelector('.wiki-page-app-list')).to.equal(null);
+  expect(el.querySelector('.wiki-page-app-list')).to.not.exist;
  });
 });
 
@@ -1038,7 +1038,7 @@ describe('Image renderer', () => {
    'root = Card("T", [i])\ni = Image("/uploads/sha256-AAAA?filename=hero.png", "hero")',
   );
   const image = el.querySelector('.wiki-page-app-image');
-  expect(image).not.to.equal(null);
+  expect(image).to.exist;
   const img = image?.querySelector('img.wiki-page-app-image-img');
   expect(img?.getAttribute('src')).to.equal('/uploads/sha256-AAAA?filename=hero.png');
   expect(image?.hasAttribute('data-broken')).to.equal(false);
@@ -1103,10 +1103,10 @@ describe('Image renderer', () => {
   ]) {
    const el = await renderImageProgram(`root = Card("T", [i])\ni = Image("${unsafe}", "hero")`);
    const image = el.querySelector('.wiki-page-app-image');
-   expect(image, unsafe).not.to.equal(null);
-   expect(image?.querySelector('img'), unsafe).to.equal(null);
+   expect(image, unsafe).to.exist;
+   expect(image?.querySelector('img'), unsafe).to.not.exist;
    expect(image?.getAttribute('data-broken'), unsafe).to.equal('true');
-   expect(image?.querySelector('.wiki-page-app-image-fallback'), unsafe).not.to.equal(null);
+   expect(image?.querySelector('.wiki-page-app-image-fallback'), unsafe).to.exist;
   }
  });
 
@@ -1124,15 +1124,15 @@ describe('Image renderer', () => {
    'root = Card("T", [i])\ni = Image("/uploads/sha256-missing", "hero")',
   );
   const image = el.querySelector('.wiki-page-app-image') as HTMLElement | null;
-  expect(image).not.to.equal(null);
+  expect(image).to.exist;
   expect(image!.hasAttribute('data-broken')).to.equal(false);
   const img = image!.querySelector('img.wiki-page-app-image-img');
-  expect(img).not.to.equal(null);
+  expect(img).to.exist;
   img!.dispatchEvent(new Event('error'));
   expect(image!.hasAttribute('data-broken')).to.equal(true);
   // The fallback shows underneath once the wrapper is stamped; the <img>
   // stays in the DOM hidden by CSS, mirroring the Avatar contract.
-  expect(image!.querySelector('.wiki-page-app-image-fallback')).not.to.equal(null);
+  expect(image!.querySelector('.wiki-page-app-image-fallback')).to.exist;
  });
 
  it('should clear data-broken on a successful load so a repaired src is not latched hidden', async () => {
