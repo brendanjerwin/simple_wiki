@@ -68,7 +68,7 @@ describe('AgentSelector', () => {
     });
 
     it('should exist', () => {
-      expect(el).not.to.equal(null);
+      expect(el).to.exist;
     });
 
     it('should be an instance of AgentSelector', () => {
@@ -85,12 +85,12 @@ describe('AgentSelector', () => {
 
     it('should render a current-agent button', () => {
       const btn = el.shadowRoot?.querySelector('.current-agent');
-      expect(btn).not.to.equal(null);
+      expect(btn).to.exist;
     });
 
     it('should render a dropdown', () => {
       const dropdown = el.shadowRoot?.querySelector('menu-popover');
-      expect(dropdown).not.to.equal(null);
+      expect(dropdown).to.exist;
     });
 
     it('should have the dropdown hidden by default', () => {
@@ -170,7 +170,7 @@ describe('AgentSelector', () => {
 
     it('should not show the switching hint', () => {
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint === null).to.equal(true);
+      expect(hint).to.not.exist;
     });
   });
 
@@ -202,7 +202,7 @@ describe('AgentSelector', () => {
 
     it('should show the switching hint', () => {
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint).to.not.equal(null);
+      expect(hint).to.exist;
       expect(hint?.textContent).to.include('switching…');
     });
 
@@ -211,7 +211,7 @@ describe('AgentSelector', () => {
       await el.updateComplete;
 
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint === null).to.equal(true);
+      expect(hint).to.not.exist;
     });
   });
 
@@ -242,7 +242,7 @@ describe('AgentSelector', () => {
 
     it('should not show the switching hint', () => {
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint === null).to.equal(true);
+      expect(hint).to.not.exist;
     });
   });
 
@@ -277,7 +277,7 @@ describe('AgentSelector', () => {
 
     it('should show the unavailable hint under the trigger', () => {
       const hint = el.shadowRoot?.querySelector('.desired-unavailable-hint');
-      expect(hint).to.not.equal(null);
+      expect(hint).to.exist;
       expect(hint?.textContent).to.include('bound agent unavailable');
     });
   });
@@ -308,7 +308,7 @@ describe('AgentSelector', () => {
 
     it('should not show the unavailable hint', () => {
       const hint = el.shadowRoot?.querySelector('.desired-unavailable-hint');
-      expect(hint === null).to.equal(true);
+      expect(hint).to.not.exist;
     });
 
     describe('when refresh() is called', () => {

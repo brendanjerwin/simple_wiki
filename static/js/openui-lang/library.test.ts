@@ -204,7 +204,7 @@ describe('when parsing Grid and Span', () => {
   const { cols, gap, children } = grid.props;
   expect(cols).to.equal(2);
   expect(gap).to.equal('lg');
-  expect((children as ElementNode[]).length).to.equal(1);
+  expect(children as ElementNode[]).to.have.lengthOf(1);
  });
 
  it('should parse Grid without gap binding cleanly (children-first safety)', () => {
@@ -212,7 +212,7 @@ describe('when parsing Grid and Span', () => {
   expect(result.meta.errors).to.deep.equal([]);
   const grid = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
   expect(grid.props['cols']).to.equal(2);
-  expect(grid.props['gap']).to.equal(undefined);
+  expect(grid.props['gap']).to.be.undefined;
  });
 
  it('should parse the sidebar preset', () => {
@@ -309,7 +309,7 @@ describe('when parsing Badge', () => {
   const badge = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
   expect(badge.typeName).to.equal('Badge');
   expect(badge.props['label']).to.equal('4 sets');
-  expect(badge.props['variant']).to.equal(undefined);
+  expect(badge.props['variant']).to.be.undefined;
  });
 
  it('should parse Badge variant as the second positional arg', () => {
@@ -597,7 +597,7 @@ describe('ICON_LIBRARY', () => {
 
  it('should hold a non-null SVG fragment for every curated name', () => {
   for (const name of ICON_NAMES) {
-   expect(ICON_LIBRARY[name], name).to.not.equal(null);
+   expect(ICON_LIBRARY[name], name).to.exist;
   }
  });
 
@@ -629,7 +629,7 @@ describe('when parsing Card variants', () => {
   const result = parser.parse('root = Card("t", [x])\nx = Text("hi")');
   expect(result.meta.errors).to.deep.equal([]);
   expect(result.root?.props['title']).to.equal('t');
-  expect(result.root?.props['variant']).to.equal(undefined);
+  expect(result.root?.props['variant']).to.be.undefined;
  });
 
  it('should reject unknown Card variants', () => {
@@ -647,7 +647,7 @@ describe('when parsing Card backgroundImage', () => {
  it('should keep positional Card("title", children) binding unchanged when backgroundImage is absent', () => {
   const result = parser.parse('root = Card("t", [x])\nx = Text("hi")');
   expect(result.meta.errors).to.deep.equal([]);
-  expect(result.root?.props['backgroundImage']).to.equal(undefined);
+  expect(result.root?.props['backgroundImage']).to.be.undefined;
  });
 
  it('should bind backgroundImage as the fourth positional arg after variant', () => {
@@ -680,7 +680,7 @@ describe('when parsing Card backgroundImage', () => {
   expect(result.meta.errors).to.deep.equal([]);
   // Explicit undefined positionals arrive as null (parser substitutes before
   // schema validation treats null as absent); safeBackgroundImageUrl drops both.
-  expect(result.root?.props['backgroundImage']).to.equal(null);
+  expect(result.root?.props['backgroundImage']).to.be.null;
  });
 
  it('should reject a non-string backgroundImage', () => {
@@ -693,7 +693,7 @@ describe('when parsing Card backgroundImage', () => {
   const result = parser.parse('root = Card("t", [x], "filled")\nx = Text("hi")');
   expect(result.meta.errors).to.deep.equal([]);
   expect(result.root?.props['variant']).to.equal('filled');
-  expect(result.root?.props['backgroundImage']).to.equal(undefined);
+  expect(result.root?.props['backgroundImage']).to.be.undefined;
  });
 });
 
@@ -814,7 +814,7 @@ describe('wiki library prompt', () => {
  });
 
  it('should derive its tools from a pinned allowlist', () => {
-  expect(WIKI_TOOLS.length).to.equal(11);
+  expect(WIKI_TOOLS).to.have.lengthOf(11);
   expect(WIKI_TOOLS).to.include('api_v1_PageManagementService_ReadPageOutline');
   expect(WIKI_TOOLS).to.include('api_v1_PageAppStateService_MergePageAppState');
  });

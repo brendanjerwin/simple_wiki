@@ -97,7 +97,7 @@ describe('wiki-core@3 storybook story programs', () => {
     await awaitWrappers(div);
     try {
      const errors = parseErrorsIn(div);
-     expect(errors, `${story.name} rendered parse errors: ${errors ?? ''}`).to.equal(null);
+     expect(errors, `${story.name} rendered parse errors: ${errors ?? ''}`).to.be.null;
     } finally {
      render(null, div);
      div.remove();
