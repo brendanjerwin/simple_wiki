@@ -99,10 +99,11 @@ jobs:
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
-        uses: AButler/upload-release-assets@3d6774fae0ed91407dc5ae29d576b166536d1777 # v3.0
-        with:
-          files: "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        # --clobber replaces an existing asset of the same name, so re-runs are idempotent.
+        run: gh release upload "$RELEASE_TAG" "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}" --clobber --repo "$GITHUB_REPOSITORY"
 
   deploy:
     name: Deploy to Home Server
@@ -111,7 +112,9 @@ jobs:
     # Do not deploy from a partial matrix: with fail-fast: false, a single
     # flaky leg (e.g. nix-cache install failure) must block the deploy so
     # production never ships while other platforms' assets are missing.
-    if: github.event_name == 'release' && needs.build.result == 'success'
+    # always() stops the implicit success() check from inheriting a
+    # sign-extension failure through build's needs; deploy only needs build.
+    if: always() && github.event_name == 'release' && needs.build.result == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
