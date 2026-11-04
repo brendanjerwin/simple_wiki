@@ -52,7 +52,7 @@ describe('PageChatPanel', () => {
 
     it('should render the FAB with disabled class', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.not.equal(null);
+      expect(fab).to.exist;
       expect(fab!.classList.contains('disabled')).to.equal(true);
     });
 
@@ -65,7 +65,7 @@ describe('PageChatPanel', () => {
       el.drawerOpen = true;
       await el.updateComplete;
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-      expect(banner).to.not.equal(null);
+      expect(banner).to.exist;
       expect(banner!.textContent).to.contain('TestPersona is not connected');
     });
 
@@ -100,7 +100,7 @@ describe('PageChatPanel', () => {
 
     it('should render the FAB button', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.not.equal(null);
+      expect(fab).to.exist;
     });
 
     it('should have correct aria-label', () => {
@@ -134,7 +134,7 @@ describe('PageChatPanel', () => {
 
     it('should hide the FAB', () => {
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLButtonElement | null;
-      expect(fab).to.not.equal(null);
+      expect(fab).to.exist;
       expect(fab!.hidden).to.equal(true);
     });
 
@@ -272,7 +272,7 @@ describe('PageChatPanel', () => {
 
     it('should have id="chat-panel" on the panel element', () => {
       const panel = el.shadowRoot!.querySelector('#chat-panel');
-      expect(panel).to.not.equal(null);
+      expect(panel).to.exist;
     });
 
     describe('FAB aria attributes', () => {
@@ -333,7 +333,7 @@ describe('PageChatPanel', () => {
 
     it('should have a textarea', () => {
       const textarea = el.shadowRoot!.querySelector('textarea');
-      expect(textarea).to.not.equal(null);
+      expect(textarea).to.exist;
     });
 
     it('should have maxlength of 2000', () => {
@@ -342,7 +342,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should not render a send button while the draft is empty (#1349)', async () => {
-      expect(el.shadowRoot!.querySelector('.send-button')).to.equal(null);
+      expect(el.shadowRoot!.querySelector('.send-button')).to.not.exist;
     });
   });
 
@@ -408,7 +408,7 @@ describe('PageChatPanel', () => {
 
     it('should show empty state message when no messages', () => {
       const empty = el.shadowRoot!.querySelector('.empty-state');
-      expect(empty).to.not.equal(null);
+      expect(empty).to.exist;
       expect(empty!.textContent).to.contain('Send a message');
     });
   });
@@ -448,7 +448,7 @@ describe('PageChatPanel', () => {
 
     it('should display the error banner', () => {
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-      expect(banner).to.not.equal(null);
+      expect(banner).to.exist;
     });
 
     it('should show the error message', () => {
@@ -471,7 +471,7 @@ describe('PageChatPanel', () => {
 
       it('should show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.not.equal(null);
+        expect(indicator).to.exist;
       });
 
       it('should contain thinking text', () => {
@@ -481,7 +481,7 @@ describe('PageChatPanel', () => {
 
       it('should show the Stop button', () => {
         const stop = el.shadowRoot!.querySelector('.stop-button');
-        expect(stop).to.not.equal(null);
+        expect(stop).to.exist;
       });
     });
 
@@ -498,12 +498,12 @@ describe('PageChatPanel', () => {
 
       it('should still show the indicator (turn is active)', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.not.equal(null);
+        expect(indicator).to.exist;
       });
 
       it('should still show the Stop button so the user can stop tool use', () => {
         const stop = el.shadowRoot!.querySelector('.stop-button');
-        expect(stop).to.not.equal(null);
+        expect(stop).to.exist;
       });
 
       it('should not show the thinking text once the first token arrived', () => {
@@ -524,12 +524,12 @@ describe('PageChatPanel', () => {
 
       it('should not show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.equal(null);
+        expect(indicator).to.not.exist;
       });
 
       it('should not show the Stop button', () => {
         const stop = el.shadowRoot!.querySelector('.stop-button');
-        expect(stop).to.equal(null);
+        expect(stop).to.not.exist;
       });
     });
   });
@@ -599,7 +599,7 @@ describe('PageChatPanel', () => {
 
     it('should show the reconnecting banner', () => {
       const banner = el.shadowRoot!.querySelector('.status-banner.reconnecting');
-      expect(banner).to.not.equal(null);
+      expect(banner).to.exist;
       expect(banner!.textContent).to.contain('Reconnecting');
     });
   });
@@ -754,9 +754,9 @@ describe('PageChatPanel', () => {
 
       it('should render the persona name in the chat bubble', () => {
         const bubble = el.shadowRoot!.querySelector('chat-message-bubble');
-        expect(bubble).to.not.equal(null);
+        expect(bubble).to.exist;
         const senderDiv = bubble!.shadowRoot!.querySelector('.sender-name');
-        expect(senderDiv).to.not.equal(null);
+        expect(senderDiv).to.exist;
         expect(senderDiv!.textContent).to.equal('TestPersona');
       });
     });
@@ -886,11 +886,11 @@ describe('PageChatPanel', () => {
 
       it('should not show the error banner', () => {
         const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-        expect(banner).to.equal(null);
+        expect(banner).to.not.exist;
       });
 
       it('should have null error state', () => {
-        expect(el.error).to.equal(null);
+        expect(el.error).to.be.null;
       });
     });
   });
@@ -1012,7 +1012,7 @@ describe('PageChatPanel', () => {
 
       it('should not render the permission prompt', () => {
         const prompt = el.shadowRoot!.querySelector('.permission-prompt');
-        expect(prompt).to.equal(null);
+        expect(prompt).to.not.exist;
       });
     });
 
@@ -1033,18 +1033,18 @@ describe('PageChatPanel', () => {
 
       it('should render the permission prompt', () => {
         const prompt = el.shadowRoot!.querySelector('.permission-prompt');
-        expect(prompt).to.not.equal(null);
+        expect(prompt).to.exist;
       });
 
       it('should render the permission title', () => {
         const title = el.shadowRoot!.querySelector('.permission-title');
-        expect(title).to.not.equal(null);
+        expect(title).to.exist;
         expect(title!.textContent).to.contain('Permission requested');
       });
 
       it('should render the description with title', () => {
         const desc = el.shadowRoot!.querySelector('.permission-description');
-        expect(desc).to.not.equal(null);
+        expect(desc).to.exist;
         expect(desc!.textContent).to.contain('File Access');
         expect(desc!.textContent).to.contain('Read /etc/passwd');
       });
@@ -1058,7 +1058,7 @@ describe('PageChatPanel', () => {
 
       it('should render the deny button', () => {
         const cancelBtn = el.shadowRoot!.querySelector('.permission-btn.cancel');
-        expect(cancelBtn).to.not.equal(null);
+        expect(cancelBtn).to.exist;
         expect(cancelBtn!.textContent).to.contain('Deny');
       });
     });
@@ -1100,12 +1100,12 @@ describe('PageChatPanel', () => {
       });
 
       it('should clear pendingPermission', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
 
       it('should remove the permission prompt from the DOM', () => {
         const prompt = el.shadowRoot!.querySelector('.permission-prompt');
-        expect(prompt).to.equal(null);
+        expect(prompt).to.not.exist;
       });
     });
 
@@ -1186,7 +1186,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should have cleared pendingPermission after the second response', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
     });
 
@@ -1219,7 +1219,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should clear pendingPermission', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
     });
   });
@@ -1475,7 +1475,7 @@ describe('PageChatPanel', () => {
 
     it('should pass toolCalls to the chat-message-bubble component', () => {
       const bubble = el.shadowRoot!.querySelector('chat-message-bubble');
-      expect(bubble).to.not.equal(null);
+      expect(bubble).to.exist;
       expect((bubble as unknown as { toolCalls: unknown[] }).toolCalls).to.have.length(2);
     });
   });
@@ -1667,7 +1667,7 @@ describe('PageChatPanel', () => {
 
       it('should show disconnected banner', () => {
         const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-        expect(banner).to.not.equal(null);
+        expect(banner).to.exist;
       });
     });
 
@@ -1684,7 +1684,7 @@ describe('PageChatPanel', () => {
 
       it('should render the FAB with disabled class', () => {
         const fab = closedEl.shadowRoot!.querySelector('.fab');
-        expect(fab).to.not.equal(null);
+        expect(fab).to.exist;
         expect(fab!.classList.contains('disabled')).to.equal(true);
       });
     });
@@ -1702,7 +1702,7 @@ describe('PageChatPanel', () => {
 
       it('should render the FAB without disabled class', () => {
         const fab = closedEl.shadowRoot!.querySelector('.fab');
-        expect(fab).to.not.equal(null);
+        expect(fab).to.exist;
         expect(fab!.classList.contains('disabled')).to.equal(false);
       });
     });
@@ -1718,7 +1718,7 @@ describe('PageChatPanel', () => {
 
       it('should show the starting assistant banner', () => {
         const banner = el.shadowRoot!.querySelector('.status-banner.reconnecting');
-        expect(banner).to.not.equal(null);
+        expect(banner).to.exist;
         expect(banner!.textContent).to.contain('Starting assistant...');
       });
     });
@@ -1735,7 +1735,7 @@ describe('PageChatPanel', () => {
       it('should show the send a message to start banner', () => {
         const banners = el.shadowRoot!.querySelectorAll('.status-banner');
         const startBanner = Array.from(banners).find((b) => b.textContent!.includes('Send a message to start'));
-        expect(startBanner).to.not.equal(null);
+        expect(startBanner).to.exist;
       });
     });
   });
@@ -1833,7 +1833,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear the error', () => {
-        expect(el.error).to.equal(null);
+        expect(el.error).to.be.null;
       });
 
       it('should call onResetDelay for each event', () => {
@@ -1862,7 +1862,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear the error', () => {
-        expect(el.error).to.equal(null);
+        expect(el.error).to.be.null;
       });
     });
   });
@@ -2316,7 +2316,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear pending permission', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
     });
 
@@ -2909,7 +2909,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set error with the original message', () => {
-        expect(el.error).to.not.equal(null);
+        expect(el.error).to.not.be.null;
         expect(el.error!.message).to.equal('generic network error');
       });
 
@@ -3004,7 +3004,7 @@ describe('PageChatPanel attachment handling', () => {
 
     it('should open the attach menu', () => {
       const menu = el.shadowRoot!.querySelector('.attach-menu');
-      expect(menu).to.not.equal(null);
+      expect(menu).to.exist;
     });
 
     describe('when clicked again', () => {
@@ -3016,7 +3016,7 @@ describe('PageChatPanel attachment handling', () => {
 
       it('should close the attach menu', () => {
         const menu = el.shadowRoot!.querySelector('.attach-menu');
-        expect(menu).to.equal(null);
+        expect(menu).to.not.exist;
       });
     });
   });
@@ -3038,7 +3038,7 @@ describe('PageChatPanel attachment handling', () => {
 
     it('should remove the attach-menu element from DOM', () => {
       const menu = el.shadowRoot!.querySelector('.attach-menu');
-      expect(menu).to.equal(null);
+      expect(menu).to.not.exist;
     });
   });
 
@@ -3105,12 +3105,12 @@ describe('PageChatPanel attachment handling', () => {
 
     it('should clear _attachUploadError', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
-      expect((el as any)._attachUploadError).to.equal(null);
+      expect((el as any)._attachUploadError).to.be.null;
     });
 
     it('should render an attachment chip', async () => {
       const chip = el.shadowRoot!.querySelector('.attachment-chip');
-      expect(chip).to.not.equal(null);
+      expect(chip).to.exist;
     });
   });
 
@@ -3125,7 +3125,7 @@ describe('PageChatPanel attachment handling', () => {
 
     it('should set _attachUploadError', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
-      expect((el as any)._attachUploadError).to.not.equal(null);
+      expect((el as any)._attachUploadError).to.not.be.null;
     });
 
     it('should not add any attachments', () => {
@@ -3313,7 +3313,7 @@ describe('PageChatPanel composer (issue #1349)', () => {
     });
 
     it('should NOT render the send button (absent from DOM)', () => {
-      expect(el.shadowRoot!.querySelector('.send-button')).to.equal(null);
+      expect(el.shadowRoot!.querySelector('.send-button')).to.not.exist;
     });
   });
 
@@ -3332,7 +3332,7 @@ describe('PageChatPanel composer (issue #1349)', () => {
 
     it('should render the send button', () => {
       const btn = el.shadowRoot!.querySelector('.send-button');
-      expect(btn).to.not.equal(null);
+      expect(btn).to.exist;
     });
   });
 
@@ -3350,18 +3350,18 @@ describe('PageChatPanel composer (issue #1349)', () => {
 
     it('should render the send button (attachments drive draft presence)', () => {
       const btn = el.shadowRoot!.querySelector('.send-button');
-      expect(btn).to.not.equal(null);
+      expect(btn).to.exist;
     });
 
     it('should render the attachment chips inside .composer', () => {
       const composer = el.shadowRoot!.querySelector('.composer')!;
-      expect(composer.querySelector('.attachment-chips')).to.not.equal(null);
+      expect(composer.querySelector('.attachment-chips')).to.exist;
     });
 
     it('should render chips with 20px thumbnails', () => {
       const composer = el.shadowRoot!.querySelector('.composer')!;
       const img = composer.querySelector('.attachment-chip img') as HTMLImageElement;
-      expect(img).to.not.equal(null);
+      expect(img).to.exist;
       expect(getComputedStyle(img).width).to.equal('20px');
       expect(getComputedStyle(img).height).to.equal('20px');
     });
@@ -3370,7 +3370,7 @@ describe('PageChatPanel composer (issue #1349)', () => {
   describe('when attach button renders with no boxed border (issue #1349 subtle plus styling)', () => {
     it('should have border:none on .attach-button', () => {
       const attachBtn = el.shadowRoot!.querySelector('.attach-button') as HTMLElement;
-      expect(attachBtn).to.not.equal(null);
+      expect(attachBtn).to.exist;
       expect(getComputedStyle(attachBtn).borderStyle).to.equal('none');
     });
   });
@@ -3384,7 +3384,7 @@ describe('PageChatPanel composer (issue #1349)', () => {
 
     it('should open the attach menu inside .composer', () => {
       const composer = el.shadowRoot!.querySelector('.composer')!;
-      expect(composer.querySelector('.attach-menu')).to.not.equal(null);
+      expect(composer.querySelector('.attach-menu')).to.exist;
     });
   });
 
@@ -3411,7 +3411,7 @@ describe('PageChatPanel composer (issue #1349)', () => {
     });
 
     it('should clear the send button from DOM after send', () => {
-      expect(el.shadowRoot!.querySelector('.send-button')).to.equal(null);
+      expect(el.shadowRoot!.querySelector('.send-button')).to.not.exist;
     });
   });
 
@@ -3427,7 +3427,7 @@ describe('PageChatPanel composer (issue #1349)', () => {
       const btn = el.shadowRoot!.querySelector('.send-button') as HTMLElement;
       expect(btn.getAttribute('aria-label')).to.equal('Send message');
       const icon = btn.querySelector('i');
-      expect(icon).to.not.equal(null);
+      expect(icon).to.exist;
       expect(icon!.className).to.include('fa-arrow-up');
     });
 
