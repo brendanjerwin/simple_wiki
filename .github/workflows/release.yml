@@ -8,6 +8,19 @@ on:
   pull_request:
     branches: [main]
 
+# RERUN SAFETY: this workflow must be safe to `gh run rerun --failed` at any
+# point. Invariants each job relies on:
+#   sign-extension: AMO accepts a version only once. The signed XPI is persisted
+#     as the `simple-wiki-companion.xpi` release asset right after signing; on an
+#     AMO "Conflict" the script reuses that asset only if it is a zip containing
+#     META-INF/*.rsa, and otherwise fails loudly. Pending AMO submissions are
+#     never cancelled or replaced automatically.
+#   build: asset uploads use `gh release upload --clobber`, so repeating an
+#     upload overwrites the same-named asset. Builds run even if signing failed,
+#     but then emit a warning that the extension is unsigned.
+#   deploy: runs only when every build leg succeeded (and is
+#     skipped for non-owning releases by the ownership guard, so a re-run is safe).
+
 jobs:
   sign-extension:
     name: Sign Extension
@@ -33,7 +46,15 @@ jobs:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
           AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
           SIGNED_XPI_CACHE_DIR: .signed-xpi-cache
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: devbox run -- bash scripts/sign-extension.sh
+
+      - name: Persist signed XPI as release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        # Lets a re-run recover from an AMO Conflict (see scripts/sign-extension.sh).
+        run: gh release upload "$RELEASE_TAG" signed-xpi-artifact/simple-wiki-companion.xpi --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload signed XPI artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -81,6 +102,14 @@ jobs:
           name: signed-xpi
           path: signed-xpi-artifact/
 
+      - name: Warn when shipping an unsigned extension
+        if: github.event_name == 'release' && needs.sign-extension.result != 'success'
+        run: |
+          msg="Sign Extension result was '${{ needs.sign-extension.result }}': this release is shipping an UNSIGNED companion extension."
+          echo "::warning::$msg"
+          echo "### :warning: Unsigned extension" >> "$GITHUB_STEP_SUMMARY"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build Go Binary
         env:
           SIGNED_XPI_PATH: ${{ github.workspace }}/signed-xpi-artifact/simple-wiki-companion.xpi
@@ -112,9 +141,7 @@ jobs:
     # Do not deploy from a partial matrix: with fail-fast: false, a single
     # flaky leg (e.g. nix-cache install failure) must block the deploy so
     # production never ships while other platforms' assets are missing.
-    # always() stops the implicit success() check from inheriting a
-    # sign-extension failure through build's needs; deploy only needs build.
-    if: always() && github.event_name == 'release' && needs.build.result == 'success'
+    if: github.event_name == 'release' && needs.build.result == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
