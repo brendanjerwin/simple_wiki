@@ -30,6 +30,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
+	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -975,7 +976,7 @@ func (m *Mutator) persist(page string, fm wikipage.FrontMatter, listName string,
 // Uses sync.Map.LoadOrStore so concurrent first-touches of the same page
 // share one mutex without a global lock.
 func (m *Mutator) lockPage(page string) func() {
-	v, _ := m.pageMu.LoadOrStore(page, &sync.Mutex{})
+	v, _ := m.pageMu.LoadOrStore(pagestore.CanonicalLockKey(page), &sync.Mutex{})
 	mu, ok := v.(*sync.Mutex)
 	if !ok {
 		// Belt-and-braces: every value in pageMu is set as *sync.Mutex.

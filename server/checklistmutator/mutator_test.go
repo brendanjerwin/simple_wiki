@@ -17,6 +17,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
+	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -133,6 +134,27 @@ func (s *fakeStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn 
 	s.pages[page] = deepCopyFM(nextFM)
 	s.markdown[page] = nextMD
 	return nil
+}
+
+type pausedReadStore struct {
+	*pagestore.Store
+	read    chan struct{}
+	release chan struct{}
+}
+
+func (*pausedReadStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+
+func (*pausedReadStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return id, "", nil
+}
+
+func (s *pausedReadStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	actual, fm, err := s.Store.ReadFrontMatter(id)
+	if id == "ai-assistant" {
+		close(s.read)
+		<-s.release
+	}
+	return actual, fm, err
 }
 
 // deepCopyFM is enough for our tests — TOML-shaped maps with strings,
@@ -1225,6 +1247,62 @@ var _ = Describe("Mutator", func() {
 	})
 
 	Describe("concurrent mutations on the same page", func() {
+		When("an update and an append use different identifiers for the same page", func() {
+			var (
+				list      *apiv1.Checklist
+				updateErr error
+				addErr    error
+				listErr   error
+			)
+
+			BeforeEach(func() {
+				disk := pagestore.NewStore(GinkgoT().TempDir())
+				Expect(disk.WriteFrontMatter("ai_assistant", wikipage.FrontMatter{}, wikipage.AnonymousIdentity)).To(Succeed())
+				paused := &pausedReadStore{Store: disk, read: make(chan struct{}), release: make(chan struct{})}
+				mutator = checklistmutator.New(paused, clock, ulids)
+				seed, _, err := mutator.AddItem(ctx, "ai_assistant", "list", checklistmutator.AddItemArgs{Text: "seed"}, human)
+				Expect(err).NotTo(HaveOccurred())
+
+				updateDone := make(chan error, 1)
+				go func() {
+					text := "updated"
+					_, _, err := mutator.UpdateItem(ctx, "ai-assistant", "list", seed.Uid, checklistmutator.UpdateItemArgs{Text: &text}, nil, human)
+					updateDone <- err
+				}()
+				<-paused.read
+				addDone := make(chan error, 1)
+				addStarted := make(chan struct{})
+				go func() {
+					close(addStarted)
+					_, _, err := mutator.AddItem(ctx, "ai_assistant", "list", checklistmutator.AddItemArgs{Text: "appended"}, human)
+					addDone <- err
+				}()
+				<-addStarted
+
+				select {
+				case addErr = <-addDone:
+				case <-time.After(250 * time.Millisecond):
+					close(paused.release)
+					updateErr = <-updateDone
+					addErr = <-addDone
+					list, listErr = mutator.ListItems(ctx, "ai_assistant", "list")
+					return
+				}
+				close(paused.release)
+				updateErr = <-updateDone
+				list, listErr = mutator.ListItems(ctx, "ai_assistant", "list")
+			})
+
+			It("preserves both successful mutations", func() {
+				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(addErr).NotTo(HaveOccurred())
+				Expect(listErr).NotTo(HaveOccurred())
+				Expect(list.Items).To(HaveLen(2))
+				Expect(list.Items[0].Text).To(Equal("updated"))
+				Expect(list.Items[1].Text).To(Equal("appended"))
+			})
+		})
+
 		It("should serialize without losing updates", func() {
 			_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "seed"}, human)
 
