@@ -54,10 +54,10 @@ export async function uploadChatAttachment(file: File): Promise<ChatAttachment> 
   // Extract fields from the unknown object safely, without a narrowing assertion
   const r = rawData as { [k: string]: unknown }; // eslint-disable-line @typescript-eslint/no-unsafe-type-assertion -- narrowing to indexed access is the only practical approach here
   const data = {
-    id: String(r['id'] ?? ''),
-    url: String(r['url'] ?? ''),
-    filename: String(r['filename'] ?? ''),
-    mimeType: String(r['mimeType'] ?? ''),
+    id: typeof r['id'] === 'string' ? r['id'] : '',
+    url: typeof r['url'] === 'string' ? r['url'] : '',
+    filename: typeof r['filename'] === 'string' ? r['filename'] : '',
+    mimeType: typeof r['mimeType'] === 'string' ? r['mimeType'] : '',
   };
 
   const previewUrl = URL.createObjectURL(file);

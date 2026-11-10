@@ -68,6 +68,24 @@ describe('chat-attachment-service', () => {
       });
     });
 
+    describe('when the server returns non-string metadata', () => {
+      let result: ChatAttachment;
+
+      beforeEach(async () => {
+        fetchStub.resolves(new Response(JSON.stringify({
+          id: { value: 'id' },
+          url: ['url'],
+          filename: 42,
+          mimeType: false,
+        }), { status: 201 }));
+        result = await uploadChatAttachment(new File(['data'], 'test.txt'));
+      });
+
+      it('should normalize the metadata to empty strings', () => {
+        expect([result.id, result.url, result.filename, result.mimeType]).to.deep.equal(['', '', '', '']);
+      });
+    });
+
     describe('when the server responds with an error', () => {
       let error: Error;
 

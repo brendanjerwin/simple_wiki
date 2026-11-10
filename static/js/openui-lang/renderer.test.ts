@@ -25,6 +25,58 @@ import {
 import type { WikiPageAppCountdown, PageAppActionEventDetail } from './library.js';
 import type { ToolProvider } from '@openuidev/lang-core';
 
+describe('selection controls', () => {
+ describe('when a selection is an object', () => {
+  let select: HTMLSelectElement;
+  let radios: NodeListOf<HTMLInputElement>;
+
+  beforeEach(async () => {
+   const options = ['other', '[object Object]', ''];
+   const selectElement = await fixture<HTMLElement>(renderNode({
+    type: 'element', typeName: 'Select', props: { options, value: {} },
+   }) as never);
+   const radioElement = await fixture<HTMLElement>(renderNode({
+    type: 'element', typeName: 'Radio', props: { options, selected: {} },
+   }) as never);
+   select = selectElement.querySelector('select') as HTMLSelectElement;
+   radios = radioElement.querySelectorAll('input');
+  });
+
+  it('should select the empty option', () => {
+   expect(select.value).to.equal('');
+  });
+
+  it('should check the empty radio', () => {
+   expect(Array.from(radios).filter((radio) => radio.checked).map((radio) => radio.value)).to.deep.equal(['']);
+  });
+ });
+
+ describe('when a selection is numeric', () => {
+  let select: HTMLSelectElement;
+  let radios: NodeListOf<HTMLInputElement>;
+
+  beforeEach(async () => {
+   const options = [1, 2];
+   const selectElement = await fixture<HTMLElement>(renderNode({
+    type: 'element', typeName: 'Select', props: { options, value: 2 },
+   }) as never);
+   const radioElement = await fixture<HTMLElement>(renderNode({
+    type: 'element', typeName: 'Radio', props: { options, selected: 2 },
+   }) as never);
+   select = selectElement.querySelector('select') as HTMLSelectElement;
+   radios = radioElement.querySelectorAll('input');
+  });
+
+  it('should select the matching option', () => {
+   expect(select.value).to.equal('2');
+  });
+
+  it('should check the matching radio', () => {
+   expect(Array.from(radios).filter((radio) => radio.checked).map((radio) => radio.value)).to.deep.equal(['2']);
+  });
+ });
+});
+
 describe('generateWikiPageAppRenderer', () => {
  let toolCalls: Array<[string, Record<string, unknown>]>;
  let callTool: ToolProvider['callTool'];
