@@ -550,12 +550,20 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		services = append(services, vanguard.NewService(name, grpcServer, grpcOpts...))
 	}
 
-	// Non-RPC paths fall through to Gin.
+	// Non-RPC paths fall through to Gin. Gin matches routes per HTTP method and
+	// never synthesizes HEAD from GET, so a HEAD probe of a GET-only route (the
+	// "/" redirect, for instance) would 404 even though GET is served there.
+	// RFC 9110 section 9.3.2 requires HEAD wherever GET is supported, returning
+	// the same header fields with no content, so the method is normalized to
+	// GET before routing; the HTTP server discards the body of the original
+	// HEAD response, which leaves GET and HEAD responses indistinguishable but
+	// for the content.
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ginRouter.ServeHTTP(w, r)
+		ginRouter.ServeHTTP(w, asGetRequest(r))
 	})
 
-	transcoder, err := vanguard.NewTranscoder(services,
+	transcoder, err := vanguard.NewTranscoder(
+		services,
 		vanguard.WithUnknownHandler(fallback),
 		vanguard.WithCodec(newStrictJSONCodec),
 	)
@@ -573,6 +581,20 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	mux.Handle("/", transcoder)
 
 	return mux, nil
+}
+
+// asGetRequest returns r unchanged unless it is a HEAD request, in which case
+// it returns a shallow clone whose method is GET. RFC 9110 section 9.3.2
+// defines HEAD as identical to GET except that no content is returned, so
+// running the GET handler is the exact behavior — including handlers that
+// branch on the method.
+func asGetRequest(r *http.Request) *http.Request {
+	if r.Method != http.MethodHead {
+		return r
+	}
+	getRequest := r.Clone(r.Context())
+	getRequest.Method = http.MethodGet
+	return getRequest
 }
 
 // strictJSONCodec wraps Vanguard's JSONCodec and promotes JSON unmarshal errors
