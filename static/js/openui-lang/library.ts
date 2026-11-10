@@ -519,12 +519,13 @@ function buildLibrary(): Library {
     });
    };
    const choices = Array.isArray(options) ? options.filter((o): o is string | number => typeof o === 'string' || typeof o === 'number') : [];
+   const selectedValue = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
    return html`<label class="wiki-page-app-field">
         ${typeof label === 'string' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
         <select class="wiki-page-app-select" @change=${fire}>
           ${choices.map(
     (option) =>
-     html`<option value="${option}" ?selected=${String(option) === String(value ?? '')}>${option}</option>`,
+     html`<option value="${option}" ?selected=${String(option) === selectedValue}>${option}</option>`,
    )}
         </select>
       </label>`;
@@ -1313,6 +1314,7 @@ function buildLibrary(): Library {
    'A radio group bound to a $variable choosing one of `options`. `label` is the group display label (optional); `options` the array of choices; `selected` the current choice (bind a $variable); `onSelect` the action that runs when the user picks an option — use @Set($var, $value) where $value is the chosen option. Example: `Radio("Size", ["sm", "md", "lg"], $size, @Set($size, $value))`.',
   component: (({ label, options, selected, onSelect }) => {
    const choices = Array.isArray(options) ? options.filter((o): o is string | number => typeof o === 'string' || typeof o === 'number') : [];
+   const selectedValue = typeof selected === 'string' || typeof selected === 'number' ? String(selected) : '';
    const fire = (event: Event) => {
     dispatchArtifactAction(event, {
      plan: asPlan(onSelect),
@@ -1330,7 +1332,7 @@ function buildLibrary(): Library {
          type="radio"
          name=${groupName}
          value="${option}"
-         .checked=${String(option) === String(selected ?? '')}
+         .checked=${String(option) === selectedValue}
          @change=${fire}
        />
        <span class="wiki-page-app-radio-label">${option}</span>
