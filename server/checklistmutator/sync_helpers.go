@@ -195,21 +195,15 @@ func (m *Mutator) AppendSyncEvent(ctx context.Context, page, listName, uid, op s
 	}
 	source := resolveSyncSource(ctx)
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	fm, err := m.readFrontMatter(page)
-	if err != nil {
-		return err
-	}
-	checklist := m.readChecklistForMutation(fm, listName)
-	now := m.clock.Now()
-	appendEvent(checklist, &apiv1.ChecklistEvent{
-		Src: source.String(),
-		Op:  op,
-		Uid: uid,
-	}, now)
-	return m.persist(page, fm, listName, checklist)
+	_, err := m.mutateChecklist(page, wikipage.AnonymousIdentity, listName, nil, func(checklist *apiv1.Checklist) error {
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src: source.String(),
+			Op:  op,
+			Uid: uid,
+		}, m.clock.Now())
+		return nil
+	})
+	return err
 }
 
 // decimalRadix is the multiplicative base used by parseSortHint to

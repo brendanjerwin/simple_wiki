@@ -260,8 +260,9 @@ var _ = Describe("Mutator", func() {
 				Expect(store.readCalls - readsBefore).To(Equal(1))
 			})
 
-			It("should perform exactly one WriteFrontMatter call", func() {
-				Expect(store.writeCalls - writesBefore).To(Equal(1))
+			It("should write through exactly one atomic full-page mutation", func() {
+				Expect(store.writeCalls - writesBefore).To(Equal(0))
+				Expect(store.modifyPageCalls).To(Equal(1))
 			})
 		})
 

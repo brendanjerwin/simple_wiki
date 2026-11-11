@@ -139,8 +139,9 @@ var _ = Describe("Mutator error paths", func() {
 
 		When("new_sort_order equals the current sort_order", func() {
 			var (
-				writesBefore int
-				reorderErr   error
+				writesBefore   int
+				modifiesBefore int
+				reorderErr     error
 			)
 
 			BeforeEach(func() {
@@ -149,6 +150,7 @@ var _ = Describe("Mutator error paths", func() {
 				currentOrder := list.Items[0].SortOrder
 
 				writesBefore = store.writeCalls
+				modifiesBefore = store.modifyPageCalls
 				_, reorderErr = mutator.ReorderItem(ctx, "p", "list", uid, currentOrder, nil, human)
 			})
 
@@ -156,9 +158,10 @@ var _ = Describe("Mutator error paths", func() {
 				Expect(reorderErr).NotTo(HaveOccurred())
 			})
 
-			It("should still write (persist is always called)", func() {
-				// The mutator always writes on ReorderItem even for no-op
-				Expect(store.writeCalls - writesBefore).To(Equal(1))
+			It("should still take the write path (ReorderItem always persists)", func() {
+				// The mutator always writes on ReorderItem even for no-op.
+				Expect(store.writeCalls - writesBefore).To(Equal(0))
+				Expect(store.modifyPageCalls - modifiesBefore).To(Equal(1))
 			})
 		})
 	})

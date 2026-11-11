@@ -77,38 +77,31 @@ func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
+	var resultItem *apiv1.ChecklistItem
+	checklist, err := m.mutateChecklist(page, identity, listName, nil, func(checklist *apiv1.Checklist) error {
+		idx, item := findItem(checklist, uid)
+		now := m.clock.Now()
 
-	fm, err := m.readFrontMatter(page)
+		if item != nil {
+			updatedItem, updateErr := m.upsertExistingItem(checklist, idx, item, args, ifMatch, ifNoneMatch, identity)
+			if updateErr != nil {
+				return updateErr
+			}
+			m.pruneTombstones(page, listName, checklist, now)
+			resultItem = updatedItem
+			return nil
+		}
+
+		if ifMatch != "" {
+			return status.Errorf(codes.FailedPrecondition, "If-Match set but uid %s does not exist", uid)
+		}
+		resultItem = m.upsertNewItem(page, listName, checklist, uid, args, identity, now)
+		return nil
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	idx, item := findItem(checklist, uid)
-	now := m.clock.Now()
-
-	if item != nil {
-		updatedItem, err := m.upsertExistingItem(checklist, idx, item, args, ifMatch, ifNoneMatch, identity)
-		if err != nil {
-			return nil, nil, err
-		}
-		m.pruneTombstones(page, listName, checklist, now)
-		if err := m.persist(page, fm, listName, checklist); err != nil {
-			return nil, nil, err
-		}
-		return updatedItem, checklist, nil
-	}
-
-	if ifMatch != "" {
-		return nil, nil, status.Errorf(codes.FailedPrecondition, "If-Match set but uid %s does not exist", uid)
-	}
-	newItem := m.upsertNewItem(page, listName, checklist, uid, args, identity, now)
-	if err := m.persist(page, fm, listName, checklist); err != nil {
-		return nil, nil, err
-	}
-	return newItem, checklist, nil
+	return resultItem, checklist, nil
 }
 
 // upsertExistingItem handles the update branch of UpsertFromCalDAV.
