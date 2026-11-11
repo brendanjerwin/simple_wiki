@@ -119,7 +119,7 @@ func (s *Server) CreateInventoryItem(ctx context.Context, req *apiv1.CreateInven
 	if amErr != nil {
 		return nil, amErr
 	}
-	createErr := atomicMod.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(identifier), func(current wikipage.FrontMatter, currentMD wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	createErr := atomicMod.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(identifier), func(current wikipage.FrontMatter, _ wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		if existingFm != nil || len(current) > 0 {
 			return nil, "", errItemPageAlreadyExists
 		}

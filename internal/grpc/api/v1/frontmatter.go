@@ -362,7 +362,12 @@ func (s *Server) RemoveKeyAtPath(ctx context.Context, req *apiv1.RemoveKeyAtPath
 			removeErr = err
 			return nil, err
 		}
-		updatedFm = updated.(map[string]any)
+		asMap, ok := updated.(map[string]any)
+		if !ok {
+			removeErr = status.Error(codes.Internal, "remove key at path produced a non-map frontmatter")
+			return nil, removeErr
+		}
+		updatedFm = asMap
 		return wikipage.FrontMatter(updatedFm), nil
 	})
 	if removeErr != nil {
