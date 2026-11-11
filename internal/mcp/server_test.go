@@ -46,6 +46,14 @@ func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier 
 	return err
 }
 
+// ModifyFrontMatterAndMarkdown makes the stub atomic-capable: the frontmatter
+// handlers require the atomic modifier (issue #1404), and these tests only care
+// that the tool call round-trips.
+func (noOpPageReaderMutator) ModifyFrontMatterAndMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, _, err := modifier(nil, "")
+	return err
+}
+
 // noOpPageOpener satisfies wikipage.PageOpener for tests.
 type noOpPageOpener struct{}
 
@@ -234,6 +242,14 @@ func (contentStubPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikip
 }
 
 func (contentStubPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
+
+// ModifyFrontMatterAndMarkdown makes the stub atomic-capable. The frontmatter
+// handlers require the atomic modifier (issue #1404), and these tests only care
+// that the tool call round-trips.
+func (s contentStubPageReaderMutator) ModifyFrontMatterAndMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, _, err := modifier(nil, wikipage.Markdown(s.content))
+	return err
+}
 
 func (contentStubPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier(nil, "")

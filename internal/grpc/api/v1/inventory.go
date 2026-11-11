@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -36,6 +37,11 @@ const (
 	errFmtInvalidContainerIdentifier = "invalid container identifier: %v"
 )
 
+// errItemPageAlreadyExists signals, from inside an atomic frontmatter
+// modifier, that the target page already exists. CreateInventoryItem maps it
+// to its documented Success=false response.
+var errItemPageAlreadyExists = errors.New("inventory item page already exists")
+
 // InvalidItemTypeError is returned when an item in the items array has an unexpected type.
 type InvalidItemTypeError struct {
 	ContainerID string
@@ -69,12 +75,7 @@ func (s *Server) CreateInventoryItem(ctx context.Context, req *apiv1.CreateInven
 	}
 
 	if existingFm != nil {
-		return &apiv1.CreateInventoryItemResponse{
-			Success:        false,
-			ItemIdentifier: identifier,
-			Error:          fmt.Sprintf("page already exists: %s", identifier),
-			Summary:        fmt.Sprintf("Could not create item '%s' because it already exists.", identifier),
-		}, nil
+		return buildItemAlreadyExistsResponse(identifier), nil
 	}
 
 	// Build frontmatter
@@ -109,15 +110,26 @@ func (s *Server) CreateInventoryItem(ctx context.Context, req *apiv1.CreateInven
 	inventoryData[itemsKey] = []string{}
 	fm[inventory.FrontmatterKey] = inventoryData
 
-	// Write the frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
-	}
-
-	// Build and write the markdown content
+	// Write the item in one atomic operation: the existence check above is only
+	// a fast path, and the modifier re-checks inside the page lock so a racing
+	// creator cannot be silently overwritten (issue #1404). Both sections are
+	// written together so the page is never left frontmatter-only.
 	markdown := inventory.BuildItemMarkdown()
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), tailscale.IdentityFromContext(ctx)); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	atomicMod, amErr := requirePageAtomicModifier(s.pageReaderMutator)
+	if amErr != nil {
+		return nil, amErr
+	}
+	createErr := atomicMod.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(identifier), func(current wikipage.FrontMatter, currentMD wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if existingFm != nil || len(current) > 0 {
+			return nil, "", errItemPageAlreadyExists
+		}
+		return wikipage.FrontMatter(fm), wikipage.Markdown(markdown), nil
+	}, tailscale.IdentityFromContext(ctx))
+	if errors.Is(createErr, errItemPageAlreadyExists) {
+		return buildItemAlreadyExistsResponse(identifier), nil
+	}
+	if createErr != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write frontmatter and markdown: %v", createErr)
 	}
 
 	containerSuffix := ""
@@ -130,6 +142,17 @@ func (s *Server) CreateInventoryItem(ctx context.Context, req *apiv1.CreateInven
 		ItemIdentifier: identifier,
 		Summary:        fmt.Sprintf("Created inventory item '%s'%s.", title, containerSuffix),
 	}, nil
+}
+
+// buildItemAlreadyExistsResponse reports the documented "can't do that"
+// outcome for CreateInventoryItem when the target page already exists.
+func buildItemAlreadyExistsResponse(identifier string) *apiv1.CreateInventoryItemResponse {
+	return &apiv1.CreateInventoryItemResponse{
+		Success:        false,
+		ItemIdentifier: identifier,
+		Error:          fmt.Sprintf("page already exists: %s", identifier),
+		Summary:        fmt.Sprintf("Could not create item '%s' because it already exists.", identifier),
+	}
 }
 
 // MoveInventoryItem implements the MoveInventoryItem RPC.
@@ -162,19 +185,24 @@ func (s *Server) MoveInventoryItem(ctx context.Context, req *apiv1.MoveInventory
 		return buildAlreadyInContainerResponse(identifier, previousContainer, newContainer), nil
 	}
 
-	// Update the item's inventory.container
-	updateItemContainer(itemFm, newContainer)
-
-	// Write the updated item frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(itemFm), tailscale.IdentityFromContext(ctx)); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", err)
+	var title string
+	// The container change runs inside the page lock, so a concurrent
+	// frontmatter or checklist write to this page cannot be clobbered by the
+	// map read above (issue #1404).
+	modErr := s.modifyFrontmatter(ctx, identifier, func(current wikipage.FrontMatter) (wikipage.FrontMatter, error) {
+		previousContainer = getContainerFromFrontmatter(current)
+		updateItemContainer(current, newContainer)
+		title = getItemTitle(current, identifier)
+		return current, nil
+	})
+	if modErr != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", modErr)
 	}
 
 	// Update container item lists
 	s.updateContainerItemLists(ctx, previousContainer, newContainer, identifier)
 
 	// Build and return response
-	title := getItemTitle(itemFm, identifier)
 	summary := buildMoveSummary(title, previousContainer, newContainer)
 
 	return &apiv1.MoveInventoryItemResponse{
@@ -557,37 +585,41 @@ func filterItemsExcluding(itemsRaw any, itemID string) ([]any, bool) {
 
 // removeItemFromContainerList removes an item from a container's inventory.items list.
 func (s *Server) removeItemFromContainerList(ctx context.Context, containerID, itemID string) error {
-	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
-	if err != nil {
+	// The guard read keeps the "container page is gone → nothing to do"
+	// contract: the atomic modifier would otherwise create the page.
+	if _, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID)); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return fmt.Errorf("failed to read container frontmatter: %w", err)
 	}
 
-	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
-	if !ok {
-		return nil // No inventory section, nothing to update
-	}
+	return s.modifyFrontmatter(ctx, containerID, func(current wikipage.FrontMatter) (wikipage.FrontMatter, error) {
+		inv, ok := current[inventory.FrontmatterKey].(map[string]any)
+		if !ok {
+			return current, nil // No inventory section, nothing to update
+		}
 
-	itemsRaw, ok := inv[itemsKey]
-	if !ok {
-		return nil // No items list, nothing to update
-	}
+		itemsRaw, ok := inv[itemsKey]
+		if !ok {
+			return current, nil // No items list, nothing to update
+		}
 
-	newItems, ok := filterItemsExcluding(itemsRaw, itemID)
-	if !ok {
-		return nil // Unknown type, skip
-	}
+		newItems, ok := filterItemsExcluding(itemsRaw, itemID)
+		if !ok {
+			return current, nil // Unknown type, skip
+		}
 
-	inv[itemsKey] = newItems
-	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), wikipage.FrontMatter(containerFm), tailscale.IdentityFromContext(ctx))
+		inv[itemsKey] = newItems
+		return current, nil
+	})
 }
 
 // addItemToContainerList adds an item to a container's inventory.items list if not already present.
 func (s *Server) addItemToContainerList(ctx context.Context, containerID, itemID string) error {
-	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
-	if err != nil {
+	// The guard read keeps the "container page is gone → nothing to do"
+	// contract: the atomic modifier would otherwise create the page.
+	if _, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID)); err != nil {
 		if os.IsNotExist(err) {
 			// Container doesn't exist, can't update
 			return nil
@@ -595,36 +627,37 @@ func (s *Server) addItemToContainerList(ctx context.Context, containerID, itemID
 		return fmt.Errorf("failed to read container frontmatter: %w", err)
 	}
 
-	// Ensure inventory section exists
-	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
-	if !ok {
-		inv = make(map[string]any)
-		containerFm[inventory.FrontmatterKey] = inv
-	}
-
-	// Get or initialize items list
-	var items []string
-	switch itemsRaw := inv[itemsKey].(type) {
-	case []string:
-		items = itemsRaw
-	case []any:
-		for _, item := range itemsRaw {
-			if itemStr, ok := item.(string); ok {
-				items = append(items, itemStr)
-			}
+	return s.modifyFrontmatter(ctx, containerID, func(current wikipage.FrontMatter) (wikipage.FrontMatter, error) {
+		// Ensure inventory section exists
+		inv, ok := current[inventory.FrontmatterKey].(map[string]any)
+		if !ok {
+			inv = make(map[string]any)
+			current[inventory.FrontmatterKey] = inv
 		}
-	default:
-		items = []string{}
-	}
 
-	// Check if item already exists
-	if slices.Contains(items, itemID) {
-		return nil
-	}
+		// Get or initialize items list
+		var items []string
+		switch itemsRaw := inv[itemsKey].(type) {
+		case []string:
+			items = itemsRaw
+		case []any:
+			for _, item := range itemsRaw {
+				if itemStr, ok := item.(string); ok {
+					items = append(items, itemStr)
+				}
+			}
+		default:
+			items = []string{}
+		}
 
-	// Add the item
-	items = append(items, itemID)
-	inv[itemsKey] = items
+		// Check if item already exists
+		if slices.Contains(items, itemID) {
+			return current, nil
+		}
 
-	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), wikipage.FrontMatter(containerFm), tailscale.IdentityFromContext(ctx))
+		// Add the item
+		items = append(items, itemID)
+		inv[itemsKey] = items
+		return current, nil
+	})
 }

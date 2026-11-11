@@ -185,6 +185,34 @@ func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRe
 	}, nil
 }
 
+// modifyFrontmatter runs mutate against the page's current frontmatter inside
+// the page store's per-page lock, passing the markdown through untouched.
+//
+// The lock spans the read as well as the write, so the map that is written
+// back is always the map the mutation was applied to. Reading the frontmatter,
+// mutating it in memory, and then calling WriteFrontMatter leaves a window in
+// which any other writer's change to the page is silently discarded — the
+// lost-update class behind issue #1404 (appended checklist items vanishing
+// with no tombstone).
+//
+// mutate returns the frontmatter to persist. If it returns an error the page
+// is left untouched and the error is passed through unchanged, so handlers can
+// surface their own gRPC codes.
+func (s *Server) modifyFrontmatter(ctx context.Context, page string, mutate func(wikipage.FrontMatter) (wikipage.FrontMatter, error)) error {
+	atomicMod, amErr := requirePageAtomicModifier(s.pageReaderMutator)
+	if amErr != nil {
+		return amErr
+	}
+
+	return atomicMod.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		next, err := mutate(fm)
+		if err != nil {
+			return nil, "", err
+		}
+		return next, md, nil
+	}, tailscale.IdentityFromContext(ctx))
+}
+
 // MergeFrontmatter implements the MergeFrontmatter RPC.
 func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
 	// Validate that the request doesn't contain an identifier key or any
@@ -206,27 +234,23 @@ func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatt
 		return nil, authErr
 	}
 
-	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
-	}
-
-	if existingFm == nil {
-		existingFm = make(map[string]any)
-	}
-
-	if req.Frontmatter != nil {
-		newFm := req.Frontmatter.AsMap()
-		mergeFrontmatterDeep(existingFm, newFm)
-	}
-
-	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(existingFm), tailscale.IdentityFromContext(ctx))
+	var mergedFm map[string]any
+	err = s.modifyFrontmatter(ctx, req.Page, func(current wikipage.FrontMatter) (wikipage.FrontMatter, error) {
+		mergedFm = map[string]any(current)
+		if mergedFm == nil {
+			mergedFm = make(map[string]any)
+		}
+		if req.Frontmatter != nil {
+			mergeFrontmatterDeep(mergedFm, req.Frontmatter.AsMap())
+		}
+		return wikipage.FrontMatter(mergedFm), nil
+	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
 	// Filter out the identifier key from the response
-	filteredFm := filterIdentifierKey(existingFm)
+	filteredFm := filterIdentifierKey(mergedFm)
 	mergedFmStruct, err := structpb.NewStruct(filteredFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert merged frontmatter to struct: %v", err)
@@ -257,17 +281,15 @@ func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFront
 		return nil, authErr
 	}
 
-	// Carry every reserved subtree forward — a caller unaware of those
-	// namespaces must not be able to destroy them via Replace.
-	if fm != nil {
-		_, existingFm, readErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-		if readErr != nil && !os.IsNotExist(readErr) {
-			return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, readErr)
+	err = s.modifyFrontmatter(ctx, req.Page, func(current wikipage.FrontMatter) (wikipage.FrontMatter, error) {
+		if fm == nil {
+			return nil, nil
 		}
-		preserveReservedSubtrees(existingFm, fm)
-	}
-
-	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx))
+		// Carry every reserved subtree forward — a caller unaware of those
+		// namespaces must not be able to destroy them via Replace.
+		preserveReservedSubtrees(current, fm)
+		return wikipage.FrontMatter(fm), nil
+	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -314,31 +336,44 @@ func (s *Server) RemoveKeyAtPath(ctx context.Context, req *apiv1.RemoveKeyAtPath
 		return nil, authErr
 	}
 
-	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
+	// The read is a precondition only: RemoveKeyAtPath fails with NotFound on a
+	// missing page, and the atomic modifier would otherwise create one. The
+	// mutation itself runs inside the page lock.
+	if _, _, readErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page)); readErr != nil {
+		if os.IsNotExist(readErr) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, readErr)
 	}
 
-	if fm == nil {
-		// Attempting to remove from a non-existent frontmatter. The path will not be found.
-		fm = make(map[string]any)
-	}
+	var (
+		updatedFm map[string]any
+		removeErr error
+	)
+	err := s.modifyFrontmatter(ctx, req.Page, func(current wikipage.FrontMatter) (wikipage.FrontMatter, error) {
+		base := map[string]any(current)
+		if base == nil {
+			// Attempting to remove from a non-existent frontmatter. The path will not be found.
+			base = make(map[string]any)
+		}
 
-	updatedFm, err := removeAtPath(map[string]any(fm), req.GetKeyPath())
-	if err != nil {
-		return nil, err
+		updated, err := removeAtPath(base, req.GetKeyPath())
+		if err != nil {
+			removeErr = err
+			return nil, err
+		}
+		updatedFm = updated.(map[string]any)
+		return wikipage.FrontMatter(updatedFm), nil
+	})
+	if removeErr != nil {
+		return nil, removeErr
 	}
-
-	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(updatedFm.(map[string]any)), tailscale.IdentityFromContext(ctx))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
 	// Filter out the identifier key from the response
-	filteredFm := filterIdentifierKey(updatedFm.(map[string]any))
+	filteredFm := filterIdentifierKey(updatedFm)
 	updatedFmStruct, err := structpb.NewStruct(filteredFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert updated frontmatter to struct: %v", err)
