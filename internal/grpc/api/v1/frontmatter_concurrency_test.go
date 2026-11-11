@@ -101,24 +101,37 @@ var _ = Describe("frontmatter writes racing a checklist append", func() {
 				})
 			}()
 
-			// Every pause is the frontmatter write holding a map it read before
-			// the append below; appending here puts the item inside its
-			// read→write window.
+			// Every pause is a frontmatter read performed by the merge path; each
+			// one is a chance to land an append inside a read→write window that
+			// the old unlocked form left open. Append on every pause so the
+			// interleaving happens on the code that HAS the window.
+			appendOne := func() {
+				store.armed.Store(false)
+				text := fmt.Sprintf("appended-%d", len(appendedTexts))
+				_, _, appendErr := mutator.AddItem(ctx, string(page), "todos", checklistmutator.AddItemArgs{Text: text}, human)
+				Expect(appendErr).NotTo(HaveOccurred())
+				appendedTexts = append(appendedTexts, text)
+				store.armed.Store(true)
+			}
 			for running := true; running; {
 				select {
 				case <-store.paused:
-					text := fmt.Sprintf("appended-%d", len(appendedTexts))
-					store.armed.Store(false)
-					_, _, appendErr := mutator.AddItem(ctx, string(page), "todos", checklistmutator.AddItemArgs{Text: text}, human)
-					Expect(appendErr).NotTo(HaveOccurred())
-					appendedTexts = append(appendedTexts, text)
-					store.armed.Store(true)
+					appendOne()
 					store.release <- struct{}{}
 				case <-done:
 					running = false
 				}
 			}
 			store.armed.Store(false)
+
+			// The atomic form leaves no window to interleave into, so no pause
+			// ever fires. Append once on the far side of the merge anyway: the
+			// assertion below must not pass by iterating over an empty set, and
+			// "an append that lands after a completed merge still survives" is
+			// part of the contract this test guards.
+			if len(appendedTexts) == 0 {
+				appendOne()
+			}
 
 			list, listErr = mutator.ListItems(ctx, string(page), "todos")
 		})
