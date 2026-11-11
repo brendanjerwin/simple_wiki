@@ -341,7 +341,10 @@ func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage
 	if m.MarkdownReadErr != nil {
 		return m.MarkdownReadErr
 	}
-	if m.Err != nil {
+	// A missing page is not a failure for the atomic form: pagestore.Store and
+	// Site both create the page from empty content, so the modifier sees an
+	// empty frontmatter and markdown. Only non-NotExist read errors abort.
+	if m.Err != nil && !os.IsNotExist(m.Err) {
 		return m.Err
 	}
 
