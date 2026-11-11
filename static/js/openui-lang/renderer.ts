@@ -177,12 +177,15 @@ export function generateWikiPageAppRenderer(
 
   hydrateQueriesAndMutations(result, { queryManager, evaluationContext });
 
-  lastErrors = result.meta.errors.map((err) => ({
-   code: err.code,
-   message: err.message,
-   component: err.component,
-   statementId: err.statementId ?? '',
-  }));
+  lastErrors = [
+   ...result.meta.errors.map((err) => ({
+    code: err.code,
+    message: err.message,
+    component: err.component,
+    statementId: err.statementId ?? '',
+   })),
+   ...collectEmptyButtonLabelDiagnostics(result.root),
+  ];
 
   return evaluateAndRender();
  };
@@ -216,6 +219,51 @@ export function generateWikiPageAppRenderer(
    actionContext.rerun(statementIds);
   },
  };
+}
+
+/**
+ * Walk an ElementNode tree (depth-first), visiting every element.
+ * Descends into array-valued props and nested element props.
+ */
+function walkElementTree(node: unknown, visit: (el: ElementNode) => void): void {
+ if (node == null) return;
+ if (Array.isArray(node)) {
+  for (const child of node) {
+   walkElementTree(child, visit);
+  }
+  return;
+ }
+ if (!isElementNode(node)) return;
+ visit(node);
+ for (const value of Object.values(node.props)) {
+  walkElementTree(value, visit);
+ }
+}
+
+/**
+ * Post-parse validation: collect diagnostics for Button elements whose
+ * `label` prop is a literal empty or whitespace-only string.
+ *
+ * Dynamic labels ($variable, expressions) are not flagged — they may
+ * evaluate to non-empty text at runtime.
+ */
+function collectEmptyButtonLabelDiagnostics(root: ElementNode | null): RenderedPageApp['errors'] {
+ const diagnostics: RenderedPageApp['errors'] = [];
+
+ walkElementTree(root, (el) => {
+  if (el.typeName !== 'Button') return;
+  const label = el.props['label'];
+  if (typeof label === 'string' && label.trim() === '') {
+   diagnostics.push({
+    code: 'empty-button-label',
+    message: 'Button has an empty label — it renders as an unlabeled rectangle. Give it visible text or remove it.',
+    component: 'Button',
+    statementId: el.statementId ?? '',
+   });
+  }
+ });
+
+ return diagnostics;
 }
 
 function hydrateQueriesAndMutations(
