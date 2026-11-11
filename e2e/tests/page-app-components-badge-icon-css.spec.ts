@@ -96,7 +96,7 @@ test.describe.serial('Badge component', () => {
      accent: badge('3 done')?.getAttribute('data-variant') ?? null,
     };
    });
-   expect(variants.default).toBe(null);
+   expect(variants.default).toBeNull();
    for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'accent']) {
     expect(variants[variant], variant).toBe(variant);
    }
@@ -214,7 +214,7 @@ test.describe.serial('Icon component', () => {
    ];
    // 15 top-level icons in program order, plus `check` again inside the
    // composed Stack row.
-   expect(icons.length).toBe(expectedIcons.length + 1);
+   expect(icons).toHaveLength(expectedIcons.length + 1);
    expect(icons.slice(0, expectedIcons.length).map((i) => i.icon)).toEqual(expectedIcons);
    expect(icons[expectedIcons.length].icon).toBe('check');
    for (const icon of icons) {

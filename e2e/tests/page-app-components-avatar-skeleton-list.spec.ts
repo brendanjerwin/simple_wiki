@@ -73,7 +73,7 @@ test.describe.serial('Avatar component', () => {
    const imgAvatar = host.locator('.wiki-page-app-avatar-fallback', { hasText: 'BJ' })
     .locator('xpath=..');
    await expect(imgAvatar).toBeVisible();
-   expect(await imgAvatar.getAttribute('data-broken')).toBe(null);
+   await expect(imgAvatar).not.toHaveAttribute('data-broken');
    const src = await imgAvatar.locator('img.wiki-page-app-avatar-img').getAttribute('src');
    expect(src).toContain('/uploads/');
   });
@@ -90,7 +90,7 @@ test.describe.serial('Avatar component', () => {
    const fallbackAvatar = host.locator('.wiki-page-app-avatar-fallback', { hasText: 'TC' })
     .locator('xpath=..');
    await expect(fallbackAvatar.locator('img')).toHaveCount(0);
-   expect(await fallbackAvatar.getAttribute('data-broken')).toBe(null);
+   await expect(fallbackAvatar).not.toHaveAttribute('data-broken');
   });
 
   test('renders a person glyph when neither src nor initials is present', async ({ page }) => {
