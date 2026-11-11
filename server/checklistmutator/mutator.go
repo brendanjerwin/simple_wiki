@@ -422,6 +422,32 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 	return m.updateItemImpl(page, listName, uid, args, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
 }
 
+// itemUpdateEvent describes only the fields that actually changed, so engine
+// readers see deltas (Text/Tags/Due/…) rather than the "bulk_update" op alone.
+func itemUpdateEvent(item *apiv1.ChecklistItem, args UpdateItemArgs, source Source) *apiv1.ChecklistEvent {
+	ev := &apiv1.ChecklistEvent{
+		Src: source.String(),
+		Op:  "bulk_update",
+		Uid: item.Uid,
+	}
+	if args.Text != nil {
+		textCopy := *args.Text
+		ev.Text = &textCopy
+	}
+	if args.TagsSet {
+		ev.Tags = append([]string(nil), item.Tags...)
+		ev.TagsSet = true
+	}
+	if args.DescriptionSet && item.Description != nil {
+		descCopy := *item.Description
+		ev.Description = &descCopy
+	}
+	if args.DueSet {
+		ev.Due = item.Due
+	}
+	return ev
+}
+
 // updateItemImpl is the source-aware internal entry point.
 func (m *Mutator) updateItemImpl(page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
@@ -443,30 +469,7 @@ func (m *Mutator) updateItemImpl(page, listName, uid string, args UpdateItemArgs
 		if changed {
 			item.UpdatedAt = timestamppb.New(now)
 			bumpSyncToken(checklist, now)
-			// Emit event reflecting only the fields that actually changed.
-			// "bulk_update" op covers any combination of field changes;
-			// engine readers consult deltas (Text/Tags/Due/…), not the op.
-			ev := &apiv1.ChecklistEvent{
-				Src: source.String(),
-				Op:  "bulk_update",
-				Uid: item.Uid,
-			}
-			if args.Text != nil {
-				textCopy := *args.Text
-				ev.Text = &textCopy
-			}
-			if args.TagsSet {
-				ev.Tags = append([]string(nil), item.Tags...)
-				ev.TagsSet = true
-			}
-			if args.DescriptionSet && item.Description != nil {
-				descCopy := *item.Description
-				ev.Description = &descCopy
-			}
-			if args.DueSet {
-				ev.Due = item.Due
-			}
-			appendEvent(checklist, ev, now)
+			appendEvent(checklist, itemUpdateEvent(item, args, source), now)
 		}
 		m.pruneTombstones(page, listName, checklist, now)
 		checklist.Items[idx] = item
