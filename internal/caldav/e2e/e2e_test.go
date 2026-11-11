@@ -79,7 +79,22 @@ func (*stubStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, 
 
 func (*stubStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*stubStore) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (s *stubStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current := s.pages[string(id)]
+	if current == nil {
+		current = wikipage.FrontMatter{}
+	}
+	nextFM, _, err := fn(deepCopyFM(current), "")
+	if err != nil {
+		return err
+	}
+	s.pages[string(id)] = deepCopyFM(nextFM)
+	return nil
+}
+
+func (*stubStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

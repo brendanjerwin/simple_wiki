@@ -262,6 +262,9 @@ var (
 	// ErrListAlreadyExists is returned when a rename would overwrite an
 	// existing checklist on the page.
 	ErrListAlreadyExists = errors.New("checklist already exists")
+	// errNoChange lets an atomic-modifier callback abandon the write when the
+	// requested mutation turned out to be a no-op.
+	errNoChange = errors.New("checklist unchanged")
 )
 
 type frontMatterAndMarkdownModifier interface {
@@ -301,49 +304,51 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
+	var (
+		item      *apiv1.ChecklistItem
+		checklist *apiv1.Checklist
+	)
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if hasOpenItemWithText(checklist, args.Text) {
+			return fmt.Errorf("%w: %q", ErrDuplicateOpenItem, args.Text)
+		}
+
+		now := m.clock.Now()
+		uid := m.ulids.NewULID()
+		sortOrder := nextSortOrder(checklist.Items)
+		if args.SortOrder != nil {
+			sortOrder = *args.SortOrder
+		}
+
+		item = &apiv1.ChecklistItem{
+			Uid:          uid,
+			Text:         args.Text,
+			Tags:         append([]string(nil), args.Tags...),
+			SortOrder:    sortOrder,
+			Description:  args.Description,
+			AlarmPayload: args.AlarmPayload,
+			CreatedAt:    timestamppb.New(now),
+			UpdatedAt:    timestamppb.New(now),
+			Automated:    identity.IsAgent(),
+		}
+		if args.Due != nil {
+			item.Due = timestamppb.New(*args.Due)
+		}
+
+		checklist.Items = append(checklist.Items, item)
+		sortItems(checklist.Items)
+		bumpSyncToken(checklist, now)
+		m.pruneTombstones(page, listName, checklist, now)
+
+		// Emit event AFTER mutation, BEFORE the write, while we still
+		// hold the lock. Per ADR-0015: seq monotonicity is the engine's
+		// causal authority and must not race.
+		appendEvent(checklist, addEventForItem(item, source), now)
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
 	if err != nil {
-		return nil, nil, err
-	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	if hasOpenItemWithText(checklist, args.Text) {
-		return nil, nil, fmt.Errorf("%w: %q", ErrDuplicateOpenItem, args.Text)
-	}
-
-	now := m.clock.Now()
-	uid := m.ulids.NewULID()
-	sortOrder := nextSortOrder(checklist.Items)
-	if args.SortOrder != nil {
-		sortOrder = *args.SortOrder
-	}
-
-	item := &apiv1.ChecklistItem{
-		Uid:          uid,
-		Text:         args.Text,
-		Tags:         append([]string(nil), args.Tags...),
-		SortOrder:    sortOrder,
-		Description:  args.Description,
-		AlarmPayload: args.AlarmPayload,
-		CreatedAt:    timestamppb.New(now),
-		UpdatedAt:    timestamppb.New(now),
-		Automated:    identity.IsAgent(),
-	}
-	if args.Due != nil {
-		item.Due = timestamppb.New(*args.Due)
-	}
-
-	checklist.Items = append(checklist.Items, item)
-	sortItems(checklist.Items)
-	bumpSyncToken(checklist, now)
-	m.pruneTombstones(page, listName, checklist, now)
-
-	// Emit event AFTER mutation, BEFORE persist, while we still hold
-	// the lock. Per ADR-0015: seq monotonicity is the engine's causal
-	// authority and must not race.
-	appendEvent(checklist, addEventForItem(item, source), now)
-
-	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
 	m.notify(page, listName, identity)
@@ -438,56 +443,59 @@ func (m *Mutator) updateItemImpl(page, listName, uid string, args UpdateItemArgs
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
+	var (
+		item      *apiv1.ChecklistItem
+		checklist *apiv1.Checklist
+	)
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+			return err
+		}
+
+		idx, found := findItem(checklist, uid)
+		if found == nil {
+			return ErrItemNotFound
+		}
+		item = found
+
+		changed := applyUserMutableFields(item, args)
+
+		now := m.clock.Now()
+		if changed {
+			item.UpdatedAt = timestamppb.New(now)
+			bumpSyncToken(checklist, now)
+			// Emit event reflecting only the fields that actually changed.
+			// "bulk_update" op covers any combination of field changes;
+			// engine readers consult deltas (Text/Tags/Due/…), not the op.
+			ev := &apiv1.ChecklistEvent{
+				Src: source.String(),
+				Op:  "bulk_update",
+				Uid: item.Uid,
+			}
+			if args.Text != nil {
+				textCopy := *args.Text
+				ev.Text = &textCopy
+			}
+			if args.TagsSet {
+				ev.Tags = append([]string(nil), item.Tags...)
+				ev.TagsSet = true
+			}
+			if args.DescriptionSet && item.Description != nil {
+				descCopy := *item.Description
+				ev.Description = &descCopy
+			}
+			if args.DueSet {
+				ev.Due = item.Due
+			}
+			appendEvent(checklist, ev, now)
+		}
+		m.pruneTombstones(page, listName, checklist, now)
+		checklist.Items[idx] = item
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
 	if err != nil {
-		return nil, nil, err
-	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
-		return nil, nil, err
-	}
-
-	idx, item := findItem(checklist, uid)
-	if item == nil {
-		return nil, nil, ErrItemNotFound
-	}
-
-	changed := applyUserMutableFields(item, args)
-
-	now := m.clock.Now()
-	if changed {
-		item.UpdatedAt = timestamppb.New(now)
-		bumpSyncToken(checklist, now)
-		// Emit event reflecting only the fields that actually changed.
-		// "bulk_update" op covers any combination of field changes;
-		// engine readers consult deltas (Text/Tags/Due/…), not the op.
-		ev := &apiv1.ChecklistEvent{
-			Src: source.String(),
-			Op:  "bulk_update",
-			Uid: item.Uid,
-		}
-		if args.Text != nil {
-			textCopy := *args.Text
-			ev.Text = &textCopy
-		}
-		if args.TagsSet {
-			ev.Tags = append([]string(nil), item.Tags...)
-			ev.TagsSet = true
-		}
-		if args.DescriptionSet && item.Description != nil {
-			descCopy := *item.Description
-			ev.Description = &descCopy
-		}
-		if args.DueSet {
-			ev.Due = item.Due
-		}
-		appendEvent(checklist, ev, now)
-	}
-	m.pruneTombstones(page, listName, checklist, now)
-	checklist.Items[idx] = item
-
-	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
 	m.notify(page, listName, identity)
@@ -510,45 +518,48 @@ func (m *Mutator) toggleItemImpl(_ context.Context, page, listName, uid string, 
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
+	var (
+		item      *apiv1.ChecklistItem
+		checklist *apiv1.Checklist
+	)
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+			return err
+		}
+
+		idx, found := findItem(checklist, uid)
+		if found == nil {
+			return ErrItemNotFound
+		}
+		item = found
+
+		now := m.clock.Now()
+		item.Checked = !item.Checked
+		if item.Checked {
+			item.CompletedAt = timestamppb.New(now)
+			name := identity.Name()
+			item.CompletedBy = &name
+		} else {
+			item.CompletedAt = nil
+			item.CompletedBy = nil
+		}
+		item.UpdatedAt = timestamppb.New(now)
+		item.Automated = identity.IsAgent()
+		bumpSyncToken(checklist, now)
+		checkedCopy := item.Checked
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src:     source.String(),
+			Op:      "toggle",
+			Uid:     item.Uid,
+			Checked: &checkedCopy,
+		}, now)
+		m.pruneTombstones(page, listName, checklist, now)
+		checklist.Items[idx] = item
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
 	if err != nil {
-		return nil, nil, err
-	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
-		return nil, nil, err
-	}
-
-	idx, item := findItem(checklist, uid)
-	if item == nil {
-		return nil, nil, ErrItemNotFound
-	}
-
-	now := m.clock.Now()
-	item.Checked = !item.Checked
-	if item.Checked {
-		item.CompletedAt = timestamppb.New(now)
-		name := identity.Name()
-		item.CompletedBy = &name
-	} else {
-		item.CompletedAt = nil
-		item.CompletedBy = nil
-	}
-	item.UpdatedAt = timestamppb.New(now)
-	item.Automated = identity.IsAgent()
-	bumpSyncToken(checklist, now)
-	checkedCopy := item.Checked
-	appendEvent(checklist, &apiv1.ChecklistEvent{
-		Src:     source.String(),
-		Op:      "toggle",
-		Uid:     item.Uid,
-		Checked: &checkedCopy,
-	}, now)
-	m.pruneTombstones(page, listName, checklist, now)
-	checklist.Items[idx] = item
-
-	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
 	m.notify(page, listName, identity)
@@ -573,31 +584,30 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
+	var checklist *apiv1.Checklist
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+			return err
+		}
+
+		idx, item := findItem(checklist, uid)
+		if item == nil {
+			return ErrItemNotFound
+		}
+
+		now := m.clock.Now()
+		if deadlineTag, ok := futureDeadlineTag(item.Tags, now); ok {
+			return status.Errorf(codes.FailedPrecondition, "Item has a future deadline tag (%s). Cannot delete before that date.", deadlineTag)
+		}
+		checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
+		bumpSyncToken(checklist, now)
+		recordDeletedChecklistItem(checklist, uid, now, source)
+		m.pruneTombstones(page, listName, checklist, now)
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
-		return nil, err
-	}
-
-	idx, item := findItem(checklist, uid)
-	if item == nil {
-		return nil, ErrItemNotFound
-	}
-
-	now := m.clock.Now()
-	if deadlineTag, ok := futureDeadlineTag(item.Tags, now); ok {
-		return nil, status.Errorf(codes.FailedPrecondition, "Item has a future deadline tag (%s). Cannot delete before that date.", deadlineTag)
-	}
-	checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
-	bumpSyncToken(checklist, now)
-	recordDeletedChecklistItem(checklist, uid, now, source)
-	m.pruneTombstones(page, listName, checklist, now)
-
-	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
 	}
 	m.notify(page, listName, identity)
@@ -615,38 +625,44 @@ func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, sco
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
+	var (
+		checklist *apiv1.Checklist
+		removed   int
+	)
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+			return err
+		}
+
+		removedItems := deduplicateChecklistItems(checklist, scope)
+		if len(removedItems) == 0 {
+			return errNoChange
+		}
+
+		now := m.clock.Now()
+		bumpSyncToken(checklist, now)
+		source := UserSource(identity.LoginName())
+		for _, item := range removedItems {
+			recordDeletedChecklistItem(checklist, item.GetUid(), now, source)
+		}
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src: source.String(),
+			Op:  "bulk_dedupe",
+		}, now)
+		m.pruneTombstones(page, listName, checklist, now)
+		encodeChecklist(fm, listName, checklist)
+		removed = len(removedItems)
+		return nil
+	})
 	if err != nil {
-		return 0, nil, err
-	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
-		return 0, nil, err
-	}
-
-	removedItems := deduplicateChecklistItems(checklist, scope)
-	if len(removedItems) == 0 {
-		return 0, checklist, nil
-	}
-
-	now := m.clock.Now()
-	bumpSyncToken(checklist, now)
-	source := UserSource(identity.LoginName())
-	for _, item := range removedItems {
-		recordDeletedChecklistItem(checklist, item.GetUid(), now, source)
-	}
-	appendEvent(checklist, &apiv1.ChecklistEvent{
-		Src: source.String(),
-		Op:  "bulk_dedupe",
-	}, now)
-	m.pruneTombstones(page, listName, checklist, now)
-
-	if err := m.persist(page, fm, listName, checklist); err != nil {
+		if errors.Is(err, errNoChange) {
+			return 0, checklist, nil
+		}
 		return 0, nil, err
 	}
 	m.notify(page, listName, identity)
-	return len(removedItems), checklist, nil
+	return removed, checklist, nil
 }
 
 func deduplicateChecklistItems(checklist *apiv1.Checklist, scope DeduplicateScope) []*apiv1.ChecklistItem {
@@ -696,40 +712,39 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
+	var checklist *apiv1.Checklist
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+			return err
+		}
+
+		idx, item := findItem(checklist, uid)
+		if item == nil {
+			return ErrItemNotFound
+		}
+
+		now := m.clock.Now()
+		if item.SortOrder != newSortOrder {
+			item.SortOrder = newSortOrder
+			item.UpdatedAt = timestamppb.New(now)
+			// Resolve any collision by re-densifying adjacent items only.
+			densifyAroundSortOrder(checklist.Items, idx)
+			sortItems(checklist.Items)
+			bumpSyncToken(checklist, now)
+			sortOrderCopy := item.SortOrder
+			appendEvent(checklist, &apiv1.ChecklistEvent{
+				Src:       UserSource(identity.LoginName()).String(),
+				Op:        "set_sort_order",
+				Uid:       item.Uid,
+				SortOrder: &sortOrderCopy,
+			}, now)
+		}
+		m.pruneTombstones(page, listName, checklist, now)
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	checklist := m.readChecklistForMutation(fm, listName)
-	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
-		return nil, err
-	}
-
-	idx, item := findItem(checklist, uid)
-	if item == nil {
-		return nil, ErrItemNotFound
-	}
-
-	now := m.clock.Now()
-	if item.SortOrder != newSortOrder {
-		item.SortOrder = newSortOrder
-		item.UpdatedAt = timestamppb.New(now)
-		// Resolve any collision by re-densifying adjacent items only.
-		densifyAroundSortOrder(checklist.Items, idx)
-		sortItems(checklist.Items)
-		bumpSyncToken(checklist, now)
-		sortOrderCopy := item.SortOrder
-		appendEvent(checklist, &apiv1.ChecklistEvent{
-			Src:       UserSource(identity.LoginName()).String(),
-			Op:        "set_sort_order",
-			Uid:       item.Uid,
-			SortOrder: &sortOrderCopy,
-		}, now)
-	}
-	m.pruneTombstones(page, listName, checklist, now)
-
-	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
 	}
 	m.notify(page, listName, identity)
@@ -962,14 +977,33 @@ func (m *Mutator) readFrontMatter(page string) (wikipage.FrontMatter, error) {
 	return fm, nil
 }
 
-// persist encodes checklist back into fm and writes the result.
-func (m *Mutator) persist(page string, fm wikipage.FrontMatter, listName string, checklist *apiv1.Checklist) error {
-	encodeChecklist(fm, listName, checklist)
-	id := wikipage.PageIdentifier(page)
-	if err := m.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
-		return fmt.Errorf("write frontmatter: %w", err)
+// modifyFrontMatter runs mutate against the page's current frontmatter inside a
+// single store-level read-modify-write, so a concurrent writer that changes an
+// unrelated key on the same page cannot be silently reverted by a stale
+// snapshot. The store's atomic modifier creates missing pages, so existence is
+// checked first: that preserves both the ErrPageNotFound contract and the
+// "read frontmatter: …" error wrapping callers depend on.
+func (m *Mutator) modifyFrontMatter(page string, identity wikipage.Identity, mutate func(fm wikipage.FrontMatter) error) error {
+	if _, err := m.readFrontMatter(page); err != nil {
+		return err
 	}
-	return nil
+	modifier, ok := m.pages.(frontMatterAndMarkdownModifier)
+	if !ok {
+		return status.Error(codes.FailedPrecondition, "page store does not support atomic frontmatter and markdown modification")
+	}
+	return modifier.ModifyFrontMatterAndMarkdown(
+		wikipage.PageIdentifier(page),
+		func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+			if fm == nil {
+				fm = make(wikipage.FrontMatter)
+			}
+			if err := mutate(fm); err != nil {
+				return nil, "", err
+			}
+			return fm, md, nil
+		},
+		identity,
+	)
 }
 
 // lockPage acquires the per-page mutex and returns a release function.

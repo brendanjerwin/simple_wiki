@@ -198,18 +198,17 @@ func (m *Mutator) AppendSyncEvent(ctx context.Context, page, listName, uid, op s
 	unlock := m.lockPage(page)
 	defer unlock()
 
-	fm, err := m.readFrontMatter(page)
-	if err != nil {
-		return err
-	}
-	checklist := m.readChecklistForMutation(fm, listName)
-	now := m.clock.Now()
-	appendEvent(checklist, &apiv1.ChecklistEvent{
-		Src: source.String(),
-		Op:  op,
-		Uid: uid,
-	}, now)
-	return m.persist(page, fm, listName, checklist)
+	return m.modifyFrontMatter(page, wikipage.AnonymousIdentity, func(fm wikipage.FrontMatter) error {
+		checklist := m.readChecklistForMutation(fm, listName)
+		now := m.clock.Now()
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src: source.String(),
+			Op:  op,
+			Uid: uid,
+		}, now)
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
 }
 
 // decimalRadix is the multiplicative base used by parseSortHint to
