@@ -77,15 +77,8 @@ func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var (
-		resultItem *apiv1.ChecklistItem
-		checklist  *apiv1.Checklist
-	)
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
+	var resultItem *apiv1.ChecklistItem
+	checklist, err := m.mutateChecklist(page, identity, listName, nil, func(checklist *apiv1.Checklist) error {
 		idx, item := findItem(checklist, uid)
 		now := m.clock.Now()
 
@@ -95,7 +88,6 @@ func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 				return updateErr
 			}
 			m.pruneTombstones(page, listName, checklist, now)
-			encodeChecklist(fm, listName, checklist)
 			resultItem = updatedItem
 			return nil
 		}
@@ -104,7 +96,6 @@ func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 			return status.Errorf(codes.FailedPrecondition, "If-Match set but uid %s does not exist", uid)
 		}
 		resultItem = m.upsertNewItem(page, listName, checklist, uid, args, identity, now)
-		encodeChecklist(fm, listName, checklist)
 		return nil
 	})
 	if err != nil {

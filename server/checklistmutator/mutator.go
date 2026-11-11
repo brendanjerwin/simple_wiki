@@ -301,36 +301,26 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 		return nil, nil, status.Error(codes.InvalidArgument, "text is required")
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var (
-		item      *apiv1.ChecklistItem
-		checklist *apiv1.Checklist
-	)
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
+	var item *apiv1.ChecklistItem
+	checklist, err := m.mutateChecklist(page, identity, listName, nil, func(checklist *apiv1.Checklist) error {
 		if hasOpenItemWithText(checklist, args.Text) {
 			return fmt.Errorf("%w: %q", ErrDuplicateOpenItem, args.Text)
 		}
 
 		now := m.clock.Now()
-		uid := m.ulids.NewULID()
-		sortOrder := nextSortOrder(checklist.Items)
-		if args.SortOrder != nil {
-			sortOrder = *args.SortOrder
-		}
-
 		item = &apiv1.ChecklistItem{
-			Uid:          uid,
+			Uid:          m.ulids.NewULID(),
 			Text:         args.Text,
 			Tags:         append([]string(nil), args.Tags...),
-			SortOrder:    sortOrder,
+			SortOrder:    nextSortOrder(checklist.Items),
 			Description:  args.Description,
 			AlarmPayload: args.AlarmPayload,
 			CreatedAt:    timestamppb.New(now),
 			UpdatedAt:    timestamppb.New(now),
 			Automated:    identity.IsAgent(),
+		}
+		if args.SortOrder != nil {
+			item.SortOrder = *args.SortOrder
 		}
 		if args.Due != nil {
 			item.Due = timestamppb.New(*args.Due)
@@ -341,11 +331,10 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 		bumpSyncToken(checklist, now)
 		m.pruneTombstones(page, listName, checklist, now)
 
-		// Emit event AFTER mutation, BEFORE the write, while we still
-		// hold the lock. Per ADR-0015: seq monotonicity is the engine's
-		// causal authority and must not race.
+		// Emit event AFTER mutation, BEFORE the write, while we still hold
+		// the lock. Per ADR-0015: seq monotonicity is the engine's causal
+		// authority and must not race.
 		appendEvent(checklist, addEventForItem(item, source), now)
-		encodeChecklist(fm, listName, checklist)
 		return nil
 	})
 	if err != nil {
@@ -440,22 +429,11 @@ func (m *Mutator) updateItemImpl(page, listName, uid string, args UpdateItemArgs
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var (
-		item      *apiv1.ChecklistItem
-		checklist *apiv1.Checklist
-	)
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
-		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+	var item *apiv1.ChecklistItem
+	checklist, err := m.mutateChecklist(page, identity, listName, expectedUpdatedAt, func(checklist *apiv1.Checklist) error {
+		idx, found, err := requireItem(checklist, uid)
+		if err != nil {
 			return err
-		}
-
-		idx, found := findItem(checklist, uid)
-		if found == nil {
-			return ErrItemNotFound
 		}
 		item = found
 
@@ -492,7 +470,6 @@ func (m *Mutator) updateItemImpl(page, listName, uid string, args UpdateItemArgs
 		}
 		m.pruneTombstones(page, listName, checklist, now)
 		checklist.Items[idx] = item
-		encodeChecklist(fm, listName, checklist)
 		return nil
 	})
 	if err != nil {
@@ -515,22 +492,11 @@ func (m *Mutator) toggleItemImpl(_ context.Context, page, listName, uid string, 
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var (
-		item      *apiv1.ChecklistItem
-		checklist *apiv1.Checklist
-	)
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
-		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+	var item *apiv1.ChecklistItem
+	checklist, err := m.mutateChecklist(page, identity, listName, expectedUpdatedAt, func(checklist *apiv1.Checklist) error {
+		idx, found, err := requireItem(checklist, uid)
+		if err != nil {
 			return err
-		}
-
-		idx, found := findItem(checklist, uid)
-		if found == nil {
-			return ErrItemNotFound
 		}
 		item = found
 
@@ -556,7 +522,6 @@ func (m *Mutator) toggleItemImpl(_ context.Context, page, listName, uid string, 
 		}, now)
 		m.pruneTombstones(page, listName, checklist, now)
 		checklist.Items[idx] = item
-		encodeChecklist(fm, listName, checklist)
 		return nil
 	})
 	if err != nil {
@@ -581,19 +546,10 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var checklist *apiv1.Checklist
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
-		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+	checklist, err := m.mutateChecklist(page, identity, listName, expectedUpdatedAt, func(checklist *apiv1.Checklist) error {
+		idx, item, err := requireItem(checklist, uid)
+		if err != nil {
 			return err
-		}
-
-		idx, item := findItem(checklist, uid)
-		if item == nil {
-			return ErrItemNotFound
 		}
 
 		now := m.clock.Now()
@@ -604,7 +560,6 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 		bumpSyncToken(checklist, now)
 		recordDeletedChecklistItem(checklist, uid, now, source)
 		m.pruneTombstones(page, listName, checklist, now)
-		encodeChecklist(fm, listName, checklist)
 		return nil
 	})
 	if err != nil {
@@ -622,19 +577,8 @@ func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, sco
 		return 0, nil, status.Error(codes.InvalidArgument, errListNameRequired)
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var (
-		checklist *apiv1.Checklist
-		removed   int
-	)
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
-		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
-			return err
-		}
-
+	removed := 0
+	checklist, err := m.mutateChecklist(page, identity, listName, expectedUpdatedAt, func(checklist *apiv1.Checklist) error {
 		removedItems := deduplicateChecklistItems(checklist, scope)
 		if len(removedItems) == 0 {
 			return errNoChange
@@ -651,7 +595,6 @@ func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, sco
 			Op:  "bulk_dedupe",
 		}, now)
 		m.pruneTombstones(page, listName, checklist, now)
-		encodeChecklist(fm, listName, checklist)
 		removed = len(removedItems)
 		return nil
 	})
@@ -709,19 +652,10 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
-	unlock := m.lockPage(page)
-	defer unlock()
-
-	var checklist *apiv1.Checklist
-	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
-		checklist = m.readChecklistForMutation(fm, listName)
-		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+	checklist, err := m.mutateChecklist(page, identity, listName, expectedUpdatedAt, func(checklist *apiv1.Checklist) error {
+		idx, item, err := requireItem(checklist, uid)
+		if err != nil {
 			return err
-		}
-
-		idx, item := findItem(checklist, uid)
-		if item == nil {
-			return ErrItemNotFound
 		}
 
 		now := m.clock.Now()
@@ -741,7 +675,6 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 			}, now)
 		}
 		m.pruneTombstones(page, listName, checklist, now)
-		encodeChecklist(fm, listName, checklist)
 		return nil
 	})
 	if err != nil {
@@ -1004,6 +937,41 @@ func (m *Mutator) modifyFrontMatter(page string, identity wikipage.Identity, mut
 		},
 		identity,
 	)
+}
+
+// mutateChecklist runs mutate against the named checklist inside a single
+// store-level read-modify-write, then encodes the result back into the same
+// frontmatter snapshot. Decode, the expected_updated_at precondition, the
+// mutation and the encode all happen under the store lock, so a concurrent
+// writer touching an unrelated frontmatter key cannot be reverted (#1411).
+//
+// The decoded checklist is returned even when err is non-nil, because a
+// no-op mutation reports itself through an error and its caller still needs
+// the decoded value.
+func (m *Mutator) mutateChecklist(page string, identity wikipage.Identity, listName string, expected *time.Time, mutate func(checklist *apiv1.Checklist) error) (*apiv1.Checklist, error) {
+	var checklist *apiv1.Checklist
+	err := m.modifyFrontMatter(page, identity, func(fm wikipage.FrontMatter) error {
+		checklist = m.readChecklistForMutation(fm, listName)
+		if err := checkExpectedUpdatedAt(checklist, expected); err != nil {
+			return err
+		}
+		if err := mutate(checklist); err != nil {
+			return err
+		}
+		encodeChecklist(fm, listName, checklist)
+		return nil
+	})
+	return checklist, err
+}
+
+// requireItem resolves uid to its index and item, mapping a miss to
+// ErrItemNotFound. Shared by every single-item mutation.
+func requireItem(checklist *apiv1.Checklist, uid string) (int, *apiv1.ChecklistItem, error) {
+	idx, item := findItem(checklist, uid)
+	if item == nil {
+		return -1, nil, ErrItemNotFound
+	}
+	return idx, item, nil
 }
 
 // lockPage acquires the per-page mutex and returns a release function.
