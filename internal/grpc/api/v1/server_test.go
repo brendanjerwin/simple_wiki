@@ -5350,6 +5350,158 @@ var _ = Describe("Server", func() {
 				Expect(resp.ContentMarkdown).To(Equal("# Page Name Variant"))
 			})
 		})
+
+		When("the page has checklist events in its frontmatter", func() {
+			var storedTodos map[string]any
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Checklist Page"
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"title": "Checklist Page",
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items": []any{
+									map[string]any{"uid": "item-1", "text": "Buy milk", "checked": false},
+								},
+								"tombstones": []any{
+									map[string]any{"uid": "old-item", "deleted_at": "2026-01-01"},
+								},
+								"sync_token": 10,
+								"updated_at": "2026-11-12T00:00:00Z",
+								"events": []any{
+									map[string]any{"seq": 1, "op": "add", "src": "user"},
+									map[string]any{"seq": 2, "op": "toggle", "src": "user"},
+								},
+							},
+						},
+					},
+				}
+
+				wiki, ok := mockPageReaderMutator.Frontmatter["wiki"].(map[string]any)
+				Expect(ok).To(BeTrue(), "Frontmatter[wiki] should be map[string]any")
+				checklists, ok := wiki["checklists"].(map[string]any)
+				Expect(ok).To(BeTrue(), "wiki[checklists] should be map[string]any")
+				storedTodos, ok = checklists["todos"].(map[string]any)
+				Expect(ok).To(BeTrue(), "checklists[todos] should be map[string]any")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not include events in the response TOML by default", func() {
+				Expect(resp.FrontMatterToml).NotTo(ContainSubstring("events"))
+			})
+
+			It("should still include items in the response TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("Buy milk"))
+			})
+
+			It("should still include tombstones in the response TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("old-item"))
+			})
+
+			It("should still include sync_token in the response TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("sync_token"))
+			})
+
+			It("should not mutate the stored frontmatter (events still present in mock)", func() {
+				Expect(storedTodos).To(HaveKey("events"))
+			})
+		})
+
+		When("the page has checklist events and include_events is true", func() {
+			BeforeEach(func() {
+				req = &apiv1.ReadPageRequest{
+					PageSelector:  &apiv1.ReadPageRequest_Page{Page: "test-page"},
+					IncludeEvents: true,
+				}
+				mockPageReaderMutator.Markdown = "# Checklist Page"
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items":  []any{},
+								"events": []any{map[string]any{"seq": 1, "op": "add", "src": "user"}},
+							},
+						},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include events in the response TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("events"))
+			})
+		})
+
+		When("adding many events to the frontmatter does not grow the response (stripping is effective)", func() {
+			makeEvents := func(n int) []any {
+				events := make([]any, n)
+				for i := range events {
+					events[i] = map[string]any{"seq": i, "op": "toggle", "src": "user", "field": strings.Repeat("x", 200)}
+				}
+				return events
+			}
+
+			var respFewEvents, respManyEvents *apiv1.ReadPageResponse
+
+			BeforeEach(func() {
+				// First call: few events
+				mockPageReaderMutator.Markdown = "# Checklist Page"
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items":  []any{map[string]any{"uid": "a", "text": "Task"}},
+								"events": makeEvents(5),
+							},
+						},
+					},
+				}
+
+				var innerErr error
+				var innerServer *v1.Server
+				innerServer, innerErr = v1.NewServer(
+					v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
+					mockPageReaderMutator,
+					noOpBleveIndexQueryer{},
+					mockFrontmatterIndexQueryer,
+					lumber.NewConsoleLogger(lumber.WARN),
+					noOpChatBufferManager{},
+					noOpPageOpener{},
+				)
+				Expect(innerErr).NotTo(HaveOccurred())
+				respFewEvents, innerErr = innerServer.ReadPage(ctx, &apiv1.ReadPageRequest{
+					PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
+				})
+				Expect(innerErr).NotTo(HaveOccurred())
+
+				// Second call: many events (1000x more)
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items":  []any{map[string]any{"uid": "a", "text": "Task"}},
+								"events": makeEvents(5000),
+							},
+						},
+					},
+				}
+				respManyEvents, innerErr = innerServer.ReadPage(ctx, &apiv1.ReadPageRequest{
+					PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
+				})
+				Expect(innerErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the same TOML size regardless of event count", func() {
+				Expect(len(respManyEvents.FrontMatterToml)).To(Equal(len(respFewEvents.FrontMatterToml)))
+			})
+		})
 	})
 
 	Describe("RenderMarkdown", func() {

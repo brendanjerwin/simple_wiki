@@ -27,6 +27,14 @@ import (
 
 const trashEntryNotFoundErrFmt = "trash entry not found: %s"
 
+// frontmatterChecklistsPath are the keys used to reach checklist lists in the
+// frontmatter map: fm["wiki"]["checklists"][listName].
+const (
+	fmWikiKey       = "wiki"
+	fmChecklistsKey = "checklists"
+	fmEventsKey     = "events"
+)
+
 // computePageHash computes a SHA256 hash covering both frontmatter and markdown,
 // returned as a lowercase hex string. Used for optimistic concurrency control.
 // Including frontmatter ensures that frontmatter-only edits are visible to
@@ -574,6 +582,90 @@ func (s *Server) EmptyTrash(ctx context.Context, _ *apiv1.EmptyTrashRequest) (*a
 	return &apiv1.EmptyTrashResponse{Success: true, PurgedCount: int32(purgedCount)}, nil
 }
 
+// stripChecklistEvents returns a shallow-copy of fm with the events slice
+// removed from every wiki.checklists.<list> entry. Only the layers that
+// contain events are deep-copied; unchanged subtrees and sibling keys share
+// memory with the original. The original fm map is never mutated.
+//
+// If fm contains no wiki.checklists subtree, or no list inside it has an
+// events key, the original map is returned unchanged (zero allocation path).
+func stripChecklistEvents(fm map[string]any) map[string]any {
+	if fm == nil {
+		return nil
+	}
+
+	wikiAny, ok := fm[fmWikiKey]
+	if !ok {
+		return fm
+	}
+	wiki, ok := wikiAny.(map[string]any)
+	if !ok {
+		return fm
+	}
+
+	checklistsAny, ok := wiki[fmChecklistsKey]
+	if !ok {
+		return fm
+	}
+	checklists, ok := checklistsAny.(map[string]any)
+	if !ok {
+		return fm
+	}
+
+	// Fast path: nothing to strip if no list has an events key.
+	needsStrip := false
+	for _, listAny := range checklists {
+		list, ok := listAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasEvents := list[fmEventsKey]; hasEvents {
+			needsStrip = true
+			break
+		}
+	}
+	if !needsStrip {
+		return fm
+	}
+
+	// Copy only the layers we need to modify to avoid mutating the original.
+	out := make(map[string]any, len(fm))
+	for k, v := range fm {
+		out[k] = v
+	}
+
+	newWiki := make(map[string]any, len(wiki))
+	for k, v := range wiki {
+		newWiki[k] = v
+	}
+	out[fmWikiKey] = newWiki
+
+	newChecklists := make(map[string]any, len(checklists))
+	for k, v := range checklists {
+		newChecklists[k] = v
+	}
+	newWiki[fmChecklistsKey] = newChecklists
+
+	for listName, listAny := range checklists {
+		list, ok := listAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasEvents := list[fmEventsKey]; !hasEvents {
+			continue
+		}
+		newList := make(map[string]any, len(list))
+		for k, v := range list {
+			if k != fmEventsKey {
+				newList[k] = v
+			}
+		}
+		newChecklists[listName] = newList
+	}
+
+	return out
+}
+
 // ReadPage implements the ReadPage RPC.
 func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
 	// page and identifier are mutually exclusive via oneof; exactly one must be set.
@@ -602,8 +694,17 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
+	// Strip wiki.checklists.<list>.events from the response unless the caller
+	// explicitly requested them. The op-log can grow to several MB on
+	// long-lived checklist pages (issue #1419); excluding it by default keeps
+	// the response proportional to current item state.
+	frontmatterForResponse := frontmatter
+	if !req.GetIncludeEvents() {
+		frontmatterForResponse = stripChecklistEvents(map[string]any(frontmatter))
+	}
+
 	// Convert frontmatter to TOML
-	frontmatterToml, err := toml.Marshal(frontmatter)
+	frontmatterToml, err := toml.Marshal(frontmatterForResponse)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to marshal frontmatter: %v", err)
 	}
