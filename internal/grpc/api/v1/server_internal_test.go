@@ -236,6 +236,189 @@ var _ = Describe("enqueueImportJobs internal", func() {
 	})
 })
 
+var _ = Describe("stripChecklistEvents", func() {
+	Describe("nil input", func() {
+		var result map[string]any
+
+		BeforeEach(func() {
+			result = stripChecklistEvents(nil)
+		})
+
+		It("should return nil", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("frontmatter with no wiki key", func() {
+		var input, result map[string]any
+
+		BeforeEach(func() {
+			input = map[string]any{"title": "My Page"}
+			result = stripChecklistEvents(input)
+		})
+
+		It("should return the original map unchanged", func() {
+			Expect(result).To(Equal(input))
+		})
+	})
+
+	Describe("wiki key present but no checklists", func() {
+		var input, result map[string]any
+
+		BeforeEach(func() {
+			input = map[string]any{
+				"title": "My Page",
+				"wiki":  map[string]any{"page_app": "something"},
+			}
+			result = stripChecklistEvents(input)
+		})
+
+		It("should return the original map unchanged", func() {
+			Expect(result).To(Equal(input))
+		})
+	})
+
+	Describe("checklists present but no events on any list (fast path)", func() {
+		var input, result map[string]any
+
+		BeforeEach(func() {
+			input = map[string]any{
+				"wiki": map[string]any{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items":      []any{"item1"},
+							"sync_token": 1,
+						},
+					},
+				},
+			}
+			result = stripChecklistEvents(input)
+		})
+
+		It("should return the original map unchanged", func() {
+			Expect(result).To(Equal(input))
+		})
+	})
+
+	Describe("checklists with events", func() {
+		var input map[string]any
+		var result map[string]any
+		var originalEvents []any
+		var resultTodos map[string]any
+		var inputTodos map[string]any
+
+		BeforeEach(func() {
+			originalEvents = []any{
+				map[string]any{"seq": 1, "op": "add", "src": "user"},
+				map[string]any{"seq": 2, "op": "toggle", "src": "user"},
+			}
+			input = map[string]any{
+				"title": "Checklist Page",
+				"wiki": map[string]any{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items":      []any{map[string]any{"uid": "abc", "text": "Buy milk"}},
+							"tombstones": []any{map[string]any{"uid": "old", "deleted_at": "2026-01-01"}},
+							"sync_token": 42,
+							"updated_at": "2026-11-12T00:00:00Z",
+							"events":     originalEvents,
+						},
+					},
+				},
+			}
+			result = stripChecklistEvents(input)
+
+			wiki, ok := result["wiki"].(map[string]any)
+			Expect(ok).To(BeTrue(), "result[wiki] should be map[string]any")
+			checklists, ok := wiki["checklists"].(map[string]any)
+			Expect(ok).To(BeTrue(), "wiki[checklists] should be map[string]any")
+			resultTodos, ok = checklists["todos"].(map[string]any)
+			Expect(ok).To(BeTrue(), "checklists[todos] should be map[string]any")
+
+			inputWiki, ok := input["wiki"].(map[string]any)
+			Expect(ok).To(BeTrue(), "input[wiki] should be map[string]any")
+			inputChecklists, ok := inputWiki["checklists"].(map[string]any)
+			Expect(ok).To(BeTrue(), "input wiki[checklists] should be map[string]any")
+			inputTodos, ok = inputChecklists["todos"].(map[string]any)
+			Expect(ok).To(BeTrue(), "input checklists[todos] should be map[string]any")
+		})
+
+		It("should not return the same map instance (a copy was made)", func() {
+			Expect(result).NotTo(BeIdenticalTo(input))
+		})
+
+		It("should not contain events key in the stripped list", func() {
+			Expect(resultTodos).NotTo(HaveKey("events"))
+		})
+
+		It("should preserve items in the stripped list", func() {
+			Expect(resultTodos["items"]).To(Equal([]any{map[string]any{"uid": "abc", "text": "Buy milk"}}))
+		})
+
+		It("should preserve tombstones in the stripped list", func() {
+			Expect(resultTodos["tombstones"]).To(Equal([]any{map[string]any{"uid": "old", "deleted_at": "2026-01-01"}}))
+		})
+
+		It("should preserve sync_token in the stripped list", func() {
+			Expect(resultTodos["sync_token"]).To(Equal(42))
+		})
+
+		It("should preserve updated_at in the stripped list", func() {
+			Expect(resultTodos["updated_at"]).To(Equal("2026-11-12T00:00:00Z"))
+		})
+
+		It("should preserve top-level non-wiki keys", func() {
+			Expect(result["title"]).To(Equal("Checklist Page"))
+		})
+
+		It("should NOT mutate the original map (events still present in input)", func() {
+			Expect(inputTodos["events"]).To(Equal(originalEvents))
+		})
+	})
+
+	Describe("multiple lists — some with events, some without", func() {
+		var input map[string]any
+		var result map[string]any
+		var resultTodos map[string]any
+		var resultGroceries map[string]any
+
+		BeforeEach(func() {
+			input = map[string]any{
+				"wiki": map[string]any{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items":  []any{"item1"},
+							"events": []any{map[string]any{"seq": 1}},
+						},
+						"groceries": map[string]any{
+							"items": []any{"milk"},
+							// no events key
+						},
+					},
+				},
+			}
+			result = stripChecklistEvents(input)
+
+			wiki, ok := result["wiki"].(map[string]any)
+			Expect(ok).To(BeTrue(), "result[wiki] should be map[string]any")
+			checklists, ok := wiki["checklists"].(map[string]any)
+			Expect(ok).To(BeTrue(), "wiki[checklists] should be map[string]any")
+			resultTodos, ok = checklists["todos"].(map[string]any)
+			Expect(ok).To(BeTrue(), "checklists[todos] should be map[string]any")
+			resultGroceries, ok = checklists["groceries"].(map[string]any)
+			Expect(ok).To(BeTrue(), "checklists[groceries] should be map[string]any")
+		})
+
+		It("should remove events from the list that had them", func() {
+			Expect(resultTodos).NotTo(HaveKey("events"))
+		})
+
+		It("should preserve the list that had no events", func() {
+			Expect(resultGroceries["items"]).To(Equal([]any{"milk"}))
+		})
+	})
+})
+
 var _ = Describe("preserveReservedSubtrees", func() {
 	When("existing is nil and incoming is non-nil", func() {
 		var incoming map[string]any
