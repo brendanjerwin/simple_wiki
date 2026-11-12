@@ -3,6 +3,8 @@
 package v1
 
 import (
+	"reflect"
+
 	"github.com/brendanjerwin/simple_wiki/pageimport"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -10,6 +12,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+// isSameMap reports whether a and b are the same map (same underlying pointer).
+// BeIdenticalTo cannot be used for maps because Go's == operator panics on
+// non-comparable types; this helper uses reflect.Pointer instead.
+func isSameMap(a, b map[string]any) bool {
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
+}
 
 var _ = Describe("mergeFrontmatterDeep", func() {
 	Describe("flat merge", func() {
@@ -236,6 +245,190 @@ var _ = Describe("enqueueImportJobs internal", func() {
 	})
 })
 
+var _ = Describe("asMap", func() {
+	Describe("when the key is absent", func() {
+		var result map[string]any
+		var ok bool
+
+		BeforeEach(func() {
+			result, ok = asMap(map[string]any{"other": "v"}, "missing")
+		})
+
+		It("should return false", func() {
+			Expect(ok).To(BeFalse())
+		})
+
+		It("should return nil", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("when the value is not a map[string]any", func() {
+		var result map[string]any
+		var ok bool
+
+		BeforeEach(func() {
+			result, ok = asMap(map[string]any{"key": "not-a-map"}, "key")
+		})
+
+		It("should return false", func() {
+			Expect(ok).To(BeFalse())
+		})
+
+		It("should return nil", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("when the value is a map[string]any", func() {
+		var inner map[string]any
+		var result map[string]any
+		var ok bool
+
+		BeforeEach(func() {
+			inner = map[string]any{"nested": 42}
+			result, ok = asMap(map[string]any{"key": inner}, "key")
+		})
+
+		It("should return true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should return the same map instance", func() {
+			Expect(isSameMap(result, inner)).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("copyMapExcept", func() {
+	Describe("with no drop keys", func() {
+		var inner map[string]any
+		var original, result map[string]any
+
+		BeforeEach(func() {
+			inner = map[string]any{"nested": 99}
+			original = map[string]any{"a": 1, "b": "two", "c": inner}
+			result = copyMapExcept(original)
+		})
+
+		It("should return a new map (not the same instance)", func() {
+			Expect(isSameMap(result, original)).To(BeFalse())
+		})
+
+		It("should contain all original keys", func() {
+			Expect(result).To(HaveLen(3))
+			Expect(result["a"]).To(Equal(1))
+			Expect(result["b"]).To(Equal("two"))
+		})
+
+		It("should share the nested map value with the original (shallow copy)", func() {
+			Expect(isSameMap(result["c"].(map[string]any), inner)).To(BeTrue())
+		})
+	})
+
+	Describe("with one drop key", func() {
+		var original, result map[string]any
+
+		BeforeEach(func() {
+			original = map[string]any{"keep": "yes", "drop": "no", "also-keep": 99}
+			result = copyMapExcept(original, "drop")
+		})
+
+		It("should omit the dropped key", func() {
+			Expect(result).NotTo(HaveKey("drop"))
+		})
+
+		It("should preserve the other keys", func() {
+			Expect(result["keep"]).To(Equal("yes"))
+			Expect(result["also-keep"]).To(Equal(99))
+		})
+	})
+
+	Describe("with multiple drop keys", func() {
+		var result map[string]any
+
+		BeforeEach(func() {
+			result = copyMapExcept(map[string]any{"a": 1, "b": 2, "c": 3}, "a", "c")
+		})
+
+		It("should omit all dropped keys", func() {
+			Expect(result).NotTo(HaveKey("a"))
+			Expect(result).NotTo(HaveKey("c"))
+		})
+
+		It("should keep the non-dropped key", func() {
+			Expect(result["b"]).To(Equal(2))
+		})
+	})
+
+	Describe("when dropping a key that does not exist", func() {
+		var result map[string]any
+
+		BeforeEach(func() {
+			result = copyMapExcept(map[string]any{"x": 10}, "missing")
+		})
+
+		It("should still copy all existing keys", func() {
+			Expect(result["x"]).To(Equal(10))
+		})
+	})
+})
+
+var _ = Describe("needsStrip", func() {
+	Describe("when checklists is empty", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = needsStrip(map[string]any{})
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	Describe("when no list has an events key", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = needsStrip(map[string]any{
+				"todos": map[string]any{"items": []any{"item1"}, "sync_token": 1},
+			})
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	Describe("when a list entry is not a map[string]any", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = needsStrip(map[string]any{"bad": "not-a-map"})
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	Describe("when at least one list has an events key", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = needsStrip(map[string]any{
+				"todos":     map[string]any{"items": []any{}, "events": []any{map[string]any{"seq": 1}}},
+				"groceries": map[string]any{"items": []any{"milk"}},
+			})
+		})
+
+		It("should return true", func() {
+			Expect(result).To(BeTrue())
+		})
+	})
+})
+
 var _ = Describe("stripChecklistEvents", func() {
 	Describe("nil input", func() {
 		var result map[string]any
@@ -260,6 +453,10 @@ var _ = Describe("stripChecklistEvents", func() {
 		It("should return the original map unchanged", func() {
 			Expect(result).To(Equal(input))
 		})
+
+		It("should return the same map instance (zero allocation)", func() {
+			Expect(isSameMap(result, input)).To(BeTrue())
+		})
 	})
 
 	Describe("wiki key present but no checklists", func() {
@@ -275,6 +472,10 @@ var _ = Describe("stripChecklistEvents", func() {
 
 		It("should return the original map unchanged", func() {
 			Expect(result).To(Equal(input))
+		})
+
+		It("should return the same map instance (zero allocation)", func() {
+			Expect(isSameMap(result, input)).To(BeTrue())
 		})
 	})
 
@@ -297,6 +498,10 @@ var _ = Describe("stripChecklistEvents", func() {
 
 		It("should return the original map unchanged", func() {
 			Expect(result).To(Equal(input))
+		})
+
+		It("should return the same map instance (zero allocation)", func() {
+			Expect(isSameMap(result, input)).To(BeTrue())
 		})
 	})
 
