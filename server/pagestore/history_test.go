@@ -2,6 +2,7 @@
 package pagestore_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -330,6 +331,70 @@ var _ = Describe("pagestore history", func() {
 				versions, err := store.ListVersions("normal-page")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(versions).To(HaveLen(1))
+			})
+		})
+
+		// Regression guard for the shouldSkipHistoryCapture fast path (#1409).
+		// A large checklist page (no opt_out key anywhere in its content) must
+		// still capture history on write even after the fast-path optimisation.
+		When("a large checklist page without opt_out is modified", func() {
+			BeforeEach(func() {
+				// Build realistic checklist TOML: 50 items + 200 events, totalling
+				// tens of KB. The key property is that neither "opt_out" nor the
+				// [wiki.history] section appear anywhere in the content, so the
+				// fast-path string search short-circuits without a TOML parse and
+				// must still return false (i.e. capture history).
+				fm := wikipage.FrontMatter{
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"Groceries": map[string]any{
+								"sync_token": int64(200),
+								"max_seq":    int64(200),
+								"updated_at": "2026-01-01T00:00:00Z",
+								"items": func() []any {
+									out := make([]any, 50)
+									for i := range 50 {
+										out[i] = map[string]any{
+											"uid":        fmt.Sprintf("01JTEST%08X", i),
+											"text":       fmt.Sprintf("Item %d", i),
+											"checked":    false,
+											"sort_order": int64((i + 1) * 1000),
+										}
+									}
+									return out
+								}(),
+								"events": func() []any {
+									out := make([]any, 200)
+									for i := range 200 {
+										out[i] = map[string]any{
+											"seq": int64(i + 1),
+											"src": "user:alice@example.com",
+											"op":  "add",
+											"uid": fmt.Sprintf("01JTEST%08X", i%50),
+										}
+									}
+									return out
+								}(),
+							},
+						},
+					},
+				}
+				pageText, err := wikipage.CombineFrontMatterAndMarkdown(fm, "# Grocery list\n")
+				Expect(err).NotTo(HaveOccurred())
+
+				// First write: establish the page
+				Expect(store.ModifyOrCreatePage("checklist-page", wikipage.AnonymousIdentity, "setup", func(_ string) (string, error) {
+					return pageText, nil
+				})).To(Succeed())
+
+				// Second write: modify it so a history entry is captured
+				Expect(store.WriteMarkdown("checklist-page", "# Updated grocery list\n", wikipage.AnonymousIdentity)).To(Succeed())
+			})
+
+			It("should capture a history version for the large checklist page", func() {
+				versions, err := store.ListVersions("checklist-page")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(versions).NotTo(BeEmpty())
 			})
 		})
 	})

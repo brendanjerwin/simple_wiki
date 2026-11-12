@@ -832,6 +832,105 @@ title: Test Page
 	})
 })
 
+// Regression guard for the parse-result cache introduced in issue #1409.
+// A single Page object should return consistent frontmatter and markdown
+// regardless of whether GetFrontMatter or GetMarkdown is called first, and
+// regardless of how many times each is called.
+var _ = Describe("Page parse caching", func() {
+	const content = `+++
+title = "Cache Test"
+[section]
+key = "value"
++++
+# Hello from markdown
+`
+
+	Describe("calling GetFrontMatter then GetMarkdown", func() {
+		var (
+			p           *wikipage.Page
+			frontmatter wikipage.FrontMatter
+			markdown    wikipage.Markdown
+			fmErr       error
+			mdErr       error
+		)
+
+		BeforeEach(func() {
+			p = &wikipage.Page{Text: content}
+			frontmatter, fmErr = p.GetFrontMatter()
+			markdown, mdErr = p.GetMarkdown()
+		})
+
+		It("should not error on GetFrontMatter", func() {
+			Expect(fmErr).NotTo(HaveOccurred())
+		})
+
+		It("should not error on GetMarkdown", func() {
+			Expect(mdErr).NotTo(HaveOccurred())
+		})
+
+		It("should return the frontmatter title", func() {
+			Expect(frontmatter).To(HaveKeyWithValue("title", "Cache Test"))
+		})
+
+		It("should return the markdown body", func() {
+			Expect(string(markdown)).To(ContainSubstring("# Hello from markdown"))
+		})
+	})
+
+	Describe("calling GetMarkdown then GetFrontMatter", func() {
+		var (
+			p           *wikipage.Page
+			frontmatter wikipage.FrontMatter
+			markdown    wikipage.Markdown
+			fmErr       error
+			mdErr       error
+		)
+
+		BeforeEach(func() {
+			p = &wikipage.Page{Text: content}
+			markdown, mdErr = p.GetMarkdown()
+			frontmatter, fmErr = p.GetFrontMatter()
+		})
+
+		It("should not error on GetMarkdown", func() {
+			Expect(mdErr).NotTo(HaveOccurred())
+		})
+
+		It("should not error on GetFrontMatter", func() {
+			Expect(fmErr).NotTo(HaveOccurred())
+		})
+
+		It("should return the same frontmatter as the forward order", func() {
+			Expect(frontmatter).To(HaveKeyWithValue("title", "Cache Test"))
+		})
+
+		It("should return the same markdown as the forward order", func() {
+			Expect(string(markdown)).To(ContainSubstring("# Hello from markdown"))
+		})
+	})
+
+	Describe("calling GetFrontMatter twice on the same Page", func() {
+		var (
+			fm1, fm2 wikipage.FrontMatter
+			err1     error
+		)
+
+		BeforeEach(func() {
+			p := &wikipage.Page{Text: content}
+			fm1, err1 = p.GetFrontMatter()
+			fm2, _ = p.GetFrontMatter()
+		})
+
+		It("should not error", func() {
+			Expect(err1).NotTo(HaveOccurred())
+		})
+
+		It("should return the same title both times", func() {
+			Expect(fm1["title"]).To(Equal(fm2["title"]))
+		})
+	})
+})
+
 var _ = Describe("Page.IsNew", func() {
 	var page *wikipage.Page
 

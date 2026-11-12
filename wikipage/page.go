@@ -37,10 +37,32 @@ type Page struct {
 	FrontmatterJSON   []byte    `json:"-"`
 	WasLoadedFromDisk bool      `json:"-"`
 	ModTime           time.Time `json:"-"`
+
+	// parseCached is true once parsedFM/parsedMD/parsedErr have been populated.
+	// Page objects are short-lived and never shared across goroutines, so a
+	// plain bool (no sync.Once) is safe. This avoids repeating the TOML parse
+	// when the same Page is passed to both GetFrontMatter and GetMarkdown —
+	// a common pattern in ModifyFrontMatterAndMarkdown.
+	parseCached bool
+	parsedFM    FrontMatter
+	parsedMD    Markdown
+	parsedErr   error
 }
 
-// parse parses the page content into frontmatter and markdown
+// parse returns the frontmatter and markdown for this page, caching the
+// result so subsequent calls on the same Page object pay no TOML cost.
 func (p *Page) parse() (FrontMatter, Markdown, error) {
+	if p.parseCached {
+		return p.parsedFM, p.parsedMD, p.parsedErr
+	}
+	p.parsedFM, p.parsedMD, p.parsedErr = p.parseUncached()
+	p.parseCached = true
+	return p.parsedFM, p.parsedMD, p.parsedErr
+}
+
+// parseUncached performs the actual TOML/YAML parse without consulting the
+// cache. Called exactly once per Page lifetime by parse().
+func (p *Page) parseUncached() (FrontMatter, Markdown, error) {
 	frontmatter := &map[string]any{}
 	r := strings.NewReader(p.Text)
 
