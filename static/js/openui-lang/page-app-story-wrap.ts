@@ -30,7 +30,7 @@ try {
 export class PageAppStoryWrap extends LitElement {
  @property({ type: String }) declare program: string;
 
- static override styles = [wikiPageAppDesignSystem];
+ static override readonly styles = [wikiPageAppDesignSystem];
 
  constructor() {
   super();

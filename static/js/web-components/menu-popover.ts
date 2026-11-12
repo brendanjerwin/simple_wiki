@@ -203,7 +203,7 @@ export class MenuPopover extends LitElement {
    this._placed = false;
    return;
   }
-  if (!this.anchor || !this.anchor.isConnected) {
+  if (!this.anchor?.isConnected) {
    this._placeFallback(surface);
    return;
   }

@@ -25,12 +25,10 @@ import {
  type ParseResult,
  type QueryManager,
  type Store,
- type ToolNotFoundError,
  type ToolProvider,
 } from '@openuidev/lang-core';
 import {
  WIKI_ROOT_COMPONENT,
- PAGE_APP_ACTION_EVENT,
  wikiLibrary,
  type WikiRenderer,
 } from './library.js';
@@ -336,5 +334,6 @@ export function renderNode(node: unknown): unknown {
  return renderTree(node);
 }
 
-export { isReactiveAssign, PAGE_APP_ACTION_EVENT };
-export type { ToolNotFoundError };
+export { isReactiveAssign };
+export { PAGE_APP_ACTION_EVENT } from './library.js';
+export type { ToolNotFoundError } from '@openuidev/lang-core';
