@@ -958,6 +958,147 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("the page has checklist events in its frontmatter", func() {
+			var storedWiki map[string]any
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"title": "Checklist Page",
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items": []any{
+									map[string]any{"uid": "item-1", "text": "Buy milk", "checked": false},
+								},
+								"tombstones": []any{
+									map[string]any{"uid": "old-item", "deleted_at": "2026-01-01"},
+								},
+								"sync_token": float64(10),
+								"updated_at": "2026-11-12T00:00:00Z",
+								"events": []any{
+									map[string]any{"seq": float64(1), "op": "add", "src": "user"},
+									map[string]any{"seq": float64(2), "op": "toggle", "src": "user"},
+								},
+							},
+						},
+					},
+				}
+
+				var ok bool
+				storedWiki, ok = mockPageReaderMutator.Frontmatter["wiki"].(map[string]any)
+				Expect(ok).To(BeTrue(), "Frontmatter[wiki] should be map[string]any")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			// The wiki.* namespace is a reserved top-level key stripped by
+			// filterIdentifierKey on every GetFrontmatter response. Events (and all
+			// other checklist data) are therefore absent from the response — not
+			// just events, but the entire wiki subtree.
+			It("should not include the wiki namespace in the response (reserved top-level key)", func() {
+				m := res.GetFrontmatter().AsMap()
+				Expect(m).NotTo(HaveKey("wiki"))
+			})
+
+			It("should not mutate the stored frontmatter (wiki key with events still present in mock)", func() {
+				Expect(storedWiki).To(HaveKey("checklists"))
+				checklists, ok := storedWiki["checklists"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				todos, ok := checklists["todos"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(todos).To(HaveKey("events"))
+			})
+		})
+
+		When("the page has checklist events and include_events is true", func() {
+			BeforeEach(func() {
+				req = &apiv1.GetFrontmatterRequest{
+					Page:          "test-page",
+					IncludeEvents: true,
+				}
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"title": "Checklist Page",
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items":  []any{},
+								"events": []any{map[string]any{"seq": float64(1), "op": "add", "src": "user"}},
+							},
+						},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			// The wiki.* namespace is reserved and always stripped by filterIdentifierKey
+			// regardless of include_events. The include_events flag guards the
+			// stripChecklistEvents step that would otherwise be applied to the filtered
+			// map; since the wiki key is already removed at that point, include_events
+			// has no observable effect on the response.
+			It("should not include the wiki namespace even with include_events=true (reserved top-level key)", func() {
+				m := res.GetFrontmatter().AsMap()
+				Expect(m).NotTo(HaveKey("wiki"))
+			})
+		})
+
+		When("adding many events to the frontmatter does not grow the response (stripping is effective)", func() {
+			makeEvents := func(n int) []any {
+				events := make([]any, n)
+				for i := range events {
+					events[i] = map[string]any{"seq": float64(i), "op": "toggle", "src": "user", "field": strings.Repeat("x", 200)}
+				}
+				return events
+			}
+
+			var resFewEvents, resManyEvents *apiv1.GetFrontmatterResponse
+
+			BeforeEach(func() {
+				// First call: few events (wiki stripped by filterIdentifierKey)
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"title": "Checklist Page",
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items":  []any{map[string]any{"uid": "a", "text": "Task"}},
+								"events": makeEvents(5),
+							},
+						},
+					},
+				}
+
+				innerServer := mustNewServer(mockPageReaderMutator, nil, nil)
+				var innerErr error
+				resFewEvents, innerErr = innerServer.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{Page: "test-page"})
+				Expect(innerErr).NotTo(HaveOccurred())
+
+				// Second call: many events (wiki still stripped regardless of event count)
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"title": "Checklist Page",
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"todos": map[string]any{
+								"items":  []any{map[string]any{"uid": "a", "text": "Task"}},
+								"events": makeEvents(5000),
+							},
+						},
+					},
+				}
+				resManyEvents, innerErr = innerServer.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{Page: "test-page"})
+				Expect(innerErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the same struct size regardless of event count", func() {
+				fewSize := len(resFewEvents.GetFrontmatter().String())
+				manySize := len(resManyEvents.GetFrontmatter().String())
+				Expect(manySize).To(Equal(fewSize))
+			})
+		})
+
 		When("the requested page has frontmatter with nested identifier keys", func() {
 			var frontmatterWithNestedIdentifier map[string]any
 			var expectedStruct *structpb.Struct

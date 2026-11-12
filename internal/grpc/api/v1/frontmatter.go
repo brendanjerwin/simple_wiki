@@ -174,6 +174,11 @@ func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRe
 	// Filter out the identifier key from the response
 	filteredFm := filterIdentifierKey(fm)
 
+	// Strip checklist op-log events unless the caller explicitly opts in.
+	if !req.GetIncludeEvents() {
+		filteredFm = stripChecklistEvents(filteredFm)
+	}
+
 	var structFm *structpb.Struct
 	structFm, err = structpb.NewStruct(filteredFm)
 	if err != nil {

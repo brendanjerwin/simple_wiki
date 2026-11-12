@@ -41,7 +41,7 @@ Use `Frontmatter` for reading and writing generic frontmatter. It is exposed bot
 
 | Tool | Purpose |
 |---|---|
-| `api_v1_Frontmatter_GetFrontmatter` | Read the structured frontmatter for a page. |
+| `api_v1_Frontmatter_GetFrontmatter` | Read the structured frontmatter for a page. Set `include_events: false` (default) to omit checklist CRDT op-logs from the response — the entire `wiki.*` namespace is stripped by default anyway (reserved), so events are never exposed through this tool. |
 | `api_v1_Frontmatter_MergeFrontmatter` | Merge the supplied key/value tree into the existing frontmatter. |
 | `api_v1_Frontmatter_ReplaceFrontmatter` | Replace the entire frontmatter object. |
 | `api_v1_Frontmatter_RemoveKeyAtPath` | Remove a key at a dotted or indexed path. |
