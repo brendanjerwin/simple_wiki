@@ -49,6 +49,25 @@ func (f *inMemoryPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wiki
 	return nil
 }
 
+func (f *inMemoryPageStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fm, ok := f.pages[id]
+	if !ok {
+		fm = wikipage.FrontMatter{}
+	}
+	out := wikipage.FrontMatter{}
+	for k, v := range fm {
+		out[k] = v
+	}
+	newFM, _, err := fn(out, "")
+	if err != nil {
+		return err
+	}
+	f.pages[id] = newFM
+	return nil
+}
+
 // newAgentMetadataServer wires a Server with a minimal set of dependencies
 // and returns it together with the schedule + chat-context stores so
 // individual tests can seed and assert directly.

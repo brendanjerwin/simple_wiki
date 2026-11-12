@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -46,14 +45,17 @@ func (e *SummaryTargetNotFoundError) Error() string {
 // AgentChatContextStore owns reads and writes of the agent.chat_context
 // subtree on each page. Like AgentScheduleStore, it is the only legal
 // write-path for that namespace; the generic Frontmatter API rejects writes.
+//
+// All mutating methods use ModifyFrontMatterAndMarkdown so the read, mutation,
+// and write-back happen under the page's canonical lock. This closes the
+// read-modify-write race described in issue #1420.
 type AgentChatContextStore struct {
-	pages agentSchedulePagesStore
-	mu    sync.Mutex
+	pages agentChatContextPagesStore
 }
 
 // NewAgentChatContextStore constructs a chat-context store on top of the
 // supplied page accessor.
-func NewAgentChatContextStore(pages agentSchedulePagesStore) *AgentChatContextStore {
+func NewAgentChatContextStore(pages agentChatContextPagesStore) *AgentChatContextStore {
 	return &AgentChatContextStore{pages: pages}
 }
 
@@ -85,26 +87,20 @@ func (s *AgentChatContextStore) UpdateMerge(page string, update *apiv1.ChatConte
 		return nil, errors.New("update is required")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	var merged *apiv1.ChatContext
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, decErr := decodeChatContext(fm)
+		if decErr != nil {
+			return nil, md, decErr
+		}
+		merged = mergeChatContext(existing, update)
+		merged.LastUpdated = timestamppb.New(time.Now().UTC())
+		if wErr := writeChatContext(fm, merged); wErr != nil {
+			return nil, md, wErr
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		return nil, fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-
-	existing, err := decodeChatContext(fm)
-	if err != nil {
-		return nil, err
-	}
-
-	merged := mergeChatContext(existing, update)
-	merged.LastUpdated = timestamppb.New(time.Now().UTC())
-
-	if err := writeChatContext(fm, merged); err != nil {
-		return nil, err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return merged, nil
@@ -121,28 +117,22 @@ func (s *AgentChatContextStore) AppendBackgroundActivityAutomatic(page string, e
 	if entry == nil {
 		return errors.New("entry is required")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, decErr := decodeChatContext(fm)
+		if decErr != nil {
+			return nil, md, decErr
+		}
+		existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
+		if len(existing.BackgroundActivity) > BackgroundActivityMax {
+			drop := len(existing.BackgroundActivity) - BackgroundActivityMax
+			existing.BackgroundActivity = existing.BackgroundActivity[drop:]
+		}
+		if wErr := writeChatContext(fm, existing); wErr != nil {
+			return nil, md, wErr
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		return fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-	existing, err := decodeChatContext(fm)
-	if err != nil {
-		return err
-	}
-
-	existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
-	if len(existing.BackgroundActivity) > BackgroundActivityMax {
-		drop := len(existing.BackgroundActivity) - BackgroundActivityMax
-		existing.BackgroundActivity = existing.BackgroundActivity[drop:]
-	}
-
-	if err := writeChatContext(fm, existing); err != nil {
-		return err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
@@ -159,72 +149,74 @@ func (s *AgentChatContextStore) AppendBackgroundActivityAutomatic(page string, e
 // that case a new activity entry is created directly with status OK and the
 // supplied summary, reusing the same ring-buffer path.
 func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID, summary string) (*apiv1.BackgroundActivityEntry, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	var result *apiv1.BackgroundActivityEntry
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, decErr := decodeChatContext(fm)
+		if decErr != nil {
+			return nil, md, decErr
+		}
 
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+		// systemd one-shot tasks have no wiki-native schedule entry to attach to.
+		// Create a new activity entry with the summary directly.
+		if strings.HasPrefix(scheduleID, SystemdScheduleIDPrefix) {
+			entry := &apiv1.BackgroundActivityEntry{
+				Timestamp:  timestamppb.New(time.Now().UTC()),
+				ScheduleId: scheduleID,
+				Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				Summary:    summary,
+			}
+			existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
+			if len(existing.BackgroundActivity) > BackgroundActivityMax {
+				drop := len(existing.BackgroundActivity) - BackgroundActivityMax
+				existing.BackgroundActivity = existing.BackgroundActivity[drop:]
+			}
+			if wErr := writeChatContext(fm, existing); wErr != nil {
+				return nil, md, wErr
+			}
+			result = proto.CloneOf(entry)
+			return fm, md, nil
+		}
+
+		target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
+		if target == -1 {
+			// Fallback: accept the most recent entry for this schedule_id within
+			// summaryRecencyWindow, regardless of its current status or whether it
+			// already carries a summary. This covers two cases:
+			//   • #1172: scheduler transitioned the entry terminal (TIMEOUT/etc.)
+			//     before the agent attached its first summary.
+			//   • #1270: a close-out (second) append for the same run — the entry
+			//     already has an early-receipt summary; upsert semantics apply
+			//     rather than falling through to a stale historical entry.
+			// Entries older than summaryRecencyWindow are never write targets.
+			target = findNewestBackgroundActivityInWindow(existing.BackgroundActivity, scheduleID, summaryRecencyWindow)
+		}
+		if target == -1 {
+			return nil, md, &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
+		}
+
+		existing.BackgroundActivity[target].Summary = summary
+		// NOTE: deliberately NOT rewriting a terminal WARN here. WARN has more
+		// than one provenance — synthesized from an OK run missing its summary
+		// (CompleteBackgroundActivity) and emitted for a background-task drain
+		// timeout (cmd/wiki-cli/scheduled_turn.go) — and the stored entry carries
+		// no field to tell them apart. Overwriting would silently erase a real
+		// drain warning, so the recorded status is left untouched.
+		if wErr := writeChatContext(fm, existing); wErr != nil {
+			return nil, md, wErr
+		}
+		result = proto.CloneOf(existing.BackgroundActivity[target])
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		return nil, fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-	existing, err := decodeChatContext(fm)
-	if err != nil {
-		return nil, err
-	}
-
-	// systemd one-shot tasks have no wiki-native schedule entry to attach to.
-	// Create a new activity entry with the summary directly.
-	if strings.HasPrefix(scheduleID, SystemdScheduleIDPrefix) {
-		entry := &apiv1.BackgroundActivityEntry{
-			Timestamp:  timestamppb.New(time.Now().UTC()),
-			ScheduleId: scheduleID,
-			Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
-			Summary:    summary,
+		// SummaryTargetNotFoundError is a domain error (not a store failure);
+		// return it unwrapped so callers and the gRPC layer can inspect the type.
+		var notFound *SummaryTargetNotFoundError
+		if errors.As(err, &notFound) {
+			return nil, notFound
 		}
-		existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
-		if len(existing.BackgroundActivity) > BackgroundActivityMax {
-			drop := len(existing.BackgroundActivity) - BackgroundActivityMax
-			existing.BackgroundActivity = existing.BackgroundActivity[drop:]
-		}
-		if err := writeChatContext(fm, existing); err != nil {
-			return nil, err
-		}
-		if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
-			return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
-		}
-		return proto.CloneOf(entry), nil
-	}
-
-	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
-	if target == -1 {
-		// Fallback: accept the most recent entry for this schedule_id within
-		// summaryRecencyWindow, regardless of its current status or whether it
-		// already carries a summary. This covers two cases:
-		//   • #1172: scheduler transitioned the entry terminal (TIMEOUT/etc.)
-		//     before the agent attached its first summary.
-		//   • #1270: a close-out (second) append for the same run — the entry
-		//     already has an early-receipt summary; upsert semantics apply
-		//     rather than falling through to a stale historical entry.
-		// Entries older than summaryRecencyWindow are never write targets.
-		target = findNewestBackgroundActivityInWindow(existing.BackgroundActivity, scheduleID, summaryRecencyWindow)
-	}
-	if target == -1 {
-		return nil, &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
-	}
-
-	existing.BackgroundActivity[target].Summary = summary
-	// NOTE: deliberately NOT rewriting a terminal WARN here. WARN has more
-	// than one provenance — synthesized from an OK run missing its summary
-	// (CompleteBackgroundActivity) and emitted for a background-task drain
-	// timeout (cmd/wiki-cli/scheduled_turn.go) — and the stored entry carries
-	// no field to tell them apart. Overwriting would silently erase a real
-	// drain warning, so the recorded status is left untouched.
-	if err := writeChatContext(fm, existing); err != nil {
-		return nil, err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
-	return proto.CloneOf(existing.BackgroundActivity[target]), nil
+	return result, nil
 }
 
 // CompleteBackgroundActivity updates the most recent entry for scheduleID with
@@ -232,44 +224,41 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 // recorded as WARN so operators can distinguish "work may have happened, but
 // the audit trail is missing" from a clean success.
 func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID string, status apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
-	if err != nil {
-		return status, fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-	existing, err := decodeChatContext(fm)
-	if err != nil {
-		return status, err
-	}
-
-	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
-	if target == -1 {
-		entry := &apiv1.BackgroundActivityEntry{
-			Timestamp:  timestamppb.New(time.Now().UTC()),
-			ScheduleId: scheduleID,
-			Status:     status,
-		}
-		existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
-		target = len(existing.BackgroundActivity) - 1
-	}
-
 	finalStatus := status
-	if status == apiv1.ScheduleStatus_SCHEDULE_STATUS_OK && existing.BackgroundActivity[target].GetSummary() == "" {
-		finalStatus = apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
-	}
-	existing.BackgroundActivity[target].Status = finalStatus
-	existing.BackgroundActivity[target].Timestamp = timestamppb.New(time.Now().UTC())
-	if len(existing.BackgroundActivity) > BackgroundActivityMax {
-		drop := len(existing.BackgroundActivity) - BackgroundActivityMax
-		existing.BackgroundActivity = existing.BackgroundActivity[drop:]
-	}
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, decErr := decodeChatContext(fm)
+		if decErr != nil {
+			return nil, md, decErr
+		}
 
-	if err := writeChatContext(fm, existing); err != nil {
-		return status, err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
+		target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
+		if target == -1 {
+			entry := &apiv1.BackgroundActivityEntry{
+				Timestamp:  timestamppb.New(time.Now().UTC()),
+				ScheduleId: scheduleID,
+				Status:     status,
+			}
+			existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
+			target = len(existing.BackgroundActivity) - 1
+		}
+
+		finalStatus = status
+		if status == apiv1.ScheduleStatus_SCHEDULE_STATUS_OK && existing.BackgroundActivity[target].GetSummary() == "" {
+			finalStatus = apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
+		}
+		existing.BackgroundActivity[target].Status = finalStatus
+		existing.BackgroundActivity[target].Timestamp = timestamppb.New(time.Now().UTC())
+		if len(existing.BackgroundActivity) > BackgroundActivityMax {
+			drop := len(existing.BackgroundActivity) - BackgroundActivityMax
+			existing.BackgroundActivity = existing.BackgroundActivity[drop:]
+		}
+
+		if wErr := writeChatContext(fm, existing); wErr != nil {
+			return nil, md, wErr
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
+	if err != nil {
 		return status, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return finalStatus, nil
@@ -282,30 +271,27 @@ func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID stri
 // Returns nil without modifying anything when no matching entry is found, since
 // amendment is best-effort (the original entry may have rolled off the ring buffer).
 func (s *AgentChatContextStore) AmendBackgroundActivity(page, scheduleID string, fromStatus, toStatus apiv1.ScheduleStatus) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, decErr := decodeChatContext(fm)
+		if decErr != nil {
+			return nil, md, decErr
+		}
 
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+		target := findNewestBackgroundActivityWithStatus(existing.BackgroundActivity, scheduleID, fromStatus)
+		if target == -1 {
+			// No matching entry; amendment is best-effort, return unchanged.
+			return fm, md, nil
+		}
+
+		existing.BackgroundActivity[target].Status = toStatus
+		existing.BackgroundActivity[target].Timestamp = timestamppb.New(time.Now().UTC())
+
+		if wErr := writeChatContext(fm, existing); wErr != nil {
+			return nil, md, wErr
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		return fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-	existing, err := decodeChatContext(fm)
-	if err != nil {
-		return err
-	}
-
-	target := findNewestBackgroundActivityWithStatus(existing.BackgroundActivity, scheduleID, fromStatus)
-	if target == -1 {
-		return nil
-	}
-
-	existing.BackgroundActivity[target].Status = toStatus
-	existing.BackgroundActivity[target].Timestamp = timestamppb.New(time.Now().UTC())
-
-	if err := writeChatContext(fm, existing); err != nil {
-		return err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil

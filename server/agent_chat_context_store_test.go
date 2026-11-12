@@ -125,7 +125,7 @@ var _ = Describe("AgentChatContextStore", func() {
 	})
 
 	Describe("AppendBackgroundActivityAutomatic error handling", func() {
-		Describe("when ReadFrontMatter returns an error", func() {
+		Describe("when the page store returns a read error", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -142,8 +142,8 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(err).To(HaveOccurred())
 			})
 
-			It("should wrap the error with read frontmatter context", func() {
-				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
 			})
 		})
 
@@ -171,7 +171,7 @@ var _ = Describe("AgentChatContextStore", func() {
 	})
 
 	Describe("AppendBackgroundActivitySummary error handling", func() {
-		Describe("when ReadFrontMatter returns an error", func() {
+		Describe("when the page store returns a read error", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -184,8 +184,8 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(err).To(HaveOccurred())
 			})
 
-			It("should wrap the error with read frontmatter context", func() {
-				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
 			})
 		})
 
@@ -1134,7 +1134,7 @@ var _ = Describe("AgentChatContextStore", func() {
 			})
 		})
 
-		Describe("when ReadFrontMatter returns an error", func() {
+		Describe("when the page store returns a read error", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -1149,8 +1149,8 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(err).To(HaveOccurred())
 			})
 
-			It("should wrap the error with read frontmatter context", func() {
-				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
 			})
 		})
 
