@@ -245,7 +245,17 @@ func (s *Store) DiffVersions(identifier wikipage.PageIdentifier, oldID, newID st
 // system/metrics pages that are written frequently and don't benefit
 // from version history. The check is on the OUTGOING content (the
 // state being replaced) — if the page had opted out, we don't capture.
+//
+// Fast path: the string "opt_out" only appears in page content when the
+// wiki.history.opt_out flag is used. For the overwhelming majority of pages
+// (which never set this flag) a simple Contains check lets us skip the full
+// TOML parse entirely. The full parse is only triggered when the string is
+// present — false positives (e.g. the word appears in prose) cause a full
+// parse and are harmless.
 func shouldSkipHistoryCapture(pageText string) bool {
+	if !strings.Contains(pageText, "opt_out") {
+		return false // fast path: flag absent, no need to parse TOML
+	}
 	p := &wikipage.Page{Text: pageText}
 	fm, err := p.GetFrontMatter()
 	if err != nil {
