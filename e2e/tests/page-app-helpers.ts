@@ -71,12 +71,14 @@ export async function setupPage(
  const UPDATE_404_RETRIES = 5;
  let resetResp: { status: number; json: unknown; text: string } | undefined;
  for (let attempt = 0; attempt <= UPDATE_404_RETRIES; attempt++) {
+  // eslint-disable-next-line no-await-in-loop -- retry loop: each attempt depends on the previous response status
   resetResp = await callAPI(request, 'PageManagementService', 'UpdateWholePage', {
    page,
    newWholeMarkdown: markdown,
    allowShrink: true,
   });
   if (resetResp.status !== 404) break;
+  // eslint-disable-next-line no-await-in-loop -- backoff delay between retries is intentionally sequential
   await new Promise((resolve) => setTimeout(resolve, attempt * 100));
  }
  expect(resetResp!.status, `reset ${page}: ${resetResp!.text}`).toBe(200);

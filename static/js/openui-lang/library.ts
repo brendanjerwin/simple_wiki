@@ -751,7 +751,7 @@ function buildLibrary(): Library {
      ? html`<h3 class="wiki-page-app-card-title">${title}</h3>`
      : nothing}
      <div class="wiki-page-app-card-body">
-       ${children != null ? children : nothing}
+       ${children ?? nothing}
      </div>
    </div>`;
   }) as WikiRenderer,

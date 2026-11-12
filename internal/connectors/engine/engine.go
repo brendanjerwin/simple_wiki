@@ -43,7 +43,7 @@ import (
 // against the Engine surface (and tests assert that unwired paths
 // fail loudly) without resorting to panics in library code.
 //
-// Each Phase 3 todo replaces ErrNotYetImplemented with the real
+// Each Phase 3 task replaces ErrNotYetImplemented with the real
 // implementation under TDD discipline; this sentinel disappears
 // from the engine package by the time Phase 3 completes.
 var ErrNotYetImplemented = errors.New("connectors/engine: not yet implemented (Phase 3 in progress)")

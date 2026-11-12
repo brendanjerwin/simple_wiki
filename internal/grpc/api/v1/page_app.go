@@ -1031,7 +1031,7 @@ func removeWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) wikipage.Fron
 // replaced by a new one holding the given source; a body without a fence
 // gets the new fence appended at the end, preserving prose above
 // (composition: app renders above prose; prose is never dropped).
-func replacePageAppFence(body string, source string) string {
+func replacePageAppFence(body, source string) string {
 	_, prose, found := splitPageAppBody(body)
 	fence := wikipage.PageAppFenceOpen + mdNewline + strings.TrimSuffix(source, mdNewline) + mdNewline + "```"
 	if !found {

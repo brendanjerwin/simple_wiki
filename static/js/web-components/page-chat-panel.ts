@@ -1238,6 +1238,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   for (const file of files) {
    try {
+    // eslint-disable-next-line no-await-in-loop -- sequential uploads provide per-file error recovery; parallelising would change behaviour
     const attachment = await uploadChatAttachment(file);
     results.push(attachment);
    } catch (err) {

@@ -320,7 +320,7 @@ func parseSortOrder(todo *ical.Component) *int64 {
 }
 
 // parseFirstAlarm returns the JSON-encoded alarm payload for the first
-// VALARM child of todo, or nil when no VALARM is present or the first
+// VALARM child of the VTODO component, or nil when no VALARM is present or the first
 // one fails to parse. Additional VALARM children are ignored: the
 // wiki's data model carries one alarm per item, and silently dropping
 // extras is preferable to rejecting an otherwise-valid PUT.
