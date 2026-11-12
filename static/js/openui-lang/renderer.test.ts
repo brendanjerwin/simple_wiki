@@ -1209,3 +1209,112 @@ describe('Image renderer', () => {
   }
  });
 });
+
+describe('empty-button-label diagnostics', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+ let runtime: WikiPageAppRuntime;
+
+ beforeEach(() => {
+  runtime = generateWikiPageAppRenderer(null, noopActions);
+ });
+
+ describe('when Button has an empty string label', () => {
+  let errorCodes: string[];
+
+  beforeEach(() => {
+   const rendered = runtime.render('root = Card("T", [b])\nb = Button("")', {});
+   errorCodes = rendered.errors.map((e) => e.code);
+  });
+
+  it('should emit an empty-button-label diagnostic', () => {
+   expect(errorCodes).to.include('empty-button-label');
+  });
+ });
+
+ describe('when Button has a whitespace-only label', () => {
+  let errorCodes: string[];
+
+  beforeEach(() => {
+   const rendered = runtime.render('root = Card("T", [b])\nb = Button("   ")', {});
+   errorCodes = rendered.errors.map((e) => e.code);
+  });
+
+  it('should emit an empty-button-label diagnostic', () => {
+   expect(errorCodes).to.include('empty-button-label');
+  });
+ });
+
+ describe('when Button has a non-empty label', () => {
+  let errorCodes: string[];
+
+  beforeEach(() => {
+   const rendered = runtime.render('root = Card("T", [b])\nb = Button("Done")', {});
+   errorCodes = rendered.errors.map((e) => e.code);
+  });
+
+  it('should not emit any empty-button-label diagnostic', () => {
+   expect(errorCodes).not.to.include('empty-button-label');
+  });
+ });
+
+ describe('when Button has a dynamic $variable label', () => {
+  let errorCodes: string[];
+
+  beforeEach(() => {
+   const rendered = runtime.render('root = Card("T", [b])\nb = Button($label)\n$label = "press me"', {});
+   errorCodes = rendered.errors.map((e) => e.code);
+  });
+
+  it('should not emit any empty-button-label diagnostic', () => {
+   expect(errorCodes).not.to.include('empty-button-label');
+  });
+ });
+
+ describe('when Button with an empty label is nested inside a Stack', () => {
+  let errorCodes: string[];
+
+  beforeEach(() => {
+   const rendered = runtime.render('root = Card("T", [s])\ns = Stack([b])\nb = Button("")', {});
+   errorCodes = rendered.errors.map((e) => e.code);
+  });
+
+  it('should still emit an empty-button-label diagnostic', () => {
+   expect(errorCodes).to.include('empty-button-label');
+  });
+ });
+
+ describe('when a program has Button("") alongside a valid Button', () => {
+  let rendered: ReturnType<typeof runtime.render>;
+
+  beforeEach(() => {
+   rendered = runtime.render('root = Card("T", [b1, b2])\nb1 = Button("")\nb2 = Button("Go")', {});
+  });
+
+  it('should emit an empty-button-label diagnostic', () => {
+   expect(rendered.errors.map((e) => e.code)).to.include('empty-button-label');
+  });
+
+  it('should still render the program tree (diagnostic is non-fatal)', async () => {
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   expect(el.querySelector('button.wiki-page-app-button')).to.exist;
+  });
+ });
+
+ describe('when the empty-button-label diagnostic has the correct shape', () => {
+  let emptyLabelError: { code: string; message: string; component?: string; statementId?: string } | undefined;
+
+  beforeEach(() => {
+   const rendered = runtime.render('root = Card("T", [b])\nb = Button("")', {});
+   emptyLabelError = rendered.errors.find((e) => e.code === 'empty-button-label');
+  });
+
+  it('should set component to Button', () => {
+   expect(emptyLabelError?.component).to.equal('Button');
+  });
+ });
+});

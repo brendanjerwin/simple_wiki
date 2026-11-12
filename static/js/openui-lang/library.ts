@@ -540,7 +540,7 @@ function buildLibrary(): Library {
    variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
   }),
   description:
-   'A button that runs an action: @Set, @Reset, @Run, @ToAssistant, @OpenUrl, or Action([...]). A button with no action sends its label to the assistant. `variant` sets emphasis: `primary` (default), `secondary` (muted emphasis), `ghost` (tertiary), or `danger` (destructive).',
+   'A button that runs an action: @Set, @Reset, @Run, @ToAssistant, @OpenUrl, or Action([...]). A button with no action sends its label to the assistant. `variant` sets emphasis: `primary` (default), `secondary` (muted emphasis), `ghost` (tertiary), or `danger` (destructive). An empty or whitespace-only `label` is reported as an `empty-button-label` parse diagnostic.',
   component: (({ label, action: plan, variant }) => {
    const fire = (event: Event) => {
     dispatchArtifactAction(event, {
