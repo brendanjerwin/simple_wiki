@@ -41,6 +41,21 @@ func (f *fakePageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage
 	return nil
 }
 
+func (f *fakePageStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fm, ok := f.pages[id]
+	if !ok {
+		fm = wikipage.FrontMatter{}
+	}
+	newFM, _, err := fn(cloneFrontMatter(fm), "")
+	if err != nil {
+		return err
+	}
+	f.pages[id] = cloneFrontMatter(newFM)
+	return nil
+}
+
 func cloneFrontMatter(fm wikipage.FrontMatter) wikipage.FrontMatter {
 	cloned := wikipage.FrontMatter{}
 	for key, value := range fm {
@@ -85,6 +100,10 @@ func (s *readCountingPageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 
 func (s *readCountingPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error {
 	return s.delegate.WriteFrontMatter(id, fm, identity)
+}
+
+func (s *readCountingPageStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error {
+	return s.delegate.ModifyFrontMatterAndMarkdown(id, fn, identity)
 }
 
 var _ = Describe("AgentScheduleStore", func() {
@@ -486,8 +505,15 @@ var _ = Describe("AgentScheduleStore", func() {
 			BeforeEach(func() {
 				basePages := newFakePageStore()
 				countingPages := &readCountingPageStore{
-					delegate:   basePages,
-					failReadAt: 6,
+					delegate: basePages,
+					// After the fix the five AgentChatContextStore writers use
+					// ModifyFrontMatterAndMarkdown (not counted here), so reads in
+					// this sequence are:
+					//   1. TransitionStatus(RUNNING) schedule read
+					//   2. TransitionStatus(OK) schedule read
+					//   3. TransitionStatus(OK) re-read after background-activity write
+					// Fail at 3 to target the re-read.
+					failReadAt: 3,
 					readErr:    errors.New("disk disappeared"),
 				}
 				scheduleStore := server.NewAgentScheduleStore(countingPages)
@@ -951,5 +977,28 @@ func (e *errorPageStore) WriteFrontMatter(_ wikipage.PageIdentifier, fm wikipage
 		return e.writeErr
 	}
 	e.fm = fm
+	return nil
+}
+
+func (e *errorPageStore) ModifyFrontMatterAndMarkdown(_ wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	if e.readErr != nil {
+		return e.readErr
+	}
+	fm := e.fm
+	if fm == nil {
+		fm = wikipage.FrontMatter{}
+	}
+	out := wikipage.FrontMatter{}
+	for k, v := range fm {
+		out[k] = v
+	}
+	newFM, _, err := fn(out, "")
+	if err != nil {
+		return err
+	}
+	if e.writeErr != nil {
+		return e.writeErr
+	}
+	e.fm = newFM
 	return nil
 }

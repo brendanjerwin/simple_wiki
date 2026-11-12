@@ -45,6 +45,16 @@ type agentSchedulePagesStore interface {
 	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 }
 
+// agentChatContextPagesStore is the page-access contract for
+// AgentChatContextStore. All mutating writers use ModifyFrontMatterAndMarkdown
+// for atomic read-modify-write under the page's canonical lock, eliminating the
+// TOCTOU race tracked by issue #1404/#1420. ReadFrontMatter is used by the
+// read-only Read method only.
+type agentChatContextPagesStore interface {
+	ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
 // BackgroundActivitySink is the subset of AgentChatContextStore that the
 // schedule store calls into when a terminal transition needs to record a
 // background-activity entry. Defined as an interface so the store has no hard
