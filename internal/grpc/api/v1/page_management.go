@@ -582,6 +582,47 @@ func (s *Server) EmptyTrash(ctx context.Context, _ *apiv1.EmptyTrashRequest) (*a
 	return &apiv1.EmptyTrashResponse{Success: true, PurgedCount: int32(purgedCount)}, nil
 }
 
+// asMap retrieves the value at key from m and type-asserts it to map[string]any.
+// Returns (nil, false) if the key is absent or the value is not a map[string]any.
+func asMap(m map[string]any, key string) (map[string]any, bool) {
+	v, ok := m[key]
+	if !ok {
+		return nil, false
+	}
+	result, ok := v.(map[string]any)
+	return result, ok
+}
+
+// copyMapExcept returns a shallow copy of m with the keys listed in drop omitted.
+// If drop is empty, it returns a full shallow copy.
+func copyMapExcept(m map[string]any, drop ...string) map[string]any {
+	dropSet := make(map[string]struct{}, len(drop))
+	for _, k := range drop {
+		dropSet[k] = struct{}{}
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if _, dropped := dropSet[k]; !dropped {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// needsStrip reports whether any checklist entry in checklists contains an events key.
+func needsStrip(checklists map[string]any) bool {
+	for _, listAny := range checklists {
+		list, ok := listAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasEvents := list[fmEventsKey]; hasEvents {
+			return true
+		}
+	}
+	return false
+}
+
 // stripChecklistEvents returns a shallow-copy of fm with the events slice
 // removed from every wiki.checklists.<list> entry. Only the layers that
 // contain events are deep-copied; unchanged subtrees and sibling keys share
@@ -594,58 +635,22 @@ func stripChecklistEvents(fm map[string]any) map[string]any {
 		return nil
 	}
 
-	wikiAny, ok := fm[fmWikiKey]
-	if !ok {
-		return fm
-	}
-	wiki, ok := wikiAny.(map[string]any)
+	wiki, ok := asMap(fm, fmWikiKey)
 	if !ok {
 		return fm
 	}
 
-	checklistsAny, ok := wiki[fmChecklistsKey]
-	if !ok {
-		return fm
-	}
-	checklists, ok := checklistsAny.(map[string]any)
+	checklists, ok := asMap(wiki, fmChecklistsKey)
 	if !ok {
 		return fm
 	}
 
-	// Fast path: nothing to strip if no list has an events key.
-	needsStrip := false
-	for _, listAny := range checklists {
-		list, ok := listAny.(map[string]any)
-		if !ok {
-			continue
-		}
-		if _, hasEvents := list[fmEventsKey]; hasEvents {
-			needsStrip = true
-			break
-		}
-	}
-	if !needsStrip {
+	if !needsStrip(checklists) {
 		return fm
 	}
 
 	// Copy only the layers we need to modify to avoid mutating the original.
-	out := make(map[string]any, len(fm))
-	for k, v := range fm {
-		out[k] = v
-	}
-
-	newWiki := make(map[string]any, len(wiki))
-	for k, v := range wiki {
-		newWiki[k] = v
-	}
-	out[fmWikiKey] = newWiki
-
-	newChecklists := make(map[string]any, len(checklists))
-	for k, v := range checklists {
-		newChecklists[k] = v
-	}
-	newWiki[fmChecklistsKey] = newChecklists
-
+	newChecklists := copyMapExcept(checklists)
 	for listName, listAny := range checklists {
 		list, ok := listAny.(map[string]any)
 		if !ok {
@@ -654,14 +659,14 @@ func stripChecklistEvents(fm map[string]any) map[string]any {
 		if _, hasEvents := list[fmEventsKey]; !hasEvents {
 			continue
 		}
-		newList := make(map[string]any, len(list))
-		for k, v := range list {
-			if k != fmEventsKey {
-				newList[k] = v
-			}
-		}
-		newChecklists[listName] = newList
+		newChecklists[listName] = copyMapExcept(list, fmEventsKey)
 	}
+
+	newWiki := copyMapExcept(wiki)
+	newWiki[fmChecklistsKey] = newChecklists
+
+	out := copyMapExcept(fm)
+	out[fmWikiKey] = newWiki
 
 	return out
 }
