@@ -8,6 +8,7 @@
 package checklistmutator_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -21,6 +22,10 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
+
+// benchLargeChecklistCase names the sub-benchmark that exercises a 120-item
+// checklist carrying 2000 events, the page shape that surfaced #1409.
+const benchLargeChecklistCase = "120items_2000events"
 
 // benchStoreWrapper adds the ReadMarkdown and DeletePage methods that
 // PageReaderMutator requires but *pagestore.Store doesn't expose directly.
@@ -132,7 +137,7 @@ func newBenchFixture(b *testing.B, numItems, numEvents int) (
 //	(b) sync-token + fan-out: negligible — no subscribers in this benchmark
 //	(c) fsync: not present — os.WriteFile without O_SYNC
 func BenchmarkChecklistDeleteItem(b *testing.B) {
-	b.Run("120items_2000events", func(b *testing.B) {
+	b.Run(benchLargeChecklistCase, func(b *testing.B) {
 		mutator, pageName, human, cleanup := newBenchFixture(b, 120, 2000)
 		defer cleanup()
 		ctx := context.Background()
@@ -166,7 +171,7 @@ func BenchmarkChecklistDeleteItem(b *testing.B) {
 // events. The page grows by one event per iteration, so later iterations are
 // slightly slower; this mirrors real-world O(N²) behaviour.
 func BenchmarkChecklistAddItem(b *testing.B) {
-	b.Run("120items_2000events", func(b *testing.B) {
+	b.Run(benchLargeChecklistCase, func(b *testing.B) {
 		mutator, pageName, human, cleanup := newBenchFixture(b, 120, 2000)
 		defer cleanup()
 		ctx := context.Background()
@@ -186,7 +191,7 @@ func BenchmarkChecklistAddItem(b *testing.B) {
 // TOML page. Each DeleteItem/AddItem call runs this parse 4 times; this
 // benchmark isolates that portion of the total cost.
 func BenchmarkTOMLParseCost(b *testing.B) {
-	b.Run("120items_2000events", func(b *testing.B) {
+	b.Run(benchLargeChecklistCase, func(b *testing.B) {
 		fm := buildSyntheticChecklistFM(120, 2000)
 		pageText, err := wikipage.CombineFrontMatterAndMarkdown(fm, "# Benchmark page\n")
 		if err != nil {
@@ -211,7 +216,7 @@ func BenchmarkTOMLParseCost(b *testing.B) {
 // 2000-event frontmatter map. Each item mutation runs this once via
 // CombineFrontMatterAndMarkdown.
 func BenchmarkTOMLMarshalCost(b *testing.B) {
-	b.Run("120items_2000events", func(b *testing.B) {
+	b.Run(benchLargeChecklistCase, func(b *testing.B) {
 		fm := buildSyntheticChecklistFM(120, 2000)
 		b.ResetTimer()
 		for range b.N {
@@ -228,7 +233,7 @@ func BenchmarkTOMLMarshalCost(b *testing.B) {
 // item mutation. For a 120-item + 2000-event page this is the history write
 // for the outgoing page content.
 func BenchmarkHistorySnapshotCost(b *testing.B) {
-	b.Run("120items_2000events", func(b *testing.B) {
+	b.Run(benchLargeChecklistCase, func(b *testing.B) {
 		fm := buildSyntheticChecklistFM(120, 2000)
 		pageText, err := wikipage.CombineFrontMatterAndMarkdown(fm, "# Benchmark page\n")
 		if err != nil {
@@ -262,20 +267,15 @@ func BenchmarkHistorySnapshotCost(b *testing.B) {
 // extractTOML strips the +++ delimiters from a CombineFrontMatterAndMarkdown
 // output and returns the raw TOML bytes for benchmarking.
 func extractTOML(page []byte) []byte {
-	const delim = "+++\n"
-	start := len(delim)
-	if len(page) < start*2 {
+	const openDelim = "+++\n"
+	const closeDelim = "+++"
+	start := len(openDelim)
+	if len(page) < start+len(closeDelim) {
 		return page
 	}
-	end := -1
-	for i := start; i < len(page)-3; i++ {
-		if page[i] == '+' && page[i+1] == '+' && page[i+2] == '+' {
-			end = i
-			break
-		}
-	}
-	if end < 0 {
+	rel := bytes.Index(page[start:], []byte(closeDelim))
+	if rel < 0 {
 		return page
 	}
-	return page[start:end]
+	return page[start : start+rel]
 }
