@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -58,17 +57,24 @@ var (
 	ErrPageNotFound    = errors.New("page not found")
 )
 
+// mapPagesStore is the page-access contract for map mutations. All mutating
+// writers use ModifyFrontMatterAndMarkdown for atomic read-modify-write under
+// the page's canonical lock, eliminating the TOCTOU race tracked by issue
+// #1428. ReadFrontMatter is used by read-only methods (GetMap, ListMaps) only.
+type mapPagesStore interface {
+	ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
 // Mutator is the single funnel for map mutations.
 type Mutator struct {
-	pages wikipage.PageReaderMutator
+	pages mapPagesStore
 	clock Clocker
 	ulids ulid.Generator
-
-	pageMu sync.Map
 }
 
 // New constructs a map mutator.
-func New(pages wikipage.PageReaderMutator, clock Clocker, ulids ulid.Generator) *Mutator {
+func New(pages mapPagesStore, clock Clocker, ulids ulid.Generator) *Mutator {
 	return &Mutator{pages: pages, clock: clock, ulids: ulids}
 }
 
@@ -418,23 +424,19 @@ func (m *Mutator) DeleteMap(ctx context.Context, page, mapName string, expected 
 	if err := validatePageAndMapName(page, mapName); err != nil {
 		return err
 	}
-	release := m.lockPage(page)
-	defer release()
-	fm, err := m.readFrontMatter(page)
-	if err != nil {
-		return err
-	}
-	if !mapExists(fm, mapName) {
-		return ErrMapNotFound
-	}
-	if err := checkExpectedUpdatedAt(decodeMap(fm, page, mapName), expected); err != nil {
-		return err
-	}
-	deleteMapData(fm, mapName)
-	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity); err != nil {
-		return fmt.Errorf("write frontmatter: %w", err)
-	}
-	return nil
+	return m.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+		if !mapExists(fm, mapName) {
+			return nil, md, ErrMapNotFound
+		}
+		if err := checkExpectedUpdatedAt(decodeMap(fm, page, mapName), expected); err != nil {
+			return nil, md, err
+		}
+		deleteMapData(fm, mapName)
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 }
 
 // GetMap reads a named map with all element types.
@@ -492,30 +494,32 @@ func (m *Mutator) mutateMap(ctx context.Context, page, mapName string, expected 
 	if err := validatePageAndMapName(page, mapName); err != nil {
 		return nil, err
 	}
-	release := m.lockPage(page)
-	defer release()
 
-	fm, err := m.readFrontMatter(page)
+	var resultMap *apiv1.Map
+	err := m.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+		if !mapExists(fm, mapName) && missingPolicy == requireExistingMap {
+			return nil, md, ErrMapNotFound
+		}
+		mapState := decodeMap(fm, page, mapName)
+		if err := checkExpectedUpdatedAt(mapState, expected); err != nil {
+			return nil, md, err
+		}
+		if err := mutate(mapState); err != nil {
+			return nil, md, err
+		}
+		mapState.UpdatedAt = timestamppb.New(m.clock.Now())
+		mapState.SyncToken++
+		encodeMap(fm, mapState)
+		resultMap = mapState
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
 		return nil, err
 	}
-	if !mapExists(fm, mapName) && missingPolicy == requireExistingMap {
-		return nil, ErrMapNotFound
-	}
-	mapState := decodeMap(fm, page, mapName)
-	if err := checkExpectedUpdatedAt(mapState, expected); err != nil {
-		return nil, err
-	}
-	if err := mutate(mapState); err != nil {
-		return nil, err
-	}
-	mapState.UpdatedAt = timestamppb.New(m.clock.Now())
-	mapState.SyncToken++
-	encodeMap(fm, mapState)
-	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity); err != nil {
-		return nil, fmt.Errorf("write frontmatter: %w", err)
-	}
-	return mapState, nil
+	return resultMap, nil
 }
 
 func (m *Mutator) readFrontMatter(page string) (wikipage.FrontMatter, error) {
@@ -530,16 +534,6 @@ func (m *Mutator) readFrontMatter(page string) (wikipage.FrontMatter, error) {
 		fm = make(wikipage.FrontMatter)
 	}
 	return fm, nil
-}
-
-func (m *Mutator) lockPage(page string) func() {
-	v, _ := m.pageMu.LoadOrStore(page, &sync.Mutex{})
-	mu, ok := v.(*sync.Mutex)
-	if !ok {
-		mu = &sync.Mutex{}
-	}
-	mu.Lock()
-	return mu.Unlock
 }
 
 func (m *Mutator) newMetadata(identity tailscale.IdentityValue, sortOrder int64) *apiv1.MapElementMetadata {

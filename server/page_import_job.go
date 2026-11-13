@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -87,6 +86,13 @@ func (a *PageImportResultAccumulator) GetResult() PageImportResult {
 	}
 }
 
+// pageImportFMModifier is the atomic modifier interface used by processRecord.
+// The page store (site.go / pagestore.Store) always implements it; test mocks
+// must implement it too so the type assertion in processRecord succeeds.
+type pageImportFMModifier interface {
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
 // SinglePageImportJob imports a single page from a parsed CSV record.
 type SinglePageImportJob struct {
 	record            pageimport.ParsedRecord
@@ -158,86 +164,66 @@ func (j *SinglePageImportJob) GetRecord() pageimport.ParsedRecord {
 	return j.record
 }
 
-// processRecord processes a single parsed record.
+// processRecord processes a single parsed record atomically under the page lock.
 func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) error {
 	identifier := record.Identifier
 
-	fm, isNewPage, err := j.readOrInitFrontmatter(identifier)
+	modifier, ok := j.pageReaderMutator.(pageImportFMModifier)
+	if !ok {
+		return errors.New("page store does not support atomic frontmatter modification")
+	}
+
+	var isNewPage bool
+	err := modifier.ModifyFrontMatterAndMarkdown(
+		wikipage.PageIdentifier(identifier),
+		func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+			isNewPage = len(fm) == 0
+			if fm == nil {
+				fm = make(wikipage.FrontMatter)
+			}
+			if isNewPage {
+				fm["identifier"] = identifier
+			}
+
+			// Apply template logic for inv_item
+			if record.Template == pageimport.InvItemTemplate {
+				EnsureInventoryFrontmatterStructure(fm)
+			}
+
+			// Merge frontmatter from record (upsert semantics)
+			if mergeErr := j.mergeFrontmatter(fm, record.Frontmatter); mergeErr != nil {
+				return nil, md, fmt.Errorf("failed to merge frontmatter: %w", mergeErr)
+			}
+
+			// Handle fields to delete
+			for _, fieldPath := range record.FieldsToDelete {
+				j.deleteField(fm, fieldPath)
+			}
+
+			// Handle array operations
+			for _, op := range record.ArrayOps {
+				if applyErr := j.applyArrayOperation(fm, op); applyErr != nil {
+					return nil, md, fmt.Errorf("failed to apply array operation on %s: %w", op.FieldPath, applyErr)
+				}
+			}
+
+			// Set markdown template for new inventory items
+			if isNewPage && record.Template == pageimport.InvItemTemplate {
+				md = wikipage.Markdown(inventory.BuildItemMarkdown())
+			}
+
+			return fm, md, nil
+		},
+		wikipage.AnonymousIdentity,
+	)
 	if err != nil {
-		return err
-	}
-
-	// Apply template logic for inv_item
-	if record.Template == pageimport.InvItemTemplate {
-		EnsureInventoryFrontmatterStructure(fm)
-	}
-
-	// Merge frontmatter from record (upsert semantics)
-	if err := j.mergeFrontmatter(fm, record.Frontmatter); err != nil {
-		return fmt.Errorf("failed to merge frontmatter: %w", err)
-	}
-
-	// Handle fields to delete
-	for _, fieldPath := range record.FieldsToDelete {
-		j.deleteField(fm, fieldPath)
-	}
-
-	// Handle array operations
-	for _, op := range record.ArrayOps {
-		if err := j.applyArrayOperation(fm, op); err != nil {
-			return fmt.Errorf("failed to apply array operation on %s: %w", op.FieldPath, err)
-		}
-	}
-
-	if err := j.writeFrontmatter(identifier, fm); err != nil {
 		return err
 	}
 
 	if isNewPage {
-		if err := j.finalizeNewPage(identifier, record.Template); err != nil {
-			return err
-		}
-
 		j.trackCreated(identifier)
 	} else {
 		j.trackUpdated(identifier)
-	}
-
-	return nil
-}
-
-// readOrInitFrontmatter reads existing frontmatter for the page or initialises a
-// fresh map for a brand-new page. Returns the map, whether the page is new, and
-// any unexpected error.
-func (j *SinglePageImportJob) readOrInitFrontmatter(identifier string) (map[string]any, bool, error) {
-	_, existingFm, err := j.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, false, fmt.Errorf("failed to read existing frontmatter for %s: %w", identifier, err)
-		}
-		fm := make(map[string]any)
-		fm["identifier"] = identifier
-		return fm, true, nil
-	}
-	return existingFm, false, nil
-}
-
-// writeFrontmatter persists the frontmatter for a page.
-func (j *SinglePageImportJob) writeFrontmatter(identifier string, fm map[string]any) error {
-	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm, wikipage.AnonymousIdentity); err != nil {
-		return fmt.Errorf("failed to write frontmatter: %w", err)
-	}
-
-	return nil
-}
-
-// finalizeNewPage writes any additional content needed for a newly created page.
-func (j *SinglePageImportJob) finalizeNewPage(identifier, template string) error {
-	if template == pageimport.InvItemTemplate {
-		markdown := inventory.BuildItemMarkdown()
-		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), wikipage.AnonymousIdentity); err != nil {
-			return fmt.Errorf("failed to write markdown: %w", err)
-		}
 	}
 
 	return nil

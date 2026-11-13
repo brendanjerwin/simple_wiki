@@ -651,7 +651,7 @@ var _ = Describe("SinglePageImportJob", func() {
 			})
 		})
 
-		When("WriteFrontMatter fails for a record", func() {
+		When("ModifyFrontMatterAndMarkdown fails for a record", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -676,15 +676,15 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should include the error in failed records", func() {
 				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write frontmatter"))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("permission denied"))
 			})
 		})
 
-		When("WriteMarkdown fails for a new inv_item page", func() {
+		When("ModifyFrontMatterAndMarkdown fails for a new inv_item page", func() {
 			var err error
 
 			BeforeEach(func() {
-				mockDeps.writeMarkdownErr = os.ErrPermission
+				mockDeps.writeFrontMatterErr = os.ErrPermission
 
 				record := pageimport.ParsedRecord{
 					RowNumber:  1,
@@ -703,7 +703,7 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should include the error in failed records", func() {
 				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write markdown"))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("permission denied"))
 			})
 		})
 
@@ -736,11 +736,11 @@ var _ = Describe("SinglePageImportJob", func() {
 			})
 		})
 
-		When("ReadFrontMatter fails with a non-NotExist error", func() {
+		When("ModifyFrontMatterAndMarkdown fails to process an existing page", func() {
 			var err error
 
 			BeforeEach(func() {
-				mockDeps.readFrontMatterErr = errors.New("permission denied")
+				mockDeps.writeFrontMatterErr = errors.New("permission denied")
 
 				record := pageimport.ParsedRecord{
 					RowNumber:  1,
@@ -761,7 +761,7 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should track the failure in the accumulator", func() {
 				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to read existing frontmatter"))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("permission denied"))
 			})
 		})
 

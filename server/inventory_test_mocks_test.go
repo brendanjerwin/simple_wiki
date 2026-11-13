@@ -156,6 +156,35 @@ func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modif
 	return nil
 }
 
+func (m *mockPageReaderMutator) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	var currentFM wikipage.FrontMatter
+	var currentMD wikipage.Markdown
+	if page, ok := m.pages[string(id)]; ok {
+		currentFM = page.frontmatter
+		currentMD = wikipage.Markdown(page.markdown)
+	}
+	if currentFM == nil {
+		currentFM = make(wikipage.FrontMatter)
+	}
+
+	newFM, newMD, err := fn(currentFM, currentMD)
+	if err != nil {
+		return err
+	}
+
+	if m.writeFrontMatterErr != nil {
+		return m.writeFrontMatterErr
+	}
+
+	m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, string(id))
+	if m.pages[string(id)] == nil {
+		m.pages[string(id)] = &mockPage{}
+	}
+	m.pages[string(id)].frontmatter = newFM
+	m.pages[string(id)].markdown = string(newMD)
+	return nil
+}
+
 // getFrontmatter returns the frontmatter for a page (for test assertions).
 func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {
 	if page, ok := m.pages[id]; ok {

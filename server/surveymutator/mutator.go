@@ -8,7 +8,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -33,12 +32,20 @@ type SystemClock struct{}
 // Now returns time.Now.
 func (SystemClock) Now() time.Time { return time.Now() }
 
+// surveyPagesStore is the page-access contract for survey mutations. All
+// mutating writers use ModifyFrontMatterAndMarkdown for atomic read-modify-write
+// under the page's canonical lock, eliminating the TOCTOU race tracked by
+// issue #1428. ReadFrontMatter is used by read-only methods (GetSurvey,
+// ListResponses) only.
+type surveyPagesStore interface {
+	ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
 // Mutator is the single funnel for survey configuration and response writes.
 type Mutator struct {
-	pages wikipage.PageReaderMutator
+	pages surveyPagesStore
 	clock Clocker
-
-	pageMu sync.Map
 }
 
 // Errors returned by the survey mutator.
@@ -51,7 +58,7 @@ var (
 )
 
 // New constructs a survey mutator.
-func New(pages wikipage.PageReaderMutator, clock Clocker) *Mutator {
+func New(pages surveyPagesStore, clock Clocker) *Mutator {
 	return &Mutator{pages: pages, clock: clock}
 }
 
@@ -229,29 +236,31 @@ func (m *Mutator) mutateSurveyData(ctx context.Context, page, name string, expec
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	release := m.lockPage(page)
-	defer release()
 
-	fm, err := m.readFrontMatter(page)
+	var resultSurvey *apiv1.Survey
+	err := m.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+		if !surveyExists(fm, name) && missingPolicy == requireExistingSurvey {
+			return nil, md, ErrSurveyNotFound
+		}
+		survey := decodeSurvey(fm, name)
+		if err := checkExpectedUpdatedAt(survey, expected); err != nil {
+			return nil, md, err
+		}
+		if err := mutate(survey); err != nil {
+			return nil, md, err
+		}
+		survey.UpdatedAt = timestamppb.New(m.clock.Now())
+		encodeSurvey(fm, name, survey)
+		resultSurvey = survey
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
 		return nil, err
 	}
-	if !surveyExists(fm, name) && missingPolicy == requireExistingSurvey {
-		return nil, ErrSurveyNotFound
-	}
-	survey := decodeSurvey(fm, name)
-	if err := checkExpectedUpdatedAt(survey, expected); err != nil {
-		return nil, err
-	}
-	if err := mutate(survey); err != nil {
-		return nil, err
-	}
-	survey.UpdatedAt = timestamppb.New(m.clock.Now())
-	encodeSurvey(fm, name, survey)
-	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity); err != nil {
-		return nil, fmt.Errorf("write frontmatter: %w", err)
-	}
-	return survey, nil
+	return resultSurvey, nil
 }
 
 func (m *Mutator) readFrontMatter(page string) (wikipage.FrontMatter, error) {
@@ -266,16 +275,6 @@ func (m *Mutator) readFrontMatter(page string) (wikipage.FrontMatter, error) {
 		fm = make(wikipage.FrontMatter)
 	}
 	return fm, nil
-}
-
-func (m *Mutator) lockPage(page string) func() {
-	v, _ := m.pageMu.LoadOrStore(page, &sync.Mutex{})
-	mu, ok := v.(*sync.Mutex)
-	if !ok {
-		mu = &sync.Mutex{}
-	}
-	mu.Lock()
-	return mu.Unlock
 }
 
 func checkExpectedUpdatedAt(survey *apiv1.Survey, expected *time.Time) error {
