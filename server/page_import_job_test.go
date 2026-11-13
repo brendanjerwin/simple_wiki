@@ -20,11 +20,11 @@ type noAtomicPageStore struct {
 	writes int
 }
 
-func (_ *noAtomicPageStore) ReadFrontMatter(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+func (*noAtomicPageStore) ReadFrontMatter(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return "", nil, nil
 }
 
-func (_ *noAtomicPageStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+func (*noAtomicPageStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", nil
 }
 
@@ -38,7 +38,7 @@ func (s *noAtomicPageStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.
 	return nil
 }
 
-func (_ *noAtomicPageStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+func (*noAtomicPageStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
 func (s *noAtomicPageStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	s.writes++
