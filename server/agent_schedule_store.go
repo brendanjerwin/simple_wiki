@@ -176,7 +176,6 @@ func (s *AgentScheduleStore) Upsert(page string, schedule *apiv1.AgentSchedule) 
 // Delete removes the schedule with the given id from the page. Idempotent: if
 // no schedule with that id exists, returns nil.
 func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
-	dirty := false
 	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		existing, err := decodeSchedules(fm)
 		if err != nil {
@@ -194,7 +193,7 @@ func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
 			// Nothing to delete; return fm unchanged.
 			return fm, md, nil
 		}
-		dirty = true
+
 		if err := writeSchedules(fm, filtered); err != nil {
 			return nil, md, err
 		}
@@ -203,7 +202,6 @@ func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
 	if err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
-	_ = dirty
 	return nil
 }
 
