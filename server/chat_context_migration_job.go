@@ -22,12 +22,12 @@ const legacyChatContextKey = "ai_agent_chat_context"
 // preserved unchanged on the destination side; the legacy key is still
 // removed so the next run is fast.
 type ChatContextMigrationJob struct {
-	pages agentSchedulePagesStore
+	pages chatContextMigrationPagesStore
 	index AgentScheduleQueryer
 }
 
 // NewChatContextMigrationJob constructs a migration job.
-func NewChatContextMigrationJob(pages agentSchedulePagesStore, index AgentScheduleQueryer) *ChatContextMigrationJob {
+func NewChatContextMigrationJob(pages chatContextMigrationPagesStore, index AgentScheduleQueryer) *ChatContextMigrationJob {
 	return &ChatContextMigrationJob{pages: pages, index: index}
 }
 
@@ -60,24 +60,22 @@ func (j *ChatContextMigrationJob) Execute() error {
 	return nil
 }
 
-// migrateOne rewrites a single page. Returns true when a write occurred.
+// migrateOne rewrites a single page. Returns true when a migration write occurred.
 func (j *ChatContextMigrationJob) migrateOne(page string) (bool, error) {
-	id, fm, err := j.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	moved := false
+	err := j.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		legacy, hasLegacy := fm[legacyChatContextKey]
+		if !hasLegacy {
+			return fm, md, nil
+		}
+		moveLegacyChatContextLocked(fm, legacy)
+		moved = true
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		return false, fmt.Errorf("read %q: %w", page, err)
+		return false, fmt.Errorf("migrate %q: %w", page, err)
 	}
-
-	legacy, hasLegacy := fm[legacyChatContextKey]
-	if !hasLegacy {
-		return false, nil
-	}
-
-	moveLegacyChatContextLocked(fm, legacy)
-
-	if err := j.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
-		return false, fmt.Errorf("write %q: %w", page, err)
-	}
-	return true, nil
+	return moved, nil
 }
 
 // moveLegacyChatContextLocked promotes the legacy ai_agent_chat_context value
