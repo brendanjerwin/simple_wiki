@@ -372,7 +372,58 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 
 // migrateContainerIfNeeded sets is_container = true on a container if not already set.
 // Returns true if the container was migrated.
+// Uses ModifyFrontMatterAndMarkdown when available for atomic read-modify-write
+// under the page lock; falls back to the legacy read-then-write path for mocks
+// that do not implement the modifier interface.
 func (j *InventoryNormalizationJob) migrateContainerIfNeeded(containerID string) bool {
+	if modifier, ok := j.deps.(inventoryNormalizerPageModifier); ok {
+		return j.migrateContainerIfNeededAtomic(modifier, containerID)
+	}
+	return j.migrateContainerIfNeededLegacy(containerID)
+}
+
+// migrateContainerIfNeededAtomic is the race-free implementation using the page lock.
+func (j *InventoryNormalizationJob) migrateContainerIfNeededAtomic(modifier inventoryNormalizerPageModifier, containerID string) bool {
+	var migrated bool
+	err := modifier.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(containerID), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			return nil, md, errInventorySkipWrite // page does not exist
+		}
+
+		alreadySet, typeErr := isContainerAlreadySet(fm)
+		if typeErr != nil {
+			j.logger.Warn("Container %s has unexpected is_container type: %v", containerID, typeErr)
+			// Treat unexpected type as not set — overwrite with boolean true.
+		}
+		if alreadySet {
+			return fm, md, errInventorySkipWrite // nothing to migrate
+		}
+
+		inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
+		if !ok {
+			inv = make(map[string]any)
+			fm[inventory.FrontmatterKey] = inv
+		}
+
+		inv["is_container"] = true
+		migrated = true
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
+
+	if errors.Is(err, errInventorySkipWrite) {
+		return false
+	}
+	if err != nil {
+		j.logger.Error("Failed to write frontmatter for container %s during migration: %v", containerID, err)
+		return false
+	}
+
+	return migrated
+}
+
+// migrateContainerIfNeededLegacy is the legacy implementation without a page lock.
+// Used by test mocks that do not implement ModifyFrontMatterAndMarkdown.
+func (j *InventoryNormalizationJob) migrateContainerIfNeededLegacy(containerID string) bool {
 	_, fm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
@@ -643,7 +694,82 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 
 // processContainerForItemRemoval processes a single container and removes items that have explicit container references.
 // Returns the count of removed items and any error from the operation.
+// Uses ModifyFrontMatterAndMarkdown when available for atomic read-modify-write
+// under the page lock; falls back to the legacy read-then-write path for mocks
+// that do not implement the modifier interface.
 func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID string) (int, error) {
+	if modifier, ok := j.deps.(inventoryNormalizerPageModifier); ok {
+		return j.processContainerForItemRemovalAtomic(modifier, containerID)
+	}
+	return j.processContainerForItemRemovalLegacy(containerID)
+}
+
+// processContainerForItemRemovalAtomic is the race-free implementation using the page lock.
+// It inlines the removal logic from removeAndWriteItems to keep it inside the lock.
+func (j *InventoryNormalizationJob) processContainerForItemRemovalAtomic(modifier inventoryNormalizerPageModifier, containerID string) (int, error) {
+	var removedCount int
+	err := modifier.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(containerID), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			return nil, md, errInventorySkipWrite // page does not exist
+		}
+
+		inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
+		if !ok {
+			return fm, md, errInventorySkipWrite // no inventory section
+		}
+
+		items, ok := j.extractItemsArray(inv)
+		if !ok || len(items) == 0 {
+			return fm, md, errInventorySkipWrite // no items to process
+		}
+
+		// findItemsWithContainerReference reads ITEM pages (different locks — no deadlock).
+		itemsToRemove := j.findItemsWithContainerReference(containerID, items)
+		if len(itemsToRemove) == 0 {
+			return fm, md, errInventorySkipWrite // nothing to remove
+		}
+
+		var newItems []any
+		for _, item := range items {
+			s, ok := item.(string)
+			if !ok {
+				newItems = append(newItems, item)
+				continue
+			}
+			mungedItem, err := wikiidentifiers.MungeIdentifier(s)
+			if err != nil {
+				newItems = append(newItems, item)
+				continue
+			}
+			if itemsToRemove[mungedItem] {
+				removedCount++
+				j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
+				continue
+			}
+			newItems = append(newItems, item)
+		}
+
+		if removedCount == 0 {
+			return fm, md, errInventorySkipWrite
+		}
+
+		inv["items"] = newItems
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
+
+	if errors.Is(err, errInventorySkipWrite) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
+	}
+
+	return removedCount, nil
+}
+
+// processContainerForItemRemovalLegacy is the legacy implementation without a page lock.
+// Used by test mocks that do not implement ModifyFrontMatterAndMarkdown.
+func (j *InventoryNormalizationJob) processContainerForItemRemovalLegacy(containerID string) (int, error) {
 	// Read the container's frontmatter
 	_, containerFm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {

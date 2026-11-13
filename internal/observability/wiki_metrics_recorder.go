@@ -23,14 +23,22 @@ const (
 	requiredDependencyCount = 3
 )
 
+// wikiMetricsPageModifier is the atomic modifier contract for Persist.
+// Implemented by pagestore.Store but not by PageWriter, so it is accessed
+// via type assertion in the constructor.
+type wikiMetricsPageModifier interface {
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
 // WikiMetricsRecorder provides lightweight metrics persistence to a wiki page.
 // This allows tracking basic statistics even when OTEL is unavailable, and provides
 // an audit trail directly within the wiki itself.
 type WikiMetricsRecorder struct {
-	pageWriter wikipage.PageWriter
-	pageReader PageReader
-	logger     Logger
-	jobQueue   *jobs.JobQueueCoordinator
+	pageWriter     wikipage.PageWriter
+	pageReader     PageReader
+	atomicModifier wikiMetricsPageModifier // non-nil when pageWriter supports atomic FM+MD writes
+	logger         Logger
+	jobQueue       *jobs.JobQueueCoordinator
 
 	// In-memory counters (atomically updated)
 	httpRequestsTotal   atomic.Int64
@@ -93,13 +101,17 @@ func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader PageReade
 		return nil, errors.New("pageWriter, pageReader, and jobQueue must all be provided together or all be nil")
 	}
 
-	return &WikiMetricsRecorder{
+	r := &WikiMetricsRecorder{
 		pageWriter:    pageWriter,
 		pageReader:    pageReader,
 		jobQueue:      jobQueue,
 		logger:        logger,
 		lastPersisted: time.Now(),
-	}, nil
+	}
+	if m, ok := pageWriter.(wikiMetricsPageModifier); ok {
+		r.atomicModifier = m
+	}
+	return r, nil
 }
 
 // RecordHTTPRequest increments the HTTP request counter.
@@ -186,6 +198,10 @@ func (r *WikiMetricsRecorder) hasPageAccess() bool {
 // If the page exists, it only updates the frontmatter without touching the markdown.
 // Only persists if counters have changed since last persist (dirty flag).
 //
+// When the underlying store supports ModifyFrontMatterAndMarkdown, the entire
+// read-modify-write is performed atomically under the page lock (persistAtomic).
+// Otherwise the legacy separate-read-then-write path is used (persistLegacy).
+//
 // Note: There's a potential race between checking and clearing the dirty flag where new
 // records could arrive. This is acceptable: data is never lost since counters are atomic,
 // and the new data will be persisted on the next cycle when dirty is set again.
@@ -197,6 +213,58 @@ func (r *WikiMetricsRecorder) Persist() error {
 		return nil
 	}
 
+	if r.atomicModifier != nil {
+		return r.persistAtomic()
+	}
+	return r.persistLegacy()
+}
+
+// persistAtomic performs the read-modify-write under the page lock.
+func (r *WikiMetricsRecorder) persistAtomic() error {
+	var needsTemplateLog bool
+	err := r.atomicModifier.ModifyFrontMatterAndMarkdown(ObservabilityMetricsPage, func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+
+		trimmedMD := strings.TrimSpace(string(md))
+		trimmedDefault := strings.TrimSpace(wikipage.DefaultPageTemplate)
+		needsTemplate := trimmedMD == "" || trimmedMD == trimmedDefault
+
+		r.buildFrontmatter(fm)
+
+		newMD := md
+		if needsTemplate {
+			newMD = wikipage.Markdown(r.buildMarkdownTemplate())
+			needsTemplateLog = true
+		}
+
+		return fm, newMD, nil
+	}, wikipage.AnonymousIdentity)
+
+	if err != nil {
+		if r.logger != nil {
+			r.logger.Error("Failed to persist wiki metrics: %v", err)
+		}
+		return err
+	}
+
+	if needsTemplateLog && r.logger != nil {
+		r.logger.Info("Created observability metrics page with template")
+	}
+
+	r.dirty.Store(false)
+	r.lastPersisted = time.Now()
+	if r.logger != nil {
+		r.logger.Info("Persisted observability metrics to wiki page")
+	}
+	return nil
+}
+
+// persistLegacy is the original persistence path for stores that do not support
+// ModifyFrontMatterAndMarkdown (e.g. test mocks). It reads and writes separately
+// without holding a page lock.
+func (r *WikiMetricsRecorder) persistLegacy() error {
 	existingFM, needsTemplate, err := r.readExistingPage()
 	if err != nil {
 		return err
