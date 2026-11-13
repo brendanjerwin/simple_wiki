@@ -35,6 +35,15 @@ const (
 	fmEventsKey     = "events"
 )
 
+// frontmatterBackgroundActivityPath are the keys used to reach the
+// background-activity list in the frontmatter map:
+// fm["agent"]["chat_context"]["background_activity"].
+const (
+	fmAgentKey              = "agent"
+	fmChatContextKey        = "chat_context"
+	fmBackgroundActivityKey = "background_activity"
+)
+
 // computePageHash computes a SHA256 hash covering both frontmatter and markdown,
 // returned as a lowercase hex string. Used for optimistic concurrency control.
 // Including frontmatter ensures that frontmatter-only edits are visible to
@@ -671,6 +680,40 @@ func stripChecklistEvents(fm map[string]any) map[string]any {
 	return out
 }
 
+// stripBackgroundActivity returns a shallow-copy of fm with the
+// agent.chat_context.background_activity slice removed. Only the layers that
+// contain the key are deep-copied; unchanged subtrees and sibling keys share
+// memory with the original. The original fm map is never mutated.
+//
+// If fm contains no agent.chat_context subtree, or no background_activity
+// key inside it, the original map is returned unchanged (zero allocation path).
+func stripBackgroundActivity(fm map[string]any) map[string]any {
+	if fm == nil {
+		return nil
+	}
+
+	agent, ok := asMap(fm, fmAgentKey)
+	if !ok {
+		return fm
+	}
+
+	chatCtx, ok := asMap(agent, fmChatContextKey)
+	if !ok {
+		return fm
+	}
+
+	if _, hasBG := chatCtx[fmBackgroundActivityKey]; !hasBG {
+		return fm
+	}
+
+	newChatCtx := copyMapExcept(chatCtx, fmBackgroundActivityKey)
+	newAgent := copyMapExcept(agent)
+	newAgent[fmChatContextKey] = newChatCtx
+	out := copyMapExcept(fm)
+	out[fmAgentKey] = newAgent
+	return out
+}
+
 // ReadPage implements the ReadPage RPC.
 func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
 	// page and identifier are mutually exclusive via oneof; exactly one must be set.
@@ -706,6 +749,14 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 	frontmatterForResponse := frontmatter
 	if !req.GetIncludeEvents() {
 		frontmatterForResponse = stripChecklistEvents(map[string]any(frontmatter))
+	}
+
+	// Strip agent.chat_context.background_activity from the response unless
+	// the caller explicitly requested it. The list is append-only and grows
+	// monotonically with every heartbeat/reflection cycle (issue #1430);
+	// excluding it by default keeps response size bounded.
+	if !req.GetIncludeBackgroundActivity() {
+		frontmatterForResponse = stripBackgroundActivity(map[string]any(frontmatterForResponse))
 	}
 
 	// Convert frontmatter to TOML
