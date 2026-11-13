@@ -5502,6 +5502,137 @@ var _ = Describe("Server", func() {
 				Expect(len(respManyEvents.FrontMatterToml)).To(Equal(len(respFewEvents.FrontMatterToml)))
 			})
 		})
+
+		When("the page has background_activity entries in its frontmatter", func() {
+			var storedChatCtx map[string]any
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Agent Page"
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"title": "Agent Page",
+					"agent": map[string]any{
+						"chat_context": map[string]any{
+							"last_conversation_summary": "working on project",
+							"background_activity": []any{
+								map[string]any{"schedule_id": "daily", "status": "OK", "summary": "ran fine"},
+							},
+						},
+					},
+				}
+
+				agent, ok := mockPageReaderMutator.Frontmatter["agent"].(map[string]any)
+				Expect(ok).To(BeTrue(), "Frontmatter[agent] should be map[string]any")
+				storedChatCtx, ok = agent["chat_context"].(map[string]any)
+				Expect(ok).To(BeTrue(), "agent[chat_context] should be map[string]any")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not include background_activity in the response TOML by default", func() {
+				Expect(resp.FrontMatterToml).NotTo(ContainSubstring("background_activity"))
+			})
+
+			It("should still include other chat_context fields in the response TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("last_conversation_summary"))
+			})
+
+			It("should not mutate the stored frontmatter (background_activity still present in mock)", func() {
+				Expect(storedChatCtx).To(HaveKey("background_activity"))
+			})
+		})
+
+		When("the page has background_activity and include_background_activity is true", func() {
+			BeforeEach(func() {
+				req = &apiv1.ReadPageRequest{
+					PageSelector:              &apiv1.ReadPageRequest_Page{Page: "test-page"},
+					IncludeBackgroundActivity: true,
+				}
+				mockPageReaderMutator.Markdown = "# Agent Page"
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"agent": map[string]any{
+						"chat_context": map[string]any{
+							"background_activity": []any{
+								map[string]any{"schedule_id": "daily", "status": "OK"},
+							},
+						},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include background_activity in the response TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("background_activity"))
+			})
+		})
+
+		When("appending N background_activity entries does not grow ReadPage response size", func() {
+			makeBGEntries := func(n int) []any {
+				entries := make([]any, n)
+				for i := range entries {
+					entries[i] = map[string]any{
+						"schedule_id": "daily",
+						"status":      "OK",
+						"summary":     strings.Repeat("x", 1500),
+					}
+				}
+				return entries
+			}
+
+			var respFewEntries, respManyEntries *apiv1.ReadPageResponse
+
+			BeforeEach(func() {
+				var innerErr error
+				var innerServer *v1.Server
+				innerServer, innerErr = v1.NewServer(
+					v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
+					mockPageReaderMutator,
+					noOpBleveIndexQueryer{},
+					mockFrontmatterIndexQueryer,
+					lumber.NewConsoleLogger(lumber.WARN),
+					noOpChatBufferManager{},
+					noOpPageOpener{},
+				)
+				Expect(innerErr).NotTo(HaveOccurred())
+
+				// First call: few background_activity entries
+				mockPageReaderMutator.Markdown = "# Agent Page"
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"agent": map[string]any{
+						"chat_context": map[string]any{
+							"last_conversation_summary": "some context",
+							"background_activity":       makeBGEntries(5),
+						},
+					},
+				}
+				respFewEntries, innerErr = innerServer.ReadPage(ctx, &apiv1.ReadPageRequest{
+					PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
+				})
+				Expect(innerErr).NotTo(HaveOccurred())
+
+				// Second call: many background_activity entries (10x more)
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"agent": map[string]any{
+						"chat_context": map[string]any{
+							"last_conversation_summary": "some context",
+							"background_activity":       makeBGEntries(50),
+						},
+					},
+				}
+				respManyEntries, innerErr = innerServer.ReadPage(ctx, &apiv1.ReadPageRequest{
+					PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
+				})
+				Expect(innerErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the same TOML size regardless of background_activity entry count", func() {
+				Expect(len(respManyEntries.FrontMatterToml)).To(Equal(len(respFewEntries.FrontMatterToml)))
+			})
+		})
 	})
 
 	Describe("RenderMarkdown", func() {

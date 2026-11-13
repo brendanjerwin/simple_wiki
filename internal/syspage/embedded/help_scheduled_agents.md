@@ -94,6 +94,8 @@ WARN ────────┘
 
 Every `RUNNING` transition appends an entry to `agent.chat_context.background_activity` — a 50-entry rolling log on the page. Interactive chat preambles include this log so users see what background agents have been doing.
 
+> **ReadPage note:** `api_v1_PageManagementService_ReadPage` strips `agent.chat_context.background_activity` from its response by default to keep response sizes bounded (the log grows with every heartbeat and reflection cycle). Set `include_background_activity: true` in the request only when you need to inspect the raw log directly. Use `api_v1_AgentMetadataService_GetChatContext` to read the full log programmatically — it always returns all entries.
+
 Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackgroundActivitySummary` before they finish:
 
 ```json

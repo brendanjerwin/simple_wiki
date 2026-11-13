@@ -259,6 +259,16 @@ message ReadPageRequest {
   // Set to true only when you need to inspect the raw op-log (e.g. connector
   // sync diagnostics); for all other reads leave this unset.
   bool include_events = 3;
+
+  // include_background_activity controls whether
+  // agent.chat_context.background_activity is included in the
+  // front_matter_toml response. Defaults to false. When false the array is
+  // stripped before serialization so the response size does not grow
+  // monotonically with every heartbeat/reflection cycle.
+  // Set to true only when you need to inspect the raw activity log; for all
+  // other reads leave this unset. Use GetChatContext when you need the full
+  // log programmatically.
+  bool include_background_activity = 4;
 }
 
 message ReadPageResponse {
