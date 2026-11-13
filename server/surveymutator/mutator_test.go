@@ -42,29 +42,20 @@ func (s *fakeStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageId
 	return id, cloneFrontMatter(fm), nil
 }
 
-func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
+func (s *fakeStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.pages[id] = cloneFrontMatter(fm)
+	fm, ok := s.pages[id]
+	if !ok {
+		fm = make(wikipage.FrontMatter)
+	}
+	newFM, _, err := fn(cloneFrontMatter(fm), "")
+	if err != nil {
+		return err
+	}
+	s.pages[id] = cloneFrontMatter(newFM)
 	s.writes++
 	return nil
-}
-
-func (*fakeStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	return id, "", nil
-}
-
-func (*fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
-	return nil
-}
-
-func (*fakeStore) DeletePage(wikipage.PageIdentifier) error {
-	return nil
-}
-
-func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
-	_, err := modifier(nil, "")
-	return err
 }
 
 func cloneFrontMatter(fm wikipage.FrontMatter) wikipage.FrontMatter {
@@ -340,6 +331,28 @@ var _ = Describe("Mutator", func() {
 
 		It("should not return a survey", func() {
 			Expect(result).To(BeNil())
+		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("when mutating a survey that does not exist", func() {
+		BeforeEach(func() {
+			result, err = mutator.AddField(context.Background(), "weekly_menu", "nonexistent_survey", &apiv1.SurveyField{Name: "choice", Type: "text"}, nil)
+		})
+
+		It("should return ErrSurveyNotFound", func() {
+			Expect(err).To(MatchError(ErrSurveyNotFound))
+		})
+
+		It("should not return a survey", func() {
+			Expect(result).To(BeNil())
+		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
 		})
 	})
 

@@ -7,10 +7,43 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/pageimport"
 	"github.com/brendanjerwin/simple_wiki/pkg/logging"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+// noAtomicPageStore implements wikipage.PageReaderMutator without
+// ModifyFrontMatterAndMarkdown, so it does NOT satisfy pageImportFMModifier.
+// Used to test the type-assertion failure path in processRecord.
+type noAtomicPageStore struct {
+	writes int
+}
+
+func (*noAtomicPageStore) ReadFrontMatter(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	return "", nil, nil
+}
+
+func (*noAtomicPageStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return "", "", nil
+}
+
+func (s *noAtomicPageStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
+	s.writes++
+	return nil
+}
+
+func (s *noAtomicPageStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
+	s.writes++
+	return nil
+}
+
+func (*noAtomicPageStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+
+func (s *noAtomicPageStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	s.writes++
+	return nil
+}
 
 var _ = Describe("SinglePageImportJob", func() {
 	var (
@@ -651,7 +684,7 @@ var _ = Describe("SinglePageImportJob", func() {
 			})
 		})
 
-		When("WriteFrontMatter fails for a record", func() {
+		When("ModifyFrontMatterAndMarkdown fails for a record", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -676,15 +709,15 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should include the error in failed records", func() {
 				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write frontmatter"))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("permission denied"))
 			})
 		})
 
-		When("WriteMarkdown fails for a new inv_item page", func() {
+		When("ModifyFrontMatterAndMarkdown fails for a new inv_item page", func() {
 			var err error
 
 			BeforeEach(func() {
-				mockDeps.writeMarkdownErr = os.ErrPermission
+				mockDeps.writeFrontMatterErr = os.ErrPermission
 
 				record := pageimport.ParsedRecord{
 					RowNumber:  1,
@@ -703,7 +736,7 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should include the error in failed records", func() {
 				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write markdown"))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("permission denied"))
 			})
 		})
 
@@ -736,11 +769,11 @@ var _ = Describe("SinglePageImportJob", func() {
 			})
 		})
 
-		When("ReadFrontMatter fails with a non-NotExist error", func() {
+		When("ModifyFrontMatterAndMarkdown fails to process an existing page", func() {
 			var err error
 
 			BeforeEach(func() {
-				mockDeps.readFrontMatterErr = errors.New("permission denied")
+				mockDeps.writeFrontMatterErr = errors.New("permission denied")
 
 				record := pageimport.ParsedRecord{
 					RowNumber:  1,
@@ -761,7 +794,42 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should track the failure in the accumulator", func() {
 				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to read existing frontmatter"))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("permission denied"))
+			})
+		})
+
+		When("the page store does not support atomic frontmatter modification", func() {
+			var (
+				err   error
+				store *noAtomicPageStore
+			)
+
+			BeforeEach(func() {
+				store = &noAtomicPageStore{}
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "some_page",
+					Frontmatter: map[string]any{
+						"title": "Test",
+					},
+				}
+				job, constructErr := NewSinglePageImportJob(record, store, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should record the failure in the accumulator", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("does not support atomic frontmatter modification"))
+			})
+
+			It("should not write", func() {
+				Expect(store.writes).To(Equal(0))
 			})
 		})
 
