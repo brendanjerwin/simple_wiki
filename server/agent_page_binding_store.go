@@ -56,11 +56,11 @@ type PageAgentBinding struct {
 // page. Per ADR-0009 it is the exclusive write-path for that subtree; the
 // generic Frontmatter API rejects writes to the reserved agent.* namespace.
 type AgentPageBindingStore struct {
-	pages agentSchedulePagesStore
+	pages agentPageBindingPagesStore
 }
 
 // NewAgentPageBindingStore constructs a store on top of the given page accessor.
-func NewAgentPageBindingStore(pages agentSchedulePagesStore) *AgentPageBindingStore {
+func NewAgentPageBindingStore(pages agentPageBindingPagesStore) *AgentPageBindingStore {
 	return &AgentPageBindingStore{pages: pages}
 }
 
@@ -77,39 +77,43 @@ func (s *AgentPageBindingStore) GetBinding(page string) (*PageAgentBinding, erro
 // SetBinding writes the binding into agent.chat_agent with server-stamped
 // updated_at. Returns the stamped timestamp. An empty AgentID with no OCC
 // guard removes the binding.
+//
+// The OCC check and the write both happen inside ModifyFrontMatterAndMarkdown,
+// so the read, guard evaluation, and write-back are atomic under the page lock.
 func (s *AgentPageBindingStore) SetBinding(page string, input *AgentBindingInput) (string, error) {
 	if input == nil {
 		return "", errors.New("binding input is required")
 	}
 
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	var updatedAt string
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		agentNS := ensureAgentNamespace(fm)
+
+		existing := extractAgentBinding(fm)
+		if input.ExpectedUpdatedAt != "" {
+			if existing == nil || existing.UpdatedAt != input.ExpectedUpdatedAt {
+				return nil, md, ErrBindingConflict
+			}
+		}
+
+		updatedAt = time.Now().UTC().Format(time.RFC3339)
+
+		if input.AgentID == "" && input.ExpectedUpdatedAt == "" {
+			delete(agentNS, agentChatAgentKey)
+		} else {
+			agentNS[agentChatAgentKey] = map[string]any{
+				bindingAgentIDKey:     input.AgentID,
+				bindingDisplayNameKey: input.DisplayName,
+				bindingUpdatedByKey:   input.UpdatedBy,
+				bindingUpdatedAtKey:   updatedAt,
+			}
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		return "", fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-
-	agentNS := ensureAgentNamespace(fm)
-
-	existing := extractAgentBinding(fm)
-	if input.ExpectedUpdatedAt != "" {
-		if existing == nil || existing.UpdatedAt != input.ExpectedUpdatedAt {
+		if errors.Is(err, ErrBindingConflict) {
 			return "", ErrBindingConflict
 		}
-	}
-
-	updatedAt := time.Now().UTC().Format(time.RFC3339)
-
-	if input.AgentID == "" && input.ExpectedUpdatedAt == "" {
-		delete(agentNS, agentChatAgentKey)
-	} else {
-		agentNS[agentChatAgentKey] = map[string]any{
-			bindingAgentIDKey:     input.AgentID,
-			bindingDisplayNameKey: input.DisplayName,
-			bindingUpdatedByKey:   input.UpdatedBy,
-			bindingUpdatedAtKey:   updatedAt,
-		}
-	}
-
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return "", fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return updatedAt, nil

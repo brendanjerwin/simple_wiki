@@ -55,6 +55,24 @@ type agentChatContextPagesStore interface {
 	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
 }
 
+// agentPageBindingPagesStore is the page-access contract for
+// AgentPageBindingStore. SetBinding uses ModifyFrontMatterAndMarkdown for
+// atomic read-modify-write under the page's canonical lock, eliminating the
+// TOCTOU race tracked by issue #1428. ReadFrontMatter is used by the
+// read-only GetBinding method only.
+type agentPageBindingPagesStore interface {
+	ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
+// chatContextMigrationPagesStore is the page-access contract for
+// ChatContextMigrationJob. migrateOne uses ModifyFrontMatterAndMarkdown for
+// atomic read-modify-write under the page's canonical lock, eliminating the
+// TOCTOU race tracked by issue #1428.
+type chatContextMigrationPagesStore interface {
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
 // BackgroundActivitySink is the subset of AgentChatContextStore that the
 // schedule store calls into when a terminal transition needs to record a
 // background-activity entry. Defined as an interface so the store has no hard
