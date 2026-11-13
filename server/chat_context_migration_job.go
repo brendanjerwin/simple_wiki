@@ -22,12 +22,12 @@ const legacyChatContextKey = "ai_agent_chat_context"
 // preserved unchanged on the destination side; the legacy key is still
 // removed so the next run is fast.
 type ChatContextMigrationJob struct {
-	pages chatContextMigrationPagesStore
+	pages chatContextMigrationModifier
 	index AgentScheduleQueryer
 }
 
 // NewChatContextMigrationJob constructs a migration job.
-func NewChatContextMigrationJob(pages chatContextMigrationPagesStore, index AgentScheduleQueryer) *ChatContextMigrationJob {
+func NewChatContextMigrationJob(pages chatContextMigrationModifier, index AgentScheduleQueryer) *ChatContextMigrationJob {
 	return &ChatContextMigrationJob{pages: pages, index: index}
 }
 
