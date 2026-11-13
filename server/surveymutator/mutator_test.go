@@ -332,6 +332,28 @@ var _ = Describe("Mutator", func() {
 		It("should not return a survey", func() {
 			Expect(result).To(BeNil())
 		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("when mutating a survey that does not exist", func() {
+		BeforeEach(func() {
+			result, err = mutator.AddField(context.Background(), "weekly_menu", "nonexistent_survey", &apiv1.SurveyField{Name: "choice", Type: "text"}, nil)
+		})
+
+		It("should return ErrSurveyNotFound", func() {
+			Expect(err).To(MatchError(ErrSurveyNotFound))
+		})
+
+		It("should not return a survey", func() {
+			Expect(result).To(BeNil())
+		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
+		})
 	})
 
 	Describe("when reordering outside the field range", func() {

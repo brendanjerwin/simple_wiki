@@ -635,6 +635,135 @@ var _ = Describe("Mutator", func() {
 		})
 	})
 
+	Describe("mutateMap callback error paths", func() {
+		Describe("when the named map does not exist and requireExistingMap is used", func() {
+			var (
+				resultMap *apiv1.Map
+				mutErr    error
+			)
+
+			BeforeEach(func() {
+				// "garden_plan" page exists but has no maps data
+				_, resultMap, mutErr = mutator.UpdateMarker(ctx, "garden_plan", "yard", "nonexistent-uid", &apiv1.MapMarker{
+					Label:    "X",
+					Position: &apiv1.GeoPoint{Lat: 1.0, Lon: 1.0},
+				}, nil)
+			})
+
+			It("should return ErrMapNotFound", func() {
+				Expect(mutErr).To(MatchError(ErrMapNotFound))
+			})
+
+			It("should not return a map", func() {
+				Expect(resultMap).To(BeNil())
+			})
+
+			It("should not write", func() {
+				Expect(store.writes).To(Equal(0))
+			})
+		})
+
+		Describe("when the expected_updated_at timestamp does not match", func() {
+			var (
+				resultMap *apiv1.Map
+				mutErr    error
+			)
+
+			BeforeEach(func() {
+				_, _, addErr := mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
+					Label:    "Shed",
+					Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				}, nil, human)
+				Expect(addErr).NotTo(HaveOccurred())
+
+				stale := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+				resultMap, mutErr = mutator.DeleteMarker(ctx, "garden_plan", "yard", "any-uid", &stale)
+			})
+
+			It("should return a FailedPrecondition error", func() {
+				Expect(mutErr).To(MatchError(ContainSubstring("expected_updated_at mismatch")))
+			})
+
+			It("should not return a map", func() {
+				Expect(resultMap).To(BeNil())
+			})
+
+			It("should not write beyond the initial AddMarker", func() {
+				Expect(store.writes).To(Equal(1))
+			})
+		})
+
+		Describe("when the mutate function returns an error", func() {
+			var (
+				resultMap *apiv1.Map
+				mutErr    error
+			)
+
+			BeforeEach(func() {
+				_, _, addErr := mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
+					Label:    "Shed",
+					Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				}, nil, human)
+				Expect(addErr).NotTo(HaveOccurred())
+
+				resultMap, mutErr = mutator.DeleteMarker(ctx, "garden_plan", "yard", "nonexistent-uid", nil)
+			})
+
+			It("should return ErrElementNotFound", func() {
+				Expect(mutErr).To(MatchError(ErrElementNotFound))
+			})
+
+			It("should not return a map", func() {
+				Expect(resultMap).To(BeNil())
+			})
+
+			It("should not write beyond the initial AddMarker", func() {
+				Expect(store.writes).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("DeleteMap error paths", func() {
+		Describe("when the map does not exist", func() {
+			var mutErr error
+
+			BeforeEach(func() {
+				mutErr = mutator.DeleteMap(ctx, "garden_plan", "nonexistent-map", nil)
+			})
+
+			It("should return ErrMapNotFound", func() {
+				Expect(mutErr).To(MatchError(ErrMapNotFound))
+			})
+
+			It("should not write", func() {
+				Expect(store.writes).To(Equal(0))
+			})
+		})
+
+		Describe("when the expected_updated_at timestamp does not match", func() {
+			var mutErr error
+
+			BeforeEach(func() {
+				_, setErr := mutator.SetMapView(ctx, "garden_plan", "yard", &apiv1.MapView{
+					Center: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+					Zoom:   12,
+				}, nil)
+				Expect(setErr).NotTo(HaveOccurred())
+
+				stale := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+				mutErr = mutator.DeleteMap(ctx, "garden_plan", "yard", &stale)
+			})
+
+			It("should return a FailedPrecondition error", func() {
+				Expect(mutErr).To(MatchError(ContainSubstring("expected_updated_at mismatch")))
+			})
+
+			It("should not write beyond the initial SetMapView", func() {
+				Expect(store.writes).To(Equal(1))
+			})
+		})
+	})
+
 	Describe("Tag Isolation", func() {
 		var (
 			markerUID  string
