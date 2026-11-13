@@ -39,10 +39,15 @@ func (e *ScheduleNotFoundError) Error() string {
 }
 
 // agentSchedulePagesStore is the subset of PageReaderMutator the store uses.
-// Only frontmatter read/write is needed; markdown access is not.
+// Upsert and Delete use ModifyFrontMatterAndMarkdown for atomic read-modify-write
+// under the page's canonical lock, eliminating the TOCTOU race tracked by issue
+// #1428. ReadFrontMatter is used by the read-only List method and by
+// transitionLocked; WriteFrontMatter is used by transitionLocked only — see the
+// comment on that method for why it cannot use ModifyFrontMatterAndMarkdown.
 type agentSchedulePagesStore interface {
 	ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
 	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
 }
 
 // agentChatContextPagesStore is the page-access contract for
@@ -65,11 +70,11 @@ type agentPageBindingPagesStore interface {
 	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
 }
 
-// chatContextMigrationPagesStore is the page-access contract for
+// chatContextMigrationModifier is the page-access contract for
 // ChatContextMigrationJob. migrateOne uses ModifyFrontMatterAndMarkdown for
 // atomic read-modify-write under the page's canonical lock, eliminating the
 // TOCTOU race tracked by issue #1428.
-type chatContextMigrationPagesStore interface {
+type chatContextMigrationModifier interface {
 	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
 }
 
@@ -137,36 +142,32 @@ func (s *AgentScheduleStore) Upsert(page string, schedule *apiv1.AgentSchedule) 
 		return errors.New("schedule.id is required")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
-	if err != nil {
-		return fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-	existing, err := decodeSchedules(fm)
-	if err != nil {
-		return err
-	}
-
-	// Strip wiki-managed fields from the input; carry them over from the
-	// existing record if one exists.
-	clean := cloneScheduleClient(schedule)
-	for _, prior := range existing {
-		if prior.GetId() == clean.GetId() {
-			clean.LastRun = prior.GetLastRun()
-			clean.LastStatus = prior.GetLastStatus()
-			clean.LastErrorMessage = prior.GetLastErrorMessage()
-			clean.LastDurationSeconds = prior.GetLastDurationSeconds()
-			break
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, err := decodeSchedules(fm)
+		if err != nil {
+			return nil, md, err
 		}
-	}
 
-	merged := mergeSchedule(existing, clean)
-	if err := writeSchedules(fm, merged); err != nil {
-		return err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
+		// Strip wiki-managed fields from the input; carry them over from the
+		// existing record if one exists.
+		clean := cloneScheduleClient(schedule)
+		for _, prior := range existing {
+			if prior.GetId() == clean.GetId() {
+				clean.LastRun = prior.GetLastRun()
+				clean.LastStatus = prior.GetLastStatus()
+				clean.LastErrorMessage = prior.GetLastErrorMessage()
+				clean.LastDurationSeconds = prior.GetLastDurationSeconds()
+				break
+			}
+		}
+
+		merged := mergeSchedule(existing, clean)
+		if err := writeSchedules(fm, merged); err != nil {
+			return nil, md, err
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
+	if err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
@@ -175,35 +176,34 @@ func (s *AgentScheduleStore) Upsert(page string, schedule *apiv1.AgentSchedule) 
 // Delete removes the schedule with the given id from the page. Idempotent: if
 // no schedule with that id exists, returns nil.
 func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
-	if err != nil {
-		return fmt.Errorf(errReadFrontmatterFmt, page, err)
-	}
-	existing, err := decodeSchedules(fm)
-	if err != nil {
-		return err
-	}
-
-	filtered := existing[:0]
-	for _, sc := range existing {
-		if sc.GetId() == scheduleID {
-			continue
+	dirty := false
+	err := s.pages.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		existing, err := decodeSchedules(fm)
+		if err != nil {
+			return nil, md, err
 		}
-		filtered = append(filtered, sc)
-	}
-	if len(filtered) == len(existing) {
-		// Nothing to delete; do not rewrite the file.
-		return nil
-	}
-	if err := writeSchedules(fm, filtered); err != nil {
-		return err
-	}
-	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
+
+		filtered := existing[:0]
+		for _, sc := range existing {
+			if sc.GetId() == scheduleID {
+				continue
+			}
+			filtered = append(filtered, sc)
+		}
+		if len(filtered) == len(existing) {
+			// Nothing to delete; return fm unchanged.
+			return fm, md, nil
+		}
+		dirty = true
+		if err := writeSchedules(fm, filtered); err != nil {
+			return nil, md, err
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
+	if err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
+	_ = dirty
 	return nil
 }
 
@@ -232,6 +232,16 @@ func (s *AgentScheduleStore) TransitionStatusFrom(page, scheduleID string, expec
 // TransitionStatusFrom. The caller must hold s.mu before calling. When
 // expectedFrom is non-nil the schedule's current status must equal it or an
 // *IllegalScheduleTransitionError is returned without writing.
+//
+// DEADLOCK WARNING — do NOT convert this method to ModifyFrontMatterAndMarkdown.
+// When a terminal status is reached, transitionLocked calls
+// s.completeBackgroundActivityStatus / s.amendBackgroundActivity, which delegate
+// to AgentChatContextStore. Those methods themselves call
+// ModifyFrontMatterAndMarkdown and acquire the page-store lock. If
+// transitionLocked were also wrapped in a ModifyFrontMatterAndMarkdown callback
+// it would hold the page-store lock on entry and then try to acquire it again
+// through the sink — causing a deadlock. The existing s.mu + explicit
+// ReadFrontMatter / WriteFrontMatter pair is intentional and must stay.
 func (s *AgentScheduleStore) transitionLocked(page, scheduleID string, expectedFrom *apiv1.ScheduleStatus, to apiv1.ScheduleStatus, errMessage string, durationSeconds int32) error {
 	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
