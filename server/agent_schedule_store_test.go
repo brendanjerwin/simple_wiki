@@ -862,8 +862,81 @@ var _ = Describe("AgentScheduleStore", func() {
 		})
 	})
 
+	Describe("Upsert error handling", func() {
+		Describe("when agent.schedules on the page has the wrong type", func() {
+			var err error
+			var fmBefore, fmAfter wikipage.FrontMatter
+
+			BeforeEach(func() {
+				_ = pages.WriteFrontMatter("malformed", wikipage.FrontMatter{
+					"agent": map[string]any{
+						"schedules": "not-a-list",
+					},
+				}, wikipage.AnonymousIdentity)
+				_, fmBefore, _ = pages.ReadFrontMatter("malformed")
+
+				err = store.Upsert("malformed", &apiv1.AgentSchedule{Id: "s1", Cron: "0 * * * * *", Enabled: true})
+
+				_, fmAfter, _ = pages.ReadFrontMatter("malformed")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention the unexpected type", func() {
+				Expect(err.Error()).To(ContainSubstring("unexpected type"))
+			})
+
+			It("should leave the page frontmatter unmodified", func() {
+				Expect(fmAfter).To(Equal(fmBefore))
+			})
+		})
+
+		Describe("when the schedule cannot be encoded", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = store.Upsert("p", &apiv1.AgentSchedule{
+					Id:     "s1",
+					Cron:   "0 * * * * *",
+					Prompt: string([]byte{0xff, 0xfe}),
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should name the schedule that failed to encode", func() {
+				Expect(err.Error()).To(ContainSubstring(`encode schedule "s1"`))
+			})
+		})
+	})
+
 	Describe("Delete error handling", func() {
-		Describe("when WriteFrontMatter returns an error", func() {
+		Describe("when agent.schedules on the page has the wrong type", func() {
+			var err error
+
+			BeforeEach(func() {
+				_ = pages.WriteFrontMatter("malformed", wikipage.FrontMatter{
+					"agent": map[string]any{
+						"schedules": "not-a-list",
+					},
+				}, wikipage.AnonymousIdentity)
+				err = store.Delete("malformed", "anything")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention the unexpected type", func() {
+				Expect(err.Error()).To(ContainSubstring("unexpected type"))
+			})
+		})
+
+		Describe("when the page store write fails", func() {
 			var err error
 
 			BeforeEach(func() {
