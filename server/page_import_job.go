@@ -185,26 +185,8 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 				fm["identifier"] = identifier
 			}
 
-			// Apply template logic for inv_item
-			if record.Template == pageimport.InvItemTemplate {
-				EnsureInventoryFrontmatterStructure(fm)
-			}
-
-			// Merge frontmatter from record (upsert semantics)
-			if mergeErr := j.mergeFrontmatter(fm, record.Frontmatter); mergeErr != nil {
-				return nil, md, fmt.Errorf("failed to merge frontmatter: %w", mergeErr)
-			}
-
-			// Handle fields to delete
-			for _, fieldPath := range record.FieldsToDelete {
-				j.deleteField(fm, fieldPath)
-			}
-
-			// Handle array operations
-			for _, op := range record.ArrayOps {
-				if applyErr := j.applyArrayOperation(fm, op); applyErr != nil {
-					return nil, md, fmt.Errorf("failed to apply array operation on %s: %w", op.FieldPath, applyErr)
-				}
+			if applyErr := j.applyRecordToFrontmatter(fm, record); applyErr != nil {
+				return nil, md, applyErr
 			}
 
 			// Set markdown template for new inventory items
@@ -224,6 +206,34 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 		j.trackCreated(identifier)
 	} else {
 		j.trackUpdated(identifier)
+	}
+
+	return nil
+}
+
+// applyRecordToFrontmatter applies the template structure, merge, field deletes,
+// and array operations from record onto fm. fm must already be initialised.
+func (j *SinglePageImportJob) applyRecordToFrontmatter(fm wikipage.FrontMatter, record pageimport.ParsedRecord) error {
+	// Apply template logic for inv_item
+	if record.Template == pageimport.InvItemTemplate {
+		EnsureInventoryFrontmatterStructure(fm)
+	}
+
+	// Merge frontmatter from record (upsert semantics)
+	if mergeErr := j.mergeFrontmatter(fm, record.Frontmatter); mergeErr != nil {
+		return fmt.Errorf("failed to merge frontmatter: %w", mergeErr)
+	}
+
+	// Handle fields to delete
+	for _, fieldPath := range record.FieldsToDelete {
+		j.deleteField(fm, fieldPath)
+	}
+
+	// Handle array operations
+	for _, op := range record.ArrayOps {
+		if applyErr := j.applyArrayOperation(fm, op); applyErr != nil {
+			return fmt.Errorf("failed to apply array operation on %s: %w", op.FieldPath, applyErr)
+		}
 	}
 
 	return nil
