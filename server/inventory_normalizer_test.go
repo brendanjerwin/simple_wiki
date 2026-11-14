@@ -178,6 +178,40 @@ var _ = Describe("InventoryNormalizer", func() {
 	})
 
 	Describe("ensureIsContainerField", func() {
+		When("the deps does not support atomic modification", func() {
+			// Covers: "page store does not support atomic frontmatter modification" error
+			// mockNormalizationDeps does not implement inventoryNormalizerPageModifier.
+			var err error
+
+			BeforeEach(func() {
+				nonAtomicDeps := newMockNormalizationDeps()
+				nonAtomicNormalizer := NewInventoryNormalizer(nonAtomicDeps, logger)
+				err = nonAtomicNormalizer.ensureIsContainerField("any_page")
+			})
+
+			It("should return an error about missing atomic support", func() {
+				Expect(err).To(MatchError(ContainSubstring("page store does not support atomic frontmatter modification")))
+			})
+		})
+
+		When("the page does not exist and the modifier passes nil FM", func() {
+			// Covers: callback's `if fm == nil { return nil, md, errInventorySkipWrite }`
+			// mockPageReaderMutator converts nil FM to empty map before calling the callback,
+			// so we use a wrapper that preserves nil when the page is absent.
+			var err error
+
+			BeforeEach(func() {
+				nilDeps := &nilFMModifier{mockPageReaderMutator: newMockPageReaderMutator()}
+				// No page set — modifier will pass nil FM to the callback.
+				nilNormalizer := NewInventoryNormalizer(nilDeps, logger)
+				err = nilNormalizer.ensureIsContainerField("nonexistent_page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
 		When("the page does not exist", func() {
 			var err error
 
