@@ -12,6 +12,55 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// atomicPageModifier wraps mockPageReaderWriter and adds ModifyFrontMatterAndMarkdown,
+// enabling the recorder to use the persistAtomic path rather than persistLegacy.
+// When the page does not exist, it passes nil FM to the callback — matching the
+// real pagestore.Store behaviour that persistAtomic must handle.
+type atomicPageModifier struct {
+	*mockPageReaderWriter
+	failModify bool
+	failErr    error
+}
+
+func (a *atomicPageModifier) ModifyFrontMatterAndMarkdown(
+	id wikipage.PageIdentifier,
+	fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
+	_ wikipage.Identity,
+) error {
+	if a.failModify {
+		return a.failErr
+	}
+
+	// Pass nil FM when the page doesn't exist — real pagestore behaviour.
+	var currentFM wikipage.FrontMatter
+	if fm, ok := a.frontmatter[string(id)]; ok {
+		currentFM = fm
+	}
+
+	var currentMD wikipage.Markdown
+	if md, ok := a.markdown[string(id)]; ok {
+		currentMD = wikipage.Markdown(md)
+	}
+
+	newFM, newMD, err := fn(currentFM, currentMD)
+	if err != nil {
+		return err
+	}
+
+	if newFM != nil {
+		a.frontmatter[string(id)] = newFM
+	}
+	a.markdown[string(id)] = string(newMD)
+	return nil
+}
+
+// createRecorderWithAtomicModifier creates a recorder that uses the persistAtomic path.
+func createRecorderWithAtomicModifier(mock *atomicPageModifier, logger observability.Logger) *observability.WikiMetricsRecorder {
+	coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+	recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, coordinator, logger)
+	return recorder
+}
+
 // mockPageReaderWriter is a mock implementation for testing wiki metrics persistence.
 // It implements observability.PageReader and wikipage.PageWriter.
 type mockPageReaderWriter struct {
@@ -881,6 +930,111 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 			It("should contain the underlying error message", func() {
 				Expect(err).To(MatchError(ContainSubstring("markdown write failed")))
+			})
+		})
+	})
+
+	Describe("persistAtomic path", func() {
+		// These tests use atomicPageModifier (which implements ModifyFrontMatterAndMarkdown)
+		// so the recorder chooses persistAtomic rather than persistLegacy.
+
+		When("page does not exist and atomic modifier passes nil FM", func() {
+			// Covers L227-228: if fm == nil { fm = make(wikipage.FrontMatter) }
+			var mock *atomicPageModifier
+			var err error
+
+			BeforeEach(func() {
+				mock = &atomicPageModifier{mockPageReaderWriter: newMockPageReaderWriter()}
+				recorder := createRecorderWithAtomicModifier(mock, nil)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should write frontmatter via the atomic path", func() {
+				Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
+			})
+		})
+
+		When("atomic modifier fails and logger is configured", func() {
+			// Covers L246-249: error path with logger in persistAtomic
+			var logger *mockLogger
+			var err error
+
+			BeforeEach(func() {
+				modifyErr := &testError{msg: "atomic modify failed"}
+				mock := &atomicPageModifier{
+					mockPageReaderWriter: newMockPageReaderWriter(),
+					failModify:          true,
+					failErr:             modifyErr,
+				}
+				logger = &mockLogger{}
+				recorder := createRecorderWithAtomicModifier(mock, logger)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should return the error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should log the failure", func() {
+				Expect(logger.errorMessages).To(ContainElement(ContainSubstring("Failed to persist wiki metrics")))
+			})
+		})
+
+		When("creating a new page via atomic path with logger", func() {
+			// Covers L253-254: template creation logging in persistAtomic
+			// Also covers L259-260: success logging
+			var logger *mockLogger
+			var err error
+
+			BeforeEach(func() {
+				mock := &atomicPageModifier{mockPageReaderWriter: newMockPageReaderWriter()}
+				logger = &mockLogger{}
+				recorder := createRecorderWithAtomicModifier(mock, logger)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should log template creation", func() {
+				Expect(logger.infoMessages).To(ContainElement(ContainSubstring("Created observability metrics page")))
+			})
+
+			It("should log success", func() {
+				Expect(logger.infoMessages).To(ContainElement(ContainSubstring("Persisted observability metrics")))
+			})
+		})
+
+		When("persisting existing page via atomic path with logger", func() {
+			// Covers L259-260: success logging when needsTemplateLog is false
+			var logger *mockLogger
+			var err error
+
+			BeforeEach(func() {
+				mock := &atomicPageModifier{mockPageReaderWriter: newMockPageReaderWriter()}
+				mock.frontmatter[observability.ObservabilityMetricsPage] = map[string]any{}
+				mock.markdown[observability.ObservabilityMetricsPage] = "# Custom content"
+				logger = &mockLogger{}
+				recorder := createRecorderWithAtomicModifier(mock, logger)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should log success without template creation", func() {
+				Expect(logger.infoMessages).To(ContainElement(ContainSubstring("Persisted observability metrics")))
+				Expect(logger.infoMessages).NotTo(ContainElement(ContainSubstring("Created observability metrics page")))
 			})
 		})
 	})

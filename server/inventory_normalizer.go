@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,6 +14,19 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+// inventoryNormalizerPageModifier is the atomic modifier contract for
+// ensureIsContainerField. Implemented by pagestore.Store but not by the
+// PageReaderMutator interface, so it is accessed via type assertion.
+type inventoryNormalizerPageModifier interface {
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
+// errInventorySkipWrite is returned from a ModifyFrontMatterAndMarkdown callback
+// to abort the write without propagating an error to the caller.
+// Used when the callback determines there is nothing to update (page does not
+// exist, no inventory section, is_container already set, etc.).
+var errInventorySkipWrite = errors.New("inventory: skip write")
 
 // FailedPageCreation represents a page that failed to be created during normalization.
 type FailedPageCreation struct {
@@ -85,41 +99,57 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) (*No
 }
 
 // ensureIsContainerField sets is_container = true if the page has inventory.items.
+// Uses ModifyFrontMatterAndMarkdown to perform the read-modify-write atomically
+// under the page lock, preventing TOCTOU races with concurrent writers.
 func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentifier) error {
-	_, fm, err := n.deps.ReadFrontMatter(pageID)
-	if err != nil {
-		return nil // Page doesn't exist, nothing to do
-	}
-
-	// Check if page has inventory.items with actual content
-	inventoryData, ok := fm["inventory"].(map[string]any)
+	modifier, ok := n.deps.(inventoryNormalizerPageModifier)
 	if !ok {
-		return nil // No inventory section
+		return errors.New("page store does not support atomic frontmatter modification")
 	}
 
-	// Check if items array exists and is non-empty
-	items, err := n.GetContainerItems(pageID)
+	var updated bool
+	err := modifier.ModifyFrontMatterAndMarkdown(pageID, func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			return nil, md, errInventorySkipWrite // page does not exist
+		}
+
+		inventoryData, ok := fm["inventory"].(map[string]any)
+		if !ok {
+			return fm, md, errInventorySkipWrite // No inventory section — no-op
+		}
+
+		itemsRaw, ok := inventoryData["items"]
+		if !ok {
+			return fm, md, errInventorySkipWrite // No items array — no-op
+		}
+
+		items, err := mungeItemIdentifiers(itemsRaw, pageID)
+		if err != nil {
+			return nil, md, fmt.Errorf("failed to get container items: %w", err)
+		}
+		if len(items) == 0 {
+			return fm, md, errInventorySkipWrite // Empty items — no-op
+		}
+
+		if isContainer, ok := inventoryData["is_container"].(bool); ok && isContainer {
+			return fm, md, errInventorySkipWrite // Already set — no-op
+		}
+
+		inventoryData["is_container"] = true
+		updated = true
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
+
+	if errors.Is(err, errInventorySkipWrite) {
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("failed to get container items: %w", err)
-	}
-	if len(items) == 0 {
-		return nil // No items or empty items array
-	}
-
-	// Check if is_container is already set
-	if isContainer, ok := inventoryData["is_container"].(bool); ok && isContainer {
-		return nil // Already set
-	}
-
-	// Set is_container = true
-	inventoryData["is_container"] = true
-
-	// Write back frontmatter
-	if err := n.deps.WriteFrontMatter(pageID, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 
-	n.logger.Info("Set is_container = true for page: %s", pageID)
+	if updated {
+		n.logger.Info("Set is_container = true for page: %s", pageID)
+	}
 	return nil
 }
 
