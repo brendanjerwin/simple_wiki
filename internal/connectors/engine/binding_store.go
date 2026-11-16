@@ -199,38 +199,8 @@ func (s *FrontmatterBindingStore) SaveBinding(profileID wikipage.PageIdentifier,
 // creating phantom pages for missing profiles.
 func (s *FrontmatterBindingStore) DeleteBinding(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind, page, listName string) error {
 	err := s.pages.ModifyFrontMatterAndMarkdown(profileID, func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-		if len(fm) == 0 {
+		if len(fm) == 0 || !deleteBindingInFrontMatter(fm, kind, page, listName) {
 			return nil, md, errBindingSkipWrite
-		}
-		connector := connectorMap(fm, kind)
-		if connector == nil {
-			return nil, md, errBindingSkipWrite
-		}
-		rawList := getAnySlice(connector, fmKeyBindings)
-		if len(rawList) == 0 {
-			return nil, md, errBindingSkipWrite
-		}
-		filtered := make([]any, 0, len(rawList))
-		removed := false
-		for _, entry := range rawList {
-			m, ok := entry.(map[string]any)
-			if !ok {
-				filtered = append(filtered, entry)
-				continue
-			}
-			if getString(m, fmKeyPage) == page && getString(m, fmKeyListName) == listName {
-				removed = true
-				continue
-			}
-			filtered = append(filtered, entry)
-		}
-		if !removed {
-			return nil, md, errBindingSkipWrite
-		}
-		if len(filtered) == 0 {
-			delete(connector, fmKeyBindings)
-		} else {
-			connector[fmKeyBindings] = filtered
 		}
 		return fm, md, nil
 	}, wikipage.AnonymousIdentity)
@@ -241,6 +211,51 @@ func (s *FrontmatterBindingStore) DeleteBinding(profileID wikipage.PageIdentifie
 		return fmt.Errorf("connectors/engine: write frontmatter for %s: %w", profileID, err)
 	}
 	return nil
+}
+
+// deleteBindingInFrontMatter applies the deletion of (kind, page, listName)
+// directly to fm and reports whether anything changed. Pure: no page I/O,
+// no locks. Callers must check len(fm) == 0 before calling.
+func deleteBindingInFrontMatter(fm wikipage.FrontMatter, kind connectors.ConnectorKind, page, listName string) bool {
+	connector := connectorMap(fm, kind)
+	if connector == nil {
+		return false
+	}
+	rawList := getAnySlice(connector, fmKeyBindings)
+	if len(rawList) == 0 {
+		return false
+	}
+	filtered, removed := filterOutBinding(rawList, page, listName)
+	if !removed {
+		return false
+	}
+	if len(filtered) == 0 {
+		delete(connector, fmKeyBindings)
+	} else {
+		connector[fmKeyBindings] = filtered
+	}
+	return true
+}
+
+// filterOutBinding returns a copy of rawList with the entry matching
+// (page, listName) removed, plus a boolean indicating whether a match
+// was found. Non-map entries are passed through unchanged.
+func filterOutBinding(rawList []any, page, listName string) ([]any, bool) {
+	filtered := make([]any, 0, len(rawList))
+	removed := false
+	for _, entry := range rawList {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			filtered = append(filtered, entry)
+			continue
+		}
+		if getString(m, fmKeyPage) == page && getString(m, fmKeyListName) == listName {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered, removed
 }
 
 // WithProfileLock implements BindingStore.WithProfileLock. Acquires
