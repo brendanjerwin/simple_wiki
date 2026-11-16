@@ -705,50 +705,35 @@ func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID s
 }
 
 // processContainerForItemRemovalAtomic is the race-free implementation using the page lock.
-// It inlines the removal logic from removeAndWriteItems to keep it inside the lock.
+// Items are pre-read and findItemsWithContainerReference is called before entering the
+// page lock to avoid deadlock (it opens item page locks of its own).
 func (j *InventoryNormalizationJob) processContainerForItemRemovalAtomic(modifier inventoryNormalizerPageModifier, containerID string) (int, error) {
+	// Pre-read items outside the page lock so findItemsWithContainerReference
+	// can open item page locks without risk of deadlock with the container lock.
+	_, preFM, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
+	if err != nil {
+		return 0, nil
+	}
+
+	_, items, skipErr := j.extractContainerInventoryInputs(preFM)
+	if skipErr != nil {
+		return 0, nil
+	}
+
+	itemsToRemove := j.findItemsWithContainerReference(containerID, items)
+	if len(itemsToRemove) == 0 {
+		return 0, nil
+	}
+
 	var removedCount int
-	err := modifier.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(containerID), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-		if fm == nil {
-			return nil, md, errInventorySkipWrite // page does not exist
+	err = modifier.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(containerID), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		inv, currentItems, skipErr := j.extractContainerInventoryInputs(fm)
+		if skipErr != nil {
+			return fm, md, skipErr
 		}
 
-		inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
-		if !ok {
-			return fm, md, errInventorySkipWrite // no inventory section
-		}
-
-		items, ok := j.extractItemsArray(inv)
-		if !ok || len(items) == 0 {
-			return fm, md, errInventorySkipWrite // no items to process
-		}
-
-		// findItemsWithContainerReference reads ITEM pages (different locks — no deadlock).
-		itemsToRemove := j.findItemsWithContainerReference(containerID, items)
-		if len(itemsToRemove) == 0 {
-			return fm, md, errInventorySkipWrite // nothing to remove
-		}
-
-		var newItems []any
-		for _, item := range items {
-			s, ok := item.(string)
-			if !ok {
-				newItems = append(newItems, item)
-				continue
-			}
-			mungedItem, err := wikiidentifiers.MungeIdentifier(s)
-			if err != nil {
-				newItems = append(newItems, item)
-				continue
-			}
-			if itemsToRemove[mungedItem] {
-				removedCount++
-				j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
-				continue
-			}
-			newItems = append(newItems, item)
-		}
-
+		newItems, count := j.filterItemsForRemoval(containerID, currentItems, itemsToRemove)
+		removedCount = count
 		if removedCount == 0 {
 			return fm, md, errInventorySkipWrite
 		}
@@ -765,6 +750,58 @@ func (j *InventoryNormalizationJob) processContainerForItemRemovalAtomic(modifie
 	}
 
 	return removedCount, nil
+}
+
+// extractContainerInventoryInputs extracts the inventory section and items list from a
+// container page's frontmatter. Returns errInventorySkipWrite when there is nothing to
+// process (nil fm, missing inventory section, or empty items list).
+func (j *InventoryNormalizationJob) extractContainerInventoryInputs(fm wikipage.FrontMatter) (map[string]any, []any, error) {
+	if fm == nil {
+		return nil, nil, errInventorySkipWrite
+	}
+
+	inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
+	if !ok {
+		return nil, nil, errInventorySkipWrite
+	}
+
+	items, ok := j.extractItemsArray(inv)
+	if !ok || len(items) == 0 {
+		return nil, nil, errInventorySkipWrite
+	}
+
+	return inv, items, nil
+}
+
+// filterItemsForRemoval filters items by removing those in itemsToRemove.
+// Returns the filtered items slice and the count of removed items.
+func (j *InventoryNormalizationJob) filterItemsForRemoval(containerID string, items []any, itemsToRemove map[string]bool) ([]any, int) {
+	var newItems []any
+	removedCount := 0
+
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			newItems = append(newItems, item)
+			continue
+		}
+
+		mungedItem, err := wikiidentifiers.MungeIdentifier(s)
+		if err != nil {
+			newItems = append(newItems, item)
+			continue
+		}
+
+		if itemsToRemove[mungedItem] {
+			removedCount++
+			j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
+			continue
+		}
+
+		newItems = append(newItems, item)
+	}
+
+	return newItems, removedCount
 }
 
 // processContainerForItemRemovalLegacy is the legacy implementation without a page lock.
