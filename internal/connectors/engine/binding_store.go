@@ -29,6 +29,12 @@ type FrontmatterReadWriter interface {
 	// to preserve fields the engine doesn't own (other connectors,
 	// non-connector wiki.* state, user fields).
 	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
+
+	// ModifyFrontMatterAndMarkdown atomically reads the page, calls fn with the
+	// current frontmatter and markdown, and writes back the values fn returns.
+	// The whole read-mutate-write runs under the page-canonical lock so no
+	// concurrent writer can land between the read and the write.
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
 }
 
 // ProfileLister enumerates every profile page that has at least one
@@ -95,6 +101,12 @@ func NewFrontmatterBindingStore(pages FrontmatterReadWriter, profiles ProfileLis
 	}, nil
 }
 
+// errBindingSkipWrite is returned from a ModifyFrontMatterAndMarkdown callback
+// to signal that nothing changed and the page should not be written.
+// DeleteBinding uses this to avoid creating phantom pages when the
+// binding to delete was absent.
+var errBindingSkipWrite = errors.New("connectors/engine: skip write — nothing changed")
+
 // Frontmatter path constants. The connector state lives at
 //
 //	wiki.connectors.<kind>.*
@@ -158,24 +170,22 @@ func (s *FrontmatterBindingStore) FindBinding(profileID wikipage.PageIdentifier,
 // bindings[] shape with each binding's adapter-specific state nested
 // under adapter_state.
 //
-// A missing profile page is treated as a fresh write: the store
-// constructs an empty frontmatter map and proceeds to write the new
-// binding. Whether the page-store creates the page on demand or
-// rejects the write is the page store's contract; this method does
-// not pre-validate page existence.
+// A missing profile page is treated as a fresh write: ModifyFrontMatterAndMarkdown
+// receives an empty frontmatter map for a missing page and the callback
+// proceeds to write the new binding. The whole read-mutate-write runs
+// under the page-canonical lock so no concurrent checklist or connector
+// write can land between the read and the write.
 func (s *FrontmatterBindingStore) SaveBinding(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind, binding connectors.Binding) error {
-	fm, err := s.readFrontMatter(profileID)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("connectors/engine: read frontmatter for %s: %w", profileID, err)
-	}
-	if fm == nil {
-		fm = make(wikipage.FrontMatter)
-	}
-	connector := ensureConnectorMap(fm, kind)
-	rawList := getAnySlice(connector, fmKeyBindings)
-	updated := upsertBinding(rawList, binding)
-	connector[fmKeyBindings] = updated
-	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
+	if err := s.pages.ModifyFrontMatterAndMarkdown(profileID, func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+		connector := ensureConnectorMap(fm, kind)
+		rawList := getAnySlice(connector, fmKeyBindings)
+		updated := upsertBinding(rawList, binding)
+		connector[fmKeyBindings] = updated
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("connectors/engine: write frontmatter for %s: %w", profileID, err)
 	}
 	return nil
@@ -183,48 +193,51 @@ func (s *FrontmatterBindingStore) SaveBinding(profileID wikipage.PageIdentifier,
 
 // DeleteBinding implements BindingStore.DeleteBinding. No-op when the
 // binding does not exist (per the BindingStore contract).
+// Uses ModifyFrontMatterAndMarkdown so the read-mutate-write is atomic
+// under the page-canonical lock. Returns errBindingSkipWrite (treated
+// as nil by the caller) when there is nothing to delete, to avoid
+// creating phantom pages for missing profiles.
 func (s *FrontmatterBindingStore) DeleteBinding(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind, page, listName string) error {
-	fm, err := s.readFrontMatter(profileID)
+	err := s.pages.ModifyFrontMatterAndMarkdown(profileID, func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if len(fm) == 0 {
+			return nil, md, errBindingSkipWrite
+		}
+		connector := connectorMap(fm, kind)
+		if connector == nil {
+			return nil, md, errBindingSkipWrite
+		}
+		rawList := getAnySlice(connector, fmKeyBindings)
+		if len(rawList) == 0 {
+			return nil, md, errBindingSkipWrite
+		}
+		filtered := make([]any, 0, len(rawList))
+		removed := false
+		for _, entry := range rawList {
+			m, ok := entry.(map[string]any)
+			if !ok {
+				filtered = append(filtered, entry)
+				continue
+			}
+			if getString(m, fmKeyPage) == page && getString(m, fmKeyListName) == listName {
+				removed = true
+				continue
+			}
+			filtered = append(filtered, entry)
+		}
+		if !removed {
+			return nil, md, errBindingSkipWrite
+		}
+		if len(filtered) == 0 {
+			delete(connector, fmKeyBindings)
+		} else {
+			connector[fmKeyBindings] = filtered
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, errBindingSkipWrite) {
 			return nil
 		}
-		return err
-	}
-	if fm == nil {
-		return nil
-	}
-	connector := connectorMap(fm, kind)
-	if connector == nil {
-		return nil
-	}
-	rawList := getAnySlice(connector, fmKeyBindings)
-	if len(rawList) == 0 {
-		return nil
-	}
-	filtered := make([]any, 0, len(rawList))
-	removed := false
-	for _, entry := range rawList {
-		m, ok := entry.(map[string]any)
-		if !ok {
-			filtered = append(filtered, entry)
-			continue
-		}
-		if getString(m, fmKeyPage) == page && getString(m, fmKeyListName) == listName {
-			removed = true
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	if !removed {
-		return nil
-	}
-	if len(filtered) == 0 {
-		delete(connector, fmKeyBindings)
-	} else {
-		connector[fmKeyBindings] = filtered
-	}
-	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("connectors/engine: write frontmatter for %s: %w", profileID, err)
 	}
 	return nil

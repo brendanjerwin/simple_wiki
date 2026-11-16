@@ -44,6 +44,11 @@ type ResumeAllBindingsHook func(ctx context.Context, profileID wikipage.PageIden
 type FrontmatterReadWriter interface {
 	ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
 	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
+	// ModifyFrontMatterAndMarkdown atomically reads the page, calls fn with the
+	// current frontmatter and markdown, and writes back the values fn returns.
+	// The whole read-mutate-write runs under the page-canonical lock so no
+	// concurrent writer can land between the read and the write.
+	ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
 }
 
 // Clocker is the testable wall-clock seam.
@@ -180,28 +185,29 @@ func (s *Store[B]) LoadCredentials(_ context.Context, profileID wikipage.PageIde
 
 // WriteCredentials does the read-modify-write on the profile's
 // frontmatter so unrelated fields under wiki.connectors.* are preserved.
+// Uses ModifyFrontMatterAndMarkdown so the read-mutate-write is atomic
+// under the page-canonical lock — no concurrent checklist or connector
+// write can land between the read and the write.
 func (s *Store[B]) WriteCredentials(profileID wikipage.PageIdentifier, bundle B) error {
-	_, fm, err := s.pages.ReadFrontMatter(profileID)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read frontmatter: %w", err)
-	}
-	if fm == nil {
-		fm = make(wikipage.FrontMatter)
-	}
-	connector := ensureConnectorMap(fm, s.codec.ConnectorKey())
-	s.codec.WriteTokenFields(bundle, connector)
-	connectedAt, lastVerifiedAt := s.codec.Timestamps(bundle)
-	if !connectedAt.IsZero() {
-		connector[credentialKeyConnectedAt] = connectedAt.UTC().Format(time.RFC3339)
-	} else {
-		delete(connector, credentialKeyConnectedAt)
-	}
-	if !lastVerifiedAt.IsZero() {
-		connector[credentialKeyLastVerifiedAt] = lastVerifiedAt.UTC().Format(time.RFC3339)
-	} else {
-		delete(connector, credentialKeyLastVerifiedAt)
-	}
-	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
+	if err := s.pages.ModifyFrontMatterAndMarkdown(profileID, func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+		connector := ensureConnectorMap(fm, s.codec.ConnectorKey())
+		s.codec.WriteTokenFields(bundle, connector)
+		connectedAt, lastVerifiedAt := s.codec.Timestamps(bundle)
+		if !connectedAt.IsZero() {
+			connector[credentialKeyConnectedAt] = connectedAt.UTC().Format(time.RFC3339)
+		} else {
+			delete(connector, credentialKeyConnectedAt)
+		}
+		if !lastVerifiedAt.IsZero() {
+			connector[credentialKeyLastVerifiedAt] = lastVerifiedAt.UTC().Format(time.RFC3339)
+		} else {
+			delete(connector, credentialKeyLastVerifiedAt)
+		}
+		return fm, md, nil
+	}, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write frontmatter: %w", err)
 	}
 	return nil
