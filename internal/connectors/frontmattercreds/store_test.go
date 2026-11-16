@@ -103,6 +103,22 @@ func (f *fakeFrontmatterRW) WriteFrontMatter(id wikipage.PageIdentifier, fm wiki
 	return nil
 }
 
+func (f *fakeFrontmatterRW) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+	fm, ok := f.pages[id]
+	if !ok {
+		fm = make(wikipage.FrontMatter)
+	}
+	newFM, _, err := fn(fm, "")
+	if err != nil {
+		return err
+	}
+	f.pages[id] = newFM
+	return nil
+}
+
 // stubClock is a deterministic clock for testing.
 type stubClock struct{ now time.Time }
 

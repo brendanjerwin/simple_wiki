@@ -84,7 +84,20 @@ func (*memoryFakePages) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*memoryFakePages) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*memoryFakePages) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	return nil
+}
+
+func (s *memoryFakePages) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	fm, ok := s.pages[id]
+	if !ok {
+		fm = make(wikipage.FrontMatter)
+	}
+	newFM, _, err := fn(fm, "")
+	if err != nil {
+		return err
+	}
+	s.pages[id] = newFM
 	return nil
 }
 

@@ -223,6 +223,19 @@ func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier,
 	return nil
 }
 
+func (f *fakeFrontmatterReadWriter) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	fm, ok := f.pages[id]
+	if !ok {
+		fm = make(wikipage.FrontMatter)
+	}
+	newFM, _, err := fn(fm, "")
+	if err != nil {
+		return err
+	}
+	f.pages[id] = newFM
+	return nil
+}
+
 // --- specs -----------------------------------------------------------
 
 var _ = Describe("TasksAdapter", func() {

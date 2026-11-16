@@ -62,6 +62,27 @@ func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier,
 	return nil
 }
 
+func (f *fakeFrontmatterReadWriter) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err, ok := f.writeErr[id]; ok && err != nil {
+		return err
+	}
+	fm := deepCopyFrontMatter(f.pages[id])
+	if fm == nil {
+		fm = make(wikipage.FrontMatter)
+	}
+	newFM, _, err := fn(fm, "")
+	if err != nil {
+		return err
+	}
+	f.pages[id] = deepCopyFrontMatter(newFM)
+	if f.writeHook != nil {
+		f.writeHook(id, deepCopyFrontMatter(newFM))
+	}
+	return nil
+}
+
 // SetReadError programs the next ReadFrontMatter for id to return err.
 func (f *fakeFrontmatterReadWriter) SetReadError(id wikipage.PageIdentifier, err error) {
 	f.mu.Lock()

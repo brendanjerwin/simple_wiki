@@ -46,6 +46,22 @@ func (f *fakeTasksFrontmatterRW) WriteFrontMatter(id wikipage.PageIdentifier, fm
 	return nil
 }
 
+func (f *fakeTasksFrontmatterRW) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+	fm, ok := f.pages[id]
+	if !ok {
+		fm = make(wikipage.FrontMatter)
+	}
+	newFM, _, err := fn(fm, "")
+	if err != nil {
+		return err
+	}
+	f.pages[id] = newFM
+	return nil
+}
+
 type stubTasksClock struct{ now time.Time }
 
 func (c stubTasksClock) Now() time.Time { return c.now }
