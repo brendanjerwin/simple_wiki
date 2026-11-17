@@ -11,7 +11,7 @@ require (
 	github.com/coder/acp-go-sdk v0.13.5
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/gabriel-vasile/mimetype v1.4.16
-	github.com/gin-contrib/multitemplate v1.1.5
+	github.com/gin-contrib/multitemplate v1.1.6
 	github.com/gin-contrib/sessions v1.1.3
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
@@ -138,7 +138,7 @@ require (
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
