@@ -3561,7 +3561,9 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return the version_hash covering frontmatter+markdown of written content", func() {
-				// Hash reflects new FM (parsed from new_whole_markdown) + new MD
+				// Hash reflects new FM (parsed from new_whole_markdown) + new MD.
+				// UpdateWholePage replaces the whole page, so its OCC handle keeps
+				// covering frontmatter and markdown (issue #1197).
 				expectedHash := computeExpectedPageHash(
 					wikipage.FrontMatter{"identifier": "test-page", "title": "New Title"},
 					"# New Content",
@@ -5270,7 +5272,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return a consistent version_hash covering frontmatter+markdown", func() {
-				// Hash covers both frontmatter and markdown (issue #1197)
+				// Hash covers both frontmatter and markdown (issue #1197) because
+				// the same handle drives UpdateWholePage.
 				expectedHash := computeExpectedPageHash(
 					wikipage.FrontMatter{"title": "Test Page", "tags": []any{"test"}},
 					"# Test Page\n\nThis is test content.",

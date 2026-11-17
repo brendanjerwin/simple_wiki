@@ -16,263 +16,272 @@ const DIALOG_APPEAR_TIMEOUT_MS = 5000;
  * All tests only click Cancel or press Escape — the home page is never actually deleted.
  */
 test.describe('ConfirmationDialog accessibility (via erasePage flow)', () => {
-  test.setTimeout(60000);
+ test.setTimeout(60000);
+
+ test.beforeEach(async ({ page }) => {
+  await page.goto('/home/view');
+  await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+  await page.locator('.tools-menu').hover();
+  await page.locator('#erasePage').click();
+
+  // Park the pointer off the tools menu before the dialog is torn down.
+  // Focus restoration prefers the opener while it is rendered, so leaving the
+  // pointer on this hover menu makes the restored target race the menu's
+  // :hover re-application (CI failure artifact: focus landed on #erasePage
+  // with the menu still open). With the menu closed, the opener is hidden and
+  // restoreFocus() deterministically falls back to #tools-menu.
+  await page.mouse.move(0, 0);
+  await expect(page.locator('#erasePage')).toBeHidden({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+
+  await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached({
+   timeout: DIALOG_APPEAR_TIMEOUT_MS,
+  });
+ });
+
+ test.afterEach(async ({ page }) => {
+  // Close dialog if still open after a test (e.g. focus trap test that didn't close it)
+  await page.evaluate(() => {
+   const el = document.getElementById('page-deletion-dialog') as (HTMLElement & { closeDialog?: () => void }) | null;
+   if (el?.getAttribute('open') !== null) {
+    el?.closeDialog?.();
+   }
+  });
+ });
+
+ // ──────────────────────────────────────────────────────────────
+ // ARIA attributes
+ // ──────────────────────────────────────────────────────────────
+
+ test.describe('ARIA attributes', () => {
+
+  test.describe('when the dialog is open', () => {
+
+   test('should use a native <dialog> element (implicit role="dialog")', async ({ page }) => {
+    const tagName = await page.evaluate(() =>
+     document.getElementById('page-deletion-dialog')?.shadowRoot?.querySelector('dialog')?.tagName.toLowerCase()
+    );
+    expect(tagName).toBe('dialog');
+   });
+
+   test('should have aria-labelledby set on the native dialog element', async ({ page }) => {
+    const ariaLabelledby = await page.evaluate(() =>
+     document.getElementById('page-deletion-dialog')?.shadowRoot?.querySelector('dialog')?.getAttribute('aria-labelledby')
+    );
+    expect(ariaLabelledby).toBe('confirmation-dialog-title');
+   });
+
+   test('should have a labelled element that contains the delete message', async ({ page }) => {
+    const labelText = await page.evaluate(() => {
+     const shadowRoot = document.getElementById('page-deletion-dialog')?.shadowRoot;
+     return shadowRoot?.getElementById('confirmation-dialog-title')?.textContent?.trim();
+    });
+    expect(labelText).toContain('Move this page to trash?');
+   });
+
+  });
+
+ });
+
+ // ──────────────────────────────────────────────────────────────
+ // Keyboard dismissal
+ // ──────────────────────────────────────────────────────────────
+
+ test.describe('keyboard dismissal', () => {
+
+  test.describe('when Escape is pressed', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.keyboard.press('Escape');
+   });
+
+   test('should close the dialog', async ({ page }) => {
+    await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
+     timeout: DIALOG_APPEAR_TIMEOUT_MS,
+    });
+   });
+  });
+
+ });
+
+ // ──────────────────────────────────────────────────────────────
+ // Backdrop click
+ // ──────────────────────────────────────────────────────────────
+
+ test.describe('backdrop click', () => {
+
+  test.describe('when the backdrop area of the dialog is clicked', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.evaluate(() => {
+     const dialogEl = document.getElementById('page-deletion-dialog')?.shadowRoot?.querySelector('dialog');
+     dialogEl?.click();
+    });
+   });
+
+   test('should close the dialog', async ({ page }) => {
+    await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
+     timeout: DIALOG_APPEAR_TIMEOUT_MS,
+    });
+   });
+  });
+
+ });
+
+ // ──────────────────────────────────────────────────────────────
+ // Focus management
+ // ──────────────────────────────────────────────────────────────
+
+ test.describe('focus management', () => {
+
+  test.describe('when the dialog opens', () => {
+
+   test('should move focus inside the dialog shadow root', async ({ page }) => {
+    await expect.poll(
+     () => page.evaluate(() => {
+      const host = document.getElementById('page-deletion-dialog');
+      return host?.shadowRoot?.activeElement !== null;
+     }),
+     { timeout: DIALOG_APPEAR_TIMEOUT_MS },
+    ).toBe(true);
+   });
+
+  });
+
+  test.describe('when Cancel button is clicked', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.locator('#page-deletion-dialog .button-cancel').click();
+    await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
+     timeout: DIALOG_APPEAR_TIMEOUT_MS,
+    });
+   });
+
+   // #erasePage lives inside a CSS hover menu that is display:none while the
+   // modal is open (the backdrop blocks pointer events, so :hover is inactive).
+   // restoreFocus() falls back to the nearest visible focusable ancestor —
+   // the always-visible #tools-menu trigger anchor.
+   test('should return focus to the tools-menu trigger', async ({ page }) => {
+    await expect.poll(
+     () => page.evaluate(() => document.activeElement?.id === 'tools-menu'),
+     { timeout: DIALOG_APPEAR_TIMEOUT_MS },
+    ).toBe(true);
+   });
+  });
+
+  test.describe('when Escape is pressed', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
+     timeout: DIALOG_APPEAR_TIMEOUT_MS,
+    });
+   });
+
+   // Same fallback as the Cancel case: #erasePage is display:none while the
+   // modal backdrop is up, so focus returns to #tools-menu instead.
+   test('should return focus to the tools-menu trigger', async ({ page }) => {
+    await expect.poll(
+     () => page.evaluate(() => document.activeElement?.id === 'tools-menu'),
+     { timeout: DIALOG_APPEAR_TIMEOUT_MS },
+    ).toBe(true);
+   });
+  });
+
+ });
+
+ // ──────────────────────────────────────────────────────────────
+ // Focus trap
+ // ──────────────────────────────────────────────────────────────
+
+ test.describe('focus trap', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/home/view');
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-    await page.locator('.tools-menu').hover();
-    await page.locator('#erasePage').click();
-
-    await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached({
-      timeout: DIALOG_APPEAR_TIMEOUT_MS,
-    });
+   // Wait for initial focus to land on the cancel button (autofocus)
+   await expect.poll(
+    () => page.evaluate(() => {
+     const host = document.getElementById('page-deletion-dialog');
+     return host?.shadowRoot?.activeElement !== null;
+    }),
+    { timeout: DIALOG_APPEAR_TIMEOUT_MS },
+   ).toBe(true);
   });
 
-  test.afterEach(async ({ page }) => {
-    // Close dialog if still open after a test (e.g. focus trap test that didn't close it)
-    await page.evaluate(() => {
-      const el = document.getElementById('page-deletion-dialog') as (HTMLElement & { closeDialog?: () => void }) | null;
-      if (el?.getAttribute('open') !== null) {
-        el?.closeDialog?.();
-      }
+  test.describe('when Tab is pressed from the Cancel button', () => {
+   test.beforeEach(async ({ page }) => {
+    // Focus the cancel button explicitly before tabbing
+    await page.locator('#page-deletion-dialog .button-cancel').focus();
+    await page.keyboard.press('Tab');
+   });
+
+   test('should move focus to the Confirm (danger) button', async ({ page }) => {
+    const focusedClass = await page.evaluate(() => {
+     const host = document.getElementById('page-deletion-dialog');
+     return (host?.shadowRoot?.activeElement as HTMLElement | null)?.className ?? '';
     });
+    expect(focusedClass).toContain('button-danger');
+   });
+
+   test('should keep the dialog open', async ({ page }) => {
+    await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached();
+   });
   });
 
-  // ──────────────────────────────────────────────────────────────
-  // ARIA attributes
-  // ──────────────────────────────────────────────────────────────
+  test.describe('when Tab is pressed from the Confirm button', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.locator('#page-deletion-dialog .button-danger').focus();
+    await page.keyboard.press('Tab');
+   });
 
-  test.describe('ARIA attributes', () => {
-
-    test.describe('when the dialog is open', () => {
-
-      test('should use a native <dialog> element (implicit role="dialog")', async ({ page }) => {
-        const tagName = await page.evaluate(() =>
-          document.getElementById('page-deletion-dialog')?.shadowRoot?.querySelector('dialog')?.tagName.toLowerCase()
-        );
-        expect(tagName).toBe('dialog');
-      });
-
-      test('should have aria-labelledby set on the native dialog element', async ({ page }) => {
-        const ariaLabelledby = await page.evaluate(() =>
-          document.getElementById('page-deletion-dialog')?.shadowRoot?.querySelector('dialog')?.getAttribute('aria-labelledby')
-        );
-        expect(ariaLabelledby).toBe('confirmation-dialog-title');
-      });
-
-      test('should have a labelled element that contains the delete message', async ({ page }) => {
-        const labelText = await page.evaluate(() => {
-          const shadowRoot = document.getElementById('page-deletion-dialog')?.shadowRoot;
-          return shadowRoot?.getElementById('confirmation-dialog-title')?.textContent?.trim();
-        });
-        expect(labelText).toContain('Move this page to trash?');
-      });
-
+   test('should wrap focus back to the Cancel button', async ({ page }) => {
+    const focusedClass = await page.evaluate(() => {
+     const host = document.getElementById('page-deletion-dialog');
+     return (host?.shadowRoot?.activeElement as HTMLElement | null)?.className ?? '';
     });
+    expect(focusedClass).toContain('button-cancel');
+   });
 
+   test('should keep the dialog open', async ({ page }) => {
+    await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached();
+   });
   });
 
-  // ──────────────────────────────────────────────────────────────
-  // Keyboard dismissal
-  // ──────────────────────────────────────────────────────────────
+  test.describe('when Shift+Tab is pressed from the Cancel button', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.locator('#page-deletion-dialog .button-cancel').focus();
+    await page.keyboard.press('Shift+Tab');
+   });
 
-  test.describe('keyboard dismissal', () => {
-
-    test.describe('when Escape is pressed', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.keyboard.press('Escape');
-      });
-
-      test('should close the dialog', async ({ page }) => {
-        await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
-          timeout: DIALOG_APPEAR_TIMEOUT_MS,
-        });
-      });
+   test('should wrap focus to the Confirm (danger) button', async ({ page }) => {
+    const focusedClass = await page.evaluate(() => {
+     const host = document.getElementById('page-deletion-dialog');
+     return (host?.shadowRoot?.activeElement as HTMLElement | null)?.className ?? '';
     });
+    expect(focusedClass).toContain('button-danger');
+   });
 
+   test('should keep the dialog open', async ({ page }) => {
+    await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached();
+   });
   });
 
-  // ──────────────────────────────────────────────────────────────
-  // Backdrop click
-  // ──────────────────────────────────────────────────────────────
+ });
 
-  test.describe('backdrop click', () => {
+ // ──────────────────────────────────────────────────────────────
+ // Keyboard activation
+ // ──────────────────────────────────────────────────────────────
 
-    test.describe('when the backdrop area of the dialog is clicked', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.evaluate(() => {
-          const dialogEl = document.getElementById('page-deletion-dialog')?.shadowRoot?.querySelector('dialog');
-          dialogEl?.click();
-        });
-      });
+ test.describe('keyboard activation', () => {
 
-      test('should close the dialog', async ({ page }) => {
-        await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
-          timeout: DIALOG_APPEAR_TIMEOUT_MS,
-        });
-      });
+  test.describe('when Enter is pressed while Cancel button is focused', () => {
+   test.beforeEach(async ({ page }) => {
+    await page.locator('#page-deletion-dialog .button-cancel').focus();
+    await page.keyboard.press('Enter');
+   });
+
+   test('should close the dialog', async ({ page }) => {
+    await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
+     timeout: DIALOG_APPEAR_TIMEOUT_MS,
     });
-
+   });
   });
 
-  // ──────────────────────────────────────────────────────────────
-  // Focus management
-  // ──────────────────────────────────────────────────────────────
-
-  test.describe('focus management', () => {
-
-    test.describe('when the dialog opens', () => {
-
-      test('should move focus inside the dialog shadow root', async ({ page }) => {
-        await expect.poll(
-          () => page.evaluate(() => {
-            const host = document.getElementById('page-deletion-dialog');
-            return host?.shadowRoot?.activeElement !== null;
-          }),
-          { timeout: DIALOG_APPEAR_TIMEOUT_MS },
-        ).toBe(true);
-      });
-
-    });
-
-    test.describe('when Cancel button is clicked', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.locator('#page-deletion-dialog .button-cancel').click();
-        await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
-          timeout: DIALOG_APPEAR_TIMEOUT_MS,
-        });
-      });
-
-      // #erasePage lives inside a CSS hover menu that is display:none while the
-      // modal is open (the backdrop blocks pointer events, so :hover is inactive).
-      // restoreFocus() falls back to the nearest visible focusable ancestor —
-      // the always-visible #tools-menu trigger anchor.
-      test('should return focus to the tools-menu trigger', async ({ page }) => {
-        await expect.poll(
-          () => page.evaluate(() => document.activeElement?.id === 'tools-menu'),
-          { timeout: DIALOG_APPEAR_TIMEOUT_MS },
-        ).toBe(true);
-      });
-    });
-
-    test.describe('when Escape is pressed', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.keyboard.press('Escape');
-        await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
-          timeout: DIALOG_APPEAR_TIMEOUT_MS,
-        });
-      });
-
-      // Same fallback as the Cancel case: #erasePage is display:none while the
-      // modal backdrop is up, so focus returns to #tools-menu instead.
-      test('should return focus to the tools-menu trigger', async ({ page }) => {
-        await expect.poll(
-          () => page.evaluate(() => document.activeElement?.id === 'tools-menu'),
-          { timeout: DIALOG_APPEAR_TIMEOUT_MS },
-        ).toBe(true);
-      });
-    });
-
-  });
-
-  // ──────────────────────────────────────────────────────────────
-  // Focus trap
-  // ──────────────────────────────────────────────────────────────
-
-  test.describe('focus trap', () => {
-
-    test.beforeEach(async ({ page }) => {
-      // Wait for initial focus to land on the cancel button (autofocus)
-      await expect.poll(
-        () => page.evaluate(() => {
-          const host = document.getElementById('page-deletion-dialog');
-          return host?.shadowRoot?.activeElement !== null;
-        }),
-        { timeout: DIALOG_APPEAR_TIMEOUT_MS },
-      ).toBe(true);
-    });
-
-    test.describe('when Tab is pressed from the Cancel button', () => {
-      test.beforeEach(async ({ page }) => {
-        // Focus the cancel button explicitly before tabbing
-        await page.locator('#page-deletion-dialog .button-cancel').focus();
-        await page.keyboard.press('Tab');
-      });
-
-      test('should move focus to the Confirm (danger) button', async ({ page }) => {
-        const focusedClass = await page.evaluate(() => {
-          const host = document.getElementById('page-deletion-dialog');
-          return (host?.shadowRoot?.activeElement as HTMLElement | null)?.className ?? '';
-        });
-        expect(focusedClass).toContain('button-danger');
-      });
-
-      test('should keep the dialog open', async ({ page }) => {
-        await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached();
-      });
-    });
-
-    test.describe('when Tab is pressed from the Confirm button', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.locator('#page-deletion-dialog .button-danger').focus();
-        await page.keyboard.press('Tab');
-      });
-
-      test('should wrap focus back to the Cancel button', async ({ page }) => {
-        const focusedClass = await page.evaluate(() => {
-          const host = document.getElementById('page-deletion-dialog');
-          return (host?.shadowRoot?.activeElement as HTMLElement | null)?.className ?? '';
-        });
-        expect(focusedClass).toContain('button-cancel');
-      });
-
-      test('should keep the dialog open', async ({ page }) => {
-        await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached();
-      });
-    });
-
-    test.describe('when Shift+Tab is pressed from the Cancel button', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.locator('#page-deletion-dialog .button-cancel').focus();
-        await page.keyboard.press('Shift+Tab');
-      });
-
-      test('should wrap focus to the Confirm (danger) button', async ({ page }) => {
-        const focusedClass = await page.evaluate(() => {
-          const host = document.getElementById('page-deletion-dialog');
-          return (host?.shadowRoot?.activeElement as HTMLElement | null)?.className ?? '';
-        });
-        expect(focusedClass).toContain('button-danger');
-      });
-
-      test('should keep the dialog open', async ({ page }) => {
-        await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached();
-      });
-    });
-
-  });
-
-  // ──────────────────────────────────────────────────────────────
-  // Keyboard activation
-  // ──────────────────────────────────────────────────────────────
-
-  test.describe('keyboard activation', () => {
-
-    test.describe('when Enter is pressed while Cancel button is focused', () => {
-      test.beforeEach(async ({ page }) => {
-        await page.locator('#page-deletion-dialog .button-cancel').focus();
-        await page.keyboard.press('Enter');
-      });
-
-      test('should close the dialog', async ({ page }) => {
-        await expect(page.locator('#page-deletion-dialog[open]')).not.toBeAttached({
-          timeout: DIALOG_APPEAR_TIMEOUT_MS,
-        });
-      });
-    });
-
-  });
+ });
 
 });
