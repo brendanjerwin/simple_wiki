@@ -197,6 +197,52 @@ var _ = Describe("parseATXHeading", func() {
 		})
 	})
 
+	When("given a bare collapsible marker with nothing after it (##^)", func() {
+		var ok bool
+
+		BeforeEach(func() {
+			_, _, ok = parseATXHeading("##^")
+		})
+
+		It("returns ok=false (not a heading)", func() {
+			Expect(ok).To(BeFalse())
+		})
+	})
+
+	When("given a collapsible heading separated by a tab", func() {
+		var level int
+		var text string
+		var ok bool
+
+		BeforeEach(func() {
+			level, text, ok = parseATXHeading("##^\tTabbed")
+		})
+
+		It("returns ok=true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("returns level 2", func() {
+			Expect(level).To(Equal(2))
+		})
+
+		It("strips the caret and the tab", func() {
+			Expect(text).To(Equal("Tabbed"))
+		})
+	})
+
+	When("given a collapsible heading with an ATX closing sequence", func() {
+		var text string
+
+		BeforeEach(func() {
+			_, text, _ = parseATXHeading("##^ Closed ##")
+		})
+
+		It("strips the closing sequence", func() {
+			Expect(text).To(Equal("Closed"))
+		})
+	})
+
 	When("given a collapsible heading slug", func() {
 		var text string
 
