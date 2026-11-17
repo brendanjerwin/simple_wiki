@@ -30,6 +30,9 @@ const minFenceRunLen = 3
 // maxFenceIndent is the maximum leading-space indentation allowed before a fence marker.
 const maxFenceIndent = 3
 
+// headingWhitespace is the set of characters that count as whitespace after a heading marker.
+const headingWhitespace = " \t"
+
 // headingSlugger generates slugs that match goldmark's AutoHeadingID algorithm,
 // including duplicate-suffix tracking across all headings in a document.
 type headingSlugger struct {
@@ -282,19 +285,36 @@ func parseATXHeading(line string) (int, string, bool) {
 		return level, "", true
 	}
 
+	// Accept optional collapsible marker: '^' immediately after the '#' run,
+	// followed by exactly one space or tab (e.g. "##^ Heading Text").
+	if rest[0] == '^' {
+		if len(rest) < 2 || (rest[1] != ' ' && rest[1] != '\t') {
+			// "##^word" with no space — not a heading.
+			return 0, "", false
+		}
+		// Strip the '^' and the following whitespace; text starts at rest[2:].
+		text := strings.TrimRight(rest[2:], headingWhitespace)
+		if len(text) > 0 && text[len(text)-1] == '#' {
+			trimmed := strings.TrimRight(text, "#")
+			trimmed = strings.TrimRight(trimmed, headingWhitespace)
+			text = trimmed
+		}
+		return level, text, true
+	}
+
 	if rest[0] != ' ' && rest[0] != '\t' {
 		// "#word" is not a heading — the '#' run must be followed by whitespace.
 		return 0, "", false
 	}
 
 	// Trim leading whitespace after the '#' run.
-	text := strings.TrimLeft(rest, " \t")
+	text := strings.TrimLeft(rest, headingWhitespace)
 
 	// Trim trailing '#' characters and whitespace (ATX closing sequence).
-	text = strings.TrimRight(text, " \t")
+	text = strings.TrimRight(text, headingWhitespace)
 	if len(text) > 0 && text[len(text)-1] == '#' {
 		trimmed := strings.TrimRight(text, "#")
-		trimmed = strings.TrimRight(trimmed, " \t")
+		trimmed = strings.TrimRight(trimmed, headingWhitespace)
 		text = trimmed
 	}
 
