@@ -7609,8 +7609,8 @@ var _ = Describe("Server", func() {
 })
 
 // Tests for issue #1443: page-app prose guard on edit-path RPCs.
-// A write that leaves the wiki-page-app fence byte-identical must not trigger
-// the placement guard even when it drops >10% of the page's prose.
+// allow_shrink=true is the only way to bypass the guard on page-app pages;
+// a byte-identical fence does NOT auto-bypass it (the e2e contract from #1273).
 var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func() {
 	const (
 		// Identical to the program used throughout page_app_test.go.
@@ -7645,15 +7645,15 @@ var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func(
 			err  error
 		)
 
-		When("removing ~20% of prose while fence is byte-identical", func() {
+		When("removing ~20% of prose while fence is byte-identical, with allow_shrink", func() {
 			BeforeEach(func() {
 				// Replace 23 prose lines with a short entry, targeting that byte range.
 				// The fence is not part of the range, so it is byte-identical after the write.
-				// Before fix: checkPageAppProseGuard fires → FAILED_PRECONDITION.
-				// After fix: narrow exemption skips the guard → succeeds.
+				// The prose guard fires even for unchanged fences; allow_shrink=true overrides it.
 				removed := strings.Repeat(proseLine, removedRepetitions)
 				offset := strings.Index(currentMarkdown, removed)
 				Expect(offset).To(BeNumerically(">=", 0), "test setup: removed section must appear in page")
+				allowShrink := true
 				req = &apiv1.WritePageSectionRequest{
 					Page:                "test-page",
 					ByteOffset:          int64(offset),
@@ -7661,6 +7661,7 @@ var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func(
 					Mode:                apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE,
 					ContentMarkdown:     "- condensed entry\n",
 					ExpectedVersionHash: computeExpectedPageHash(nil, currentMarkdown),
+					AllowShrink:         allowShrink,
 				}
 			})
 
@@ -7686,10 +7687,37 @@ var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func(
 			err error
 		)
 
-		When("replacing ~20% of prose while fence is byte-identical", func() {
+		When("replacing ~20% of prose while fence is byte-identical, with allow_shrink", func() {
 			BeforeEach(func() {
 				// New body has only 92 prose lines (20% fewer) but the fence is identical.
-				// Guard must not fire: an unchanged program cannot silently replace prose.
+				// The prose guard fires even for unchanged fences; allow_shrink=true overrides it.
+				smallProse := strings.Repeat(proseLine, smallProseRepetitions)
+				newMarkdown := smallProse + "\n" + smallPageAppFence + "\n"
+				h := computeExpectedPageHash(nil, currentMarkdown)
+				allow := true
+				req = &apiv1.UpdatePageContentRequest{
+					Page:                "test-page",
+					NewContentMarkdown:  newMarkdown,
+					ExpectedVersionHash: &h,
+					AllowShrink:         &allow,
+				}
+			})
+
+			JustBeforeEach(func() {
+				pageAppServer = mustNewServer(mockPageReaderMutator, nil, nil)
+				_, err = pageAppServer.UpdatePageContent(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("replacing ~20% of prose while fence is byte-identical, without allow_shrink", func() {
+			BeforeEach(func() {
+				// New body has only 92 prose lines (20% fewer) but the fence is identical.
+				// Guard must still fire: allow_shrink=true is the only override (unchanged
+				// fence does NOT auto-bypass the guard — mirroring the e2e contract from #1273).
 				smallProse := strings.Repeat(proseLine, smallProseRepetitions)
 				newMarkdown := smallProse + "\n" + smallPageAppFence + "\n"
 				h := computeExpectedPageHash(nil, currentMarkdown)
@@ -7705,8 +7733,12 @@ var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func(
 				_, err = pageAppServer.UpdatePageContent(ctx, req)
 			})
 
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			It("should fail with FAILED_PRECONDITION", func() {
+				Expect(err).To(HaveGrpcStatus(codes.FailedPrecondition, ""))
+			})
+
+			It("should mention the prose drop in the error", func() {
+				Expect(err.Error()).To(ContainSubstring("prose"))
 			})
 		})
 

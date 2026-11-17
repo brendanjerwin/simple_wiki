@@ -249,28 +249,19 @@ func (s *Server) getPageAppMutator() (*pageAppMutator, error) {
 
 // validateChangedPageAppFence is the edit-path page app funnel
 // (criterion 6): a write (UpdatePageContent / UpdateWholePage / CreatePage)
-// whose new body carries a wiki-page-app fence that is *new or changed*
-// passes through the same validation + placement-guard gate as
-// SetPageApp, so no route can land an unvalidated fence. An unchanged
-// fence (ordinary prose edit on a page app page) skips re-validation —
-// the program was validated when written.
+// whose new body carries a wiki-page-app fence passes through the same
+// validation + placement-guard gate as SetPageApp, so no route can land
+// an unvalidated fence or silently wipe substantial prose.
 //
 // allowShrink mirrors the allow_shrink field on UpdatePageContent /
-// WritePageSection / UpdateWholePage: when true the prose guard is bypassed
-// even for a changed-fence write.
+// WritePageSection / UpdateWholePage: when true the prose guard is bypassed.
+// It is the only override — an unchanged fence does NOT auto-bypass the guard.
 // revive:disable-next-line:flag-parameter -- the bool IS the allow_shrink request field
 func validateChangedPageAppFence(_ wikipage.FrontMatter, currentMarkdown wikipage.Markdown, newWholeMarkdown string, allowShrink bool) error {
-	oldSource, _, oldFound := splitPageAppBody(string(currentMarkdown))
 	newSource, _, newFound := splitPageAppBody(newWholeMarkdown)
 
 	if !newFound {
 		return nil // no fence in the new body: nothing to validate
-	}
-
-	if oldFound && oldSource == newSource {
-		// Unchanged program: ordinary prose edit; the funnel's atomic
-		// guard handles prose-removal protection for this case.
-		return nil
 	}
 
 	if err := validatePageAppSource(newSource); err != nil {
@@ -281,7 +272,8 @@ func validateChangedPageAppFence(_ wikipage.FrontMatter, currentMarkdown wikipag
 		return nil
 	}
 
-	// Changed or new fence: guard prose removal in the pre-flight.
+	// Guard prose removal for any fence write (changed, new, or unchanged).
+	// allow_shrink=true is the only override.
 	return checkPageAppProseGuard(string(currentMarkdown), newWholeMarkdown)
 }
 
@@ -1098,12 +1090,11 @@ func (s *Server) modifyMarkdownWithPageAppFunnelCtx(
 		oldSource, _, oldFound := splitPageAppBody(string(currentMarkdown))
 		newSource, _, newFound := splitPageAppBody(string(newMD))
 
-		// Placement guard: fires for new/changed fences only.
-		// Byte-identical fence = ordinary prose edit; guard is a false positive there.
-		// allow_shrink opt-in bypasses the guard for callers removing substantial prose
-		// alongside a fence change.
-		fenceUnchanged := oldFound && newFound && oldSource == newSource
-		if (newFound || oldFound) && !fenceUnchanged && !allowShrink {
+		// Placement guard: fires whenever the write touches the page-app shape.
+		// allow_shrink=true is the only override — an unchanged fence does NOT
+		// auto-bypass the guard (a wipe of ~100% prose with an identical program
+		// is the exact hazard the guard exists for).
+		if (newFound || oldFound) && !allowShrink {
 			if guardErr := checkPageAppProseGuard(string(currentMarkdown), string(newMD)); guardErr != nil {
 				return nil, "", guardErr
 			}
