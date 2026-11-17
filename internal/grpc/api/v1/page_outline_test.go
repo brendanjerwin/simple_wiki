@@ -96,6 +96,166 @@ var _ = Describe("headingSlugger", func() {
 	})
 })
 
+var _ = Describe("parseATXHeading", func() {
+	When("given a standard heading with space after hashes", func() {
+		var level int
+		var text string
+		var ok bool
+
+		BeforeEach(func() {
+			level, text, ok = parseATXHeading("## For Brendan")
+		})
+
+		It("returns ok=true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("returns level 2", func() {
+			Expect(level).To(Equal(2))
+		})
+
+		It("returns text without modification", func() {
+			Expect(text).To(Equal("For Brendan"))
+		})
+	})
+
+	When("given a collapsible heading with caret immediately after hashes", func() {
+		var level int
+		var text string
+		var ok bool
+
+		BeforeEach(func() {
+			level, text, ok = parseATXHeading("##^ For Brendan")
+		})
+
+		It("returns ok=true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("returns level 2", func() {
+			Expect(level).To(Equal(2))
+		})
+
+		It("strips the caret from the heading text", func() {
+			Expect(text).To(Equal("For Brendan"))
+		})
+	})
+
+	When("given a collapsible H1 heading", func() {
+		var level int
+		var text string
+		var ok bool
+
+		BeforeEach(func() {
+			level, text, ok = parseATXHeading("#^ Parent Section")
+		})
+
+		It("returns ok=true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("returns level 1", func() {
+			Expect(level).To(Equal(1))
+		})
+
+		It("strips the caret from the heading text", func() {
+			Expect(text).To(Equal("Parent Section"))
+		})
+	})
+
+	When("given a heading with space before caret (caret is part of text)", func() {
+		var level int
+		var text string
+		var ok bool
+
+		BeforeEach(func() {
+			level, text, ok = parseATXHeading("# ^ X")
+		})
+
+		It("returns ok=true (standard heading)", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("returns level 1", func() {
+			Expect(level).To(Equal(1))
+		})
+
+		It("preserves caret in text", func() {
+			Expect(text).To(Equal("^ X"))
+		})
+	})
+
+	When("given a heading with caret but no space after it (#^X)", func() {
+		var ok bool
+
+		BeforeEach(func() {
+			_, _, ok = parseATXHeading("#^X")
+		})
+
+		It("returns ok=false (not a heading)", func() {
+			Expect(ok).To(BeFalse())
+		})
+	})
+
+	When("given a bare collapsible marker with nothing after it (##^)", func() {
+		var ok bool
+
+		BeforeEach(func() {
+			_, _, ok = parseATXHeading("##^")
+		})
+
+		It("returns ok=false (not a heading)", func() {
+			Expect(ok).To(BeFalse())
+		})
+	})
+
+	When("given a collapsible heading separated by a tab", func() {
+		var level int
+		var text string
+		var ok bool
+
+		BeforeEach(func() {
+			level, text, ok = parseATXHeading("##^\tTabbed")
+		})
+
+		It("returns ok=true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("returns level 2", func() {
+			Expect(level).To(Equal(2))
+		})
+
+		It("strips the caret and the tab", func() {
+			Expect(text).To(Equal("Tabbed"))
+		})
+	})
+
+	When("given a collapsible heading with an ATX closing sequence", func() {
+		var text string
+
+		BeforeEach(func() {
+			_, text, _ = parseATXHeading("##^ Closed ##")
+		})
+
+		It("strips the closing sequence", func() {
+			Expect(text).To(Equal("Closed"))
+		})
+	})
+
+	When("given a collapsible heading slug", func() {
+		var text string
+
+		BeforeEach(func() {
+			_, text, _ = parseATXHeading("##^ For Brendan")
+		})
+
+		It("produces a slug matching what the renderer would generate", func() {
+			Expect(goldmarkSlugify(text)).To(Equal("for-brendan"))
+		})
+	})
+})
+
 var _ = Describe("parseHeadings", func() {
 	When("given an empty markdown string", func() {
 		BeforeEach(func() {})
@@ -254,6 +414,116 @@ var _ = Describe("parseHeadings", func() {
 
 		It("byte_offset reflects the byte length of the heading line", func() {
 			Expect(headings[0].ByteOffset).To(Equal(int64(9)))
+		})
+	})
+
+	When("markdown has collapsible headings (##^ syntax)", func() {
+		// "# Gift Ideas\n" = 14 bytes
+		// "##^ For Brendan\n" = 17 bytes
+		// "body1\n" = 6 bytes
+		// "##^ For Kirsten\n" = 17 bytes
+		// "body2\n" = 6 bytes
+		const markdown = "# Gift Ideas\n\n##^ For Brendan\n\nbody1\n\n##^ For Kirsten\n\nbody2\n"
+		var headings parseHeadingsResult
+
+		BeforeEach(func() {
+			headings = parseHeadings(markdown)
+		})
+
+		It("returns all three headings", func() {
+			Expect(headings).To(HaveLen(3))
+		})
+
+		It("H1 has text 'Gift Ideas'", func() {
+			Expect(headings[0].Text).To(Equal("Gift Ideas"))
+		})
+
+		It("first collapsible H2 has text 'For Brendan' (caret stripped)", func() {
+			Expect(headings[1].Text).To(Equal("For Brendan"))
+		})
+
+		It("second collapsible H2 has text 'For Kirsten' (caret stripped)", func() {
+			Expect(headings[2].Text).To(Equal("For Kirsten"))
+		})
+
+		It("first collapsible H2 has level 2", func() {
+			Expect(headings[1].Level).To(Equal(int32(2)))
+		})
+
+		It("first collapsible H2 byte_offset starts after its heading line", func() {
+			// "# Gift Ideas\n\n" = 15 bytes, "##^ For Brendan\n" = 17 bytes → offset = 32
+			expected := int64(len("# Gift Ideas\n\n") + len("##^ For Brendan\n"))
+			Expect(headings[1].ByteOffset).To(Equal(expected))
+		})
+
+		It("first collapsible H2 byte_length ends at the second collapsible H2 start", func() {
+			nextH2Start := int64(len("# Gift Ideas\n\n##^ For Brendan\n\nbody1\n\n"))
+			bodyStart := int64(len("# Gift Ideas\n\n") + len("##^ For Brendan\n"))
+			Expect(headings[1].ByteLength).To(Equal(nextH2Start - bodyStart))
+		})
+
+		It("H1 byte_length covers to EOF (H2 is nested inside)", func() {
+			h1BodyStart := int64(len("# Gift Ideas\n"))
+			totalBytes := int64(len(markdown))
+			Expect(headings[0].ByteOffset).To(Equal(h1BodyStart))
+			Expect(headings[0].ByteLength).To(Equal(totalBytes - h1BodyStart))
+		})
+	})
+
+	When("markdown has mixed collapsible and standard headings", func() {
+		// collapsible followed by a standard heading at same level — boundary must be correct
+		const markdown = "##^ Section A\n\nbody A\n\n## Section B\n\nbody B\n"
+		var headings parseHeadingsResult
+
+		BeforeEach(func() {
+			headings = parseHeadings(markdown)
+		})
+
+		It("returns two headings", func() {
+			Expect(headings).To(HaveLen(2))
+		})
+
+		It("collapsible H2 ends at the standard H2 start", func() {
+			bodyStart := int64(len("##^ Section A\n"))
+			nextHStart := int64(len("##^ Section A\n\nbody A\n\n"))
+			Expect(headings[0].ByteOffset).To(Equal(bodyStart))
+			Expect(headings[0].ByteLength).To(Equal(nextHStart - bodyStart))
+		})
+
+		It("standard H2 starts immediately after the collapsible section", func() {
+			expected := int64(len("##^ Section A\n\nbody A\n\n## Section B\n"))
+			Expect(headings[1].ByteOffset).To(Equal(expected))
+		})
+	})
+
+	When("markdown has nested collapsible headings", func() {
+		// #^ Parent with ##^ Child nested inside
+		const markdown = "#^ Parent\n\nintro\n\n##^ Child\n\nchild body\n"
+		var headings parseHeadingsResult
+
+		BeforeEach(func() {
+			headings = parseHeadings(markdown)
+		})
+
+		It("returns both headings", func() {
+			Expect(headings).To(HaveLen(2))
+		})
+
+		It("parent heading has level 1 and text 'Parent'", func() {
+			Expect(headings[0].Level).To(Equal(int32(1)))
+			Expect(headings[0].Text).To(Equal("Parent"))
+		})
+
+		It("child heading has level 2 and text 'Child'", func() {
+			Expect(headings[1].Level).To(Equal(int32(2)))
+			Expect(headings[1].Text).To(Equal("Child"))
+		})
+
+		It("child byte_length spans to EOF", func() {
+			childBodyStart := int64(len("#^ Parent\n\nintro\n\n##^ Child\n"))
+			totalBytes := int64(len(markdown))
+			Expect(headings[1].ByteOffset).To(Equal(childBodyStart))
+			Expect(headings[1].ByteLength).To(Equal(totalBytes - childBodyStart))
 		})
 	})
 
