@@ -8,7 +8,7 @@ import (
 
 // utf8 byte boundary constants — mirrors the UTF-8 encoding specification.
 const (
-	utf8TwoByteMin  = 0x80 // first byte value that starts a multi-byte sequence
+	utf8TwoByteMin   = 0x80 // first byte value that starts a multi-byte sequence
 	utf8ThreeByteMin = 0xE0 // first byte value that starts a 3-byte sequence
 	utf8FourByteMin  = 0xF0 // first byte value that starts a 4-byte sequence
 	utf8ThreeByteLen = 3    // byte length of a 3-byte UTF-8 sequence
@@ -123,10 +123,10 @@ func itoa(n int) string {
 
 // rawHeading is an intermediate representation of a heading found during parsing.
 type rawHeading struct {
-	level      int
-	text       string
-	lineStart  int // byte offset of the first byte of the heading line (the '#')
-	lineEnd    int // byte offset immediately after the '\n' terminating the heading line (or EOF)
+	level     int
+	text      string
+	lineStart int // byte offset of the first byte of the heading line (the '#')
+	lineEnd   int // byte offset immediately after the '\n' terminating the heading line (or EOF)
 }
 
 // parseHeadings parses markdown content, extracts all ATX headings (# through ######)
@@ -288,16 +288,10 @@ func parseATXHeading(line string) (int, string, bool) {
 	// Accept optional collapsible marker: '^' immediately after the '#' run,
 	// followed by exactly one space or tab (e.g. "##^ Heading Text").
 	if rest[0] == '^' {
-		if len(rest) < 2 || (rest[1] != ' ' && rest[1] != '\t') {
+		text, ok := parseCollapsibleHeadingText(rest)
+		if !ok {
 			// "##^word" with no space — not a heading.
 			return 0, "", false
-		}
-		// Strip the '^' and the following whitespace; text starts at rest[2:].
-		text := strings.TrimRight(rest[2:], headingWhitespace)
-		if len(text) > 0 && text[len(text)-1] == '#' {
-			trimmed := strings.TrimRight(text, "#")
-			trimmed = strings.TrimRight(trimmed, headingWhitespace)
-			text = trimmed
 		}
 		return level, text, true
 	}
@@ -310,13 +304,27 @@ func parseATXHeading(line string) (int, string, bool) {
 	// Trim leading whitespace after the '#' run.
 	text := strings.TrimLeft(rest, headingWhitespace)
 
-	// Trim trailing '#' characters and whitespace (ATX closing sequence).
+	return level, trimATXClosingText(text), true
+}
+
+// parseCollapsibleHeadingText parses the text after a collapsible heading
+// marker (the '^' immediately after the '#' run). rest starts at the '^'.
+// The caret must be followed by exactly one space or tab, matching the
+// goldmark block parser in utils/goldmarkrenderer. Returns ok=false when the
+// line does not carry the collapsible syntax.
+func parseCollapsibleHeadingText(rest string) (string, bool) {
+	if len(rest) < 2 || (rest[1] != ' ' && rest[1] != '\t') {
+		return "", false
+	}
+	return trimATXClosingText(rest[2:]), true
+}
+
+// trimATXClosingText trims trailing whitespace and an ATX closing '#' run
+// (e.g. "Heading ##" → "Heading").
+func trimATXClosingText(text string) string {
 	text = strings.TrimRight(text, headingWhitespace)
 	if len(text) > 0 && text[len(text)-1] == '#' {
-		trimmed := strings.TrimRight(text, "#")
-		trimmed = strings.TrimRight(trimmed, headingWhitespace)
-		text = trimmed
+		return strings.TrimRight(strings.TrimRight(text, "#"), headingWhitespace)
 	}
-
-	return level, text, true
+	return text
 }
