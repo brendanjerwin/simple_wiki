@@ -7608,6 +7608,142 @@ var _ = Describe("Server", func() {
 	})
 })
 
+// Tests for issue #1443: page-app prose guard on edit-path RPCs.
+// A write that leaves the wiki-page-app fence byte-identical must not trigger
+// the placement guard even when it drops >10% of the page's prose.
+var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func() {
+	const (
+		// Identical to the program used throughout page_app_test.go.
+		smallPageAppFence      = "```wiki-page-app\n" + pageAppCounterProgram + "```"
+		changedPageAppFence    = "```wiki-page-app\nroot = Card(\"changed\")\n```"
+		proseLine              = "This is a meaningful content paragraph with enough text to simulate real prose.\n"
+		largeProseRepetitions  = 115 // ~9.2 KB of prose — well above the 1 KB floor
+		smallProseRepetitions  = 92  // ~7.4 KB — ~20% drop, above the 10% guard threshold
+		removedRepetitions     = 23  // removed by WritePageSection to reach ~80% of original
+	)
+
+	var (
+		ctx                   context.Context
+		pageAppServer         *v1.Server
+		mockPageReaderMutator *MockPageReaderMutator
+		currentMarkdown       string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		largeProse := strings.Repeat(proseLine, largeProseRepetitions)
+		currentMarkdown = largeProse + "\n" + smallPageAppFence + "\n"
+		mockPageReaderMutator = &MockPageReaderMutator{
+			Markdown: wikipage.Markdown(currentMarkdown),
+		}
+	})
+
+	Describe("WritePageSection", func() {
+		var (
+			req  *apiv1.WritePageSectionRequest
+			resp *apiv1.WritePageSectionResponse
+			err  error
+		)
+
+		When("removing ~20% of prose while fence is byte-identical", func() {
+			BeforeEach(func() {
+				// Replace 23 prose lines with a short entry, targeting that byte range.
+				// The fence is not part of the range, so it is byte-identical after the write.
+				// Before fix: checkPageAppProseGuard fires → FAILED_PRECONDITION.
+				// After fix: narrow exemption skips the guard → succeeds.
+				removed := strings.Repeat(proseLine, removedRepetitions)
+				offset := strings.Index(currentMarkdown, removed)
+				Expect(offset).To(BeNumerically(">=", 0), "test setup: removed section must appear in page")
+				req = &apiv1.WritePageSectionRequest{
+					Page:                "test-page",
+					ByteOffset:          int64(offset),
+					ByteLength:          int64(len(removed)),
+					Mode:                apiv1.WritePageSectionMode_WRITE_PAGE_SECTION_MODE_REPLACE,
+					ContentMarkdown:     "- condensed entry\n",
+					ExpectedVersionHash: computeExpectedPageHash(nil, currentMarkdown),
+				}
+			})
+
+			JustBeforeEach(func() {
+				pageAppServer = mustNewServer(mockPageReaderMutator, nil, nil)
+				resp, err = pageAppServer.WritePageSection(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a successful response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Success).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("UpdatePageContent", func() {
+		var (
+			req *apiv1.UpdatePageContentRequest
+			err error
+		)
+
+		When("replacing ~20% of prose while fence is byte-identical", func() {
+			BeforeEach(func() {
+				// New body has only 92 prose lines (20% fewer) but the fence is identical.
+				// Guard must not fire: an unchanged program cannot silently replace prose.
+				smallProse := strings.Repeat(proseLine, smallProseRepetitions)
+				newMarkdown := smallProse + "\n" + smallPageAppFence + "\n"
+				h := computeExpectedPageHash(nil, currentMarkdown)
+				req = &apiv1.UpdatePageContentRequest{
+					Page:                "test-page",
+					NewContentMarkdown:  newMarkdown,
+					ExpectedVersionHash: &h,
+				}
+			})
+
+			JustBeforeEach(func() {
+				pageAppServer = mustNewServer(mockPageReaderMutator, nil, nil)
+				_, err = pageAppServer.UpdatePageContent(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("replacing ~20% of prose AND changing the fence", func() {
+			BeforeEach(func() {
+				// New body has only 92 prose lines (20% fewer) AND a different fence program.
+				// Guard must still fire: a changed fence CAN silently replace the prose.
+				smallProse := strings.Repeat(proseLine, smallProseRepetitions)
+				newMarkdown := smallProse + "\n" + changedPageAppFence + "\n"
+				h := computeExpectedPageHash(nil, currentMarkdown)
+				req = &apiv1.UpdatePageContentRequest{
+					Page:                "test-page",
+					NewContentMarkdown:  newMarkdown,
+					ExpectedVersionHash: &h,
+				}
+			})
+
+			JustBeforeEach(func() {
+				pageAppServer = mustNewServer(mockPageReaderMutator, nil, nil)
+				_, err = pageAppServer.UpdatePageContent(ctx, req)
+			})
+
+			It("should fail with FAILED_PRECONDITION", func() {
+				Expect(err).To(HaveGrpcStatus(codes.FailedPrecondition, ""))
+			})
+
+			It("should mention the prose drop in the error", func() {
+				Expect(err.Error()).To(ContainSubstring("prose"))
+			})
+
+			It("should mention allow_shrink=true as an override in the error", func() {
+				Expect(err.Error()).To(ContainSubstring("allow_shrink"))
+			})
+		})
+	})
+})
+
 var _ = Describe("Checklist gRPC round-trip", func() {
 	var (
 		server                *v1.Server
