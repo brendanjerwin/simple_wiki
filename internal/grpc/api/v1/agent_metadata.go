@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -78,18 +79,22 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone %q: %v", tz, tzErr)
 		}
 	}
+	if err := s.validateTimeoutSeconds(schedule.GetTimeoutSeconds()); err != nil {
+		return nil, err
+	}
 
 	// Strip wiki-managed fields so callers cannot forge status. The store
 	// layer also strips them; we belt-and-suspenders here so the response
 	// reflects the truth.
 	clean := &apiv1.AgentSchedule{
-		Id:           schedule.GetId(),
-		Cron:         schedule.GetCron(),
-		Prompt:       schedule.GetPrompt(),
-		MaxTurns:     schedule.GetMaxTurns(),
-		Enabled:      schedule.GetEnabled(),
-		Timezone:     schedule.GetTimezone(),
-		AllowedTools: append([]string(nil), schedule.GetAllowedTools()...),
+		Id:             schedule.GetId(),
+		Cron:           schedule.GetCron(),
+		Prompt:         schedule.GetPrompt(),
+		MaxTurns:       schedule.GetMaxTurns(),
+		Enabled:        schedule.GetEnabled(),
+		Timezone:       schedule.GetTimezone(),
+		AllowedTools:   append([]string(nil), schedule.GetAllowedTools()...),
+		TimeoutSeconds: schedule.GetTimeoutSeconds(),
 	}
 	if err := s.agentScheduleStore.Upsert(req.GetPage(), clean); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert schedule: %v", err)
@@ -107,6 +112,32 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 	}
 	// Defensive fallback; the upsert should always be readable.
 	return &apiv1.UpsertScheduleResponse{Schedule: clean}, nil
+}
+
+// validateTimeoutSeconds returns an INVALID_ARGUMENT status when ts is
+// out-of-range: non-zero values must be >= 60s (minimum meaningful timeout)
+// and <= the server-configured maximum. Zero means "inherit server default"
+// and always passes.
+func (s *Server) validateTimeoutSeconds(ts int32) error {
+	if ts == 0 {
+		return nil
+	}
+	const minTimeoutSeconds = 60
+	maxTimeout := s.agentTurnMaxTimeout
+	if maxTimeout <= 0 {
+		maxTimeout = server.DefaultAgentTurnMaxTimeout
+	}
+	maxTimeoutSeconds := int32(maxTimeout.Seconds())
+	if ts < minTimeoutSeconds {
+		return status.Errorf(codes.InvalidArgument,
+			"timeout_seconds %d is below the minimum of %d seconds", ts, minTimeoutSeconds)
+	}
+	if ts > maxTimeoutSeconds {
+		return status.Errorf(codes.InvalidArgument,
+			"timeout_seconds %d exceeds the server maximum of %d seconds (%s); lower the value or raise --agent-turn-max-timeout",
+			ts, maxTimeoutSeconds, maxTimeout)
+	}
+	return nil
 }
 
 // DeleteSchedule implements the DeleteSchedule RPC. Idempotent.

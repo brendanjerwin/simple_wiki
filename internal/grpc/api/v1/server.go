@@ -136,6 +136,7 @@ type Server struct {
 	pageOpener              wikipage.PageOpener
 	scheduledTurnDispatcher ScheduledTurnDispatcher
 	agentScheduleStore      AgentScheduleStore
+	agentTurnMaxTimeout     time.Duration
 	ToolCallPromoter        *ToolCallPromotion
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
@@ -235,6 +236,13 @@ func (s *Server) WithScheduledTurnDispatcher(d ScheduledTurnDispatcher) *Server 
 // AgentMetadataService.{ListSchedules, UpsertSchedule, DeleteSchedule} to work.
 func (s *Server) WithAgentScheduleStore(store AgentScheduleStore) *Server {
 	s.agentScheduleStore = store
+	return s
+}
+
+// WithAgentTurnMaxTimeout sets the upper bound on per-schedule timeout_seconds.
+// UpsertSchedule rejects values above this. Zero means use the server default.
+func (s *Server) WithAgentTurnMaxTimeout(d time.Duration) *Server {
+	s.agentTurnMaxTimeout = d
 	return s
 }
 

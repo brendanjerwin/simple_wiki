@@ -70,6 +70,13 @@ func (*AgentTurnJob) GetName() string {
 	return AgentTurnJobName
 }
 
+// HardTimeout returns the wall-clock timeout baked into this job instance.
+// Exposed for testing to verify that the scheduler passes the correct per-schedule
+// or server-default timeout when constructing jobs.
+func (j *AgentTurnJob) HardTimeout() time.Duration {
+	return j.hardTimeout
+}
+
 // Execute implements jobs.Job. Returns nil on every "expected" failure mode
 // (the failure is recorded on the schedule status); only programming bugs that
 // genuinely should not happen surface as a non-nil error to the queue's error

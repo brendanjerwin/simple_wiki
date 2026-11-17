@@ -102,6 +102,7 @@ type Site struct {
 	SkipBackgroundJobs    bool
 	AgentScheduleQueueCap int
 	AgentTurnHardTimeout  time.Duration
+	AgentTurnMaxTimeout   time.Duration
 	// caldavServer dispatches CalDAV-shaped HTTP traffic. The
 	// caldavGateway middleware (registered before route matching)
 	// forwards qualifying requests here; everything else falls through
@@ -302,6 +303,9 @@ const (
 	// DefaultAgentTurnHardTimeout is the wall-clock timeout for one scheduled
 	// agent turn when no CLI override is supplied.
 	DefaultAgentTurnHardTimeout = 10 * time.Minute
+	// DefaultAgentTurnMaxTimeout is the upper bound on per-schedule
+	// timeout_seconds when no --agent-turn-max-timeout CLI override is supplied.
+	DefaultAgentTurnMaxTimeout = 60 * time.Minute
 
 	// agentScheduleRefreshConcurrency forces single-worker execution so
 	// per-page refreshes run in submission order and never race the cron

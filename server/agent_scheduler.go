@@ -147,7 +147,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		// little benefit.
 		s.cron.Remove(entryID)
 		delete(s.entries, key)
-		newID, scheduleErr := s.cron.Schedule(scheduleExpression(want), s.newJob(page, want.GetId()))
+		newID, scheduleErr := s.cron.Schedule(scheduleExpression(want), s.newJob(page, want))
 		if scheduleErr != nil {
 			slog.Warn("agent scheduler: re-register failed", logFieldPage, page, "schedule_id", want.GetId(), "error", scheduleErr)
 			continue
@@ -161,7 +161,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		if _, alreadyRegistered := s.entries[key]; alreadyRegistered {
 			continue
 		}
-		entryID, scheduleErr := s.cron.Schedule(scheduleExpression(sc), s.newJob(page, id))
+		entryID, scheduleErr := s.cron.Schedule(scheduleExpression(sc), s.newJob(page, sc))
 		if scheduleErr != nil {
 			slog.Warn("agent scheduler: register failed", logFieldPage, page, "schedule_id", id, "error", scheduleErr)
 			continue
@@ -186,8 +186,12 @@ func scheduleExpression(sc *apiv1.AgentSchedule) string {
 	return "CRON_TZ=" + tz + " " + sc.GetCron()
 }
 
-func (s *AgentScheduler) newJob(page, scheduleID string) CronJob {
-	return NewAgentTurnJob(s.store, s.dispatcher, page, scheduleID, s.hardTimeout)
+func (s *AgentScheduler) newJob(page string, sc *apiv1.AgentSchedule) CronJob {
+	timeout := s.hardTimeout
+	if sc.GetTimeoutSeconds() > 0 {
+		timeout = time.Duration(sc.GetTimeoutSeconds()) * time.Second
+	}
+	return NewAgentTurnJob(s.store, s.dispatcher, page, sc.GetId(), timeout)
 }
 
 // isValidCron returns true if expr parses as a 6-field (with seconds) cron.

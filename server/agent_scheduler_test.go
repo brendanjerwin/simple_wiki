@@ -359,3 +359,69 @@ var _ = Describe("AgentScheduler.loadPage edge cases", func() {
 		})
 	})
 })
+
+var _ = Describe("AgentScheduler per-schedule timeout", func() {
+	var (
+		pages    *fakePageStore
+		store    *server.AgentScheduleStore
+		idx      *fakeFrontmatterIndex
+		cronReg  *fakeCronRegistrar
+		dispatch *fakeDispatcher
+	)
+
+	BeforeEach(func() {
+		pages = newFakePageStore()
+		store = server.NewAgentScheduleStore(pages)
+		idx = &fakeFrontmatterIndex{}
+		cronReg = &fakeCronRegistrar{}
+		dispatch = &fakeDispatcher{}
+	})
+
+	Describe("when a schedule has timeout_seconds == 0", func() {
+		// Test (a): zero inherits the scheduler-wide hard timeout.
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id: "inherit", Cron: "0 0 9 * * 1", Prompt: "p",
+				Enabled: true, TimeoutSeconds: 0,
+			})).To(Succeed())
+			idx.pages = []wikipage.PageIdentifier{"p"}
+
+			scheduler := server.NewAgentScheduler(store, dispatch, idx, cronReg, 15*time.Minute)
+			Expect(scheduler.LoadAll()).To(Succeed())
+		})
+
+		It("should register one schedule", func() {
+			Expect(cronReg.scheduled).To(HaveLen(1))
+		})
+
+		It("should create a job with the scheduler-wide hard timeout", func() {
+			job, ok := cronReg.scheduled[0].job.(*server.AgentTurnJob)
+			Expect(ok).To(BeTrue(), "job should be *server.AgentTurnJob")
+			Expect(job.HardTimeout()).To(Equal(15 * time.Minute))
+		})
+	})
+
+	Describe("when a schedule has an explicit timeout_seconds", func() {
+		// Test (b): in-range value flows through to the job.
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id: "explicit", Cron: "0 0 9 * * 1", Prompt: "p",
+				Enabled: true, TimeoutSeconds: 2400, // 40 minutes
+			})).To(Succeed())
+			idx.pages = []wikipage.PageIdentifier{"p"}
+
+			scheduler := server.NewAgentScheduler(store, dispatch, idx, cronReg, 10*time.Minute)
+			Expect(scheduler.LoadAll()).To(Succeed())
+		})
+
+		It("should register one schedule", func() {
+			Expect(cronReg.scheduled).To(HaveLen(1))
+		})
+
+		It("should create a job with the per-schedule timeout, not the global default", func() {
+			job, ok := cronReg.scheduled[0].job.(*server.AgentTurnJob)
+			Expect(ok).To(BeTrue(), "job should be *server.AgentTurnJob")
+			Expect(job.HardTimeout()).To(Equal(2400 * time.Second))
+		})
+	})
+})

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -272,6 +273,115 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				list, _ := schedules.List("p")
 				Expect(list).To(HaveLen(1))
 				Expect(list[0].GetTimezone()).To(Equal(""))
+			})
+		})
+
+		Describe("when timeout_seconds is 0", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:             "inherit_timeout",
+						Cron:           "0 0 9 * * 1",
+						TimeoutSeconds: 0,
+					},
+				})
+			})
+
+			It("should not return an error (0 means inherit server default)", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should persist timeout_seconds as 0", func() {
+				list, _ := schedules.List("p")
+				Expect(list).To(HaveLen(1))
+				Expect(list[0].GetTimeoutSeconds()).To(Equal(int32(0)))
+			})
+		})
+
+		Describe("when timeout_seconds is a valid in-range value", func() {
+			var resp *apiv1.UpsertScheduleResponse
+			var err error
+
+			BeforeEach(func() {
+				// Use a server with explicit max timeout set (60 minutes)
+				pages := newInMemoryPageStore()
+				sched := server.NewAgentScheduleStore(pages)
+				chatCtx := server.NewAgentChatContextStore(pages)
+				sched.SetBackgroundActivitySink(chatCtx)
+				srvWithMax := mustNewServer(&MockPageReaderMutator{}, nil, nil).
+					WithAgentScheduleStore(sched).
+					WithAgentChatContextStore(chatCtx).
+					WithAgentTurnMaxTimeout(60 * time.Minute)
+
+				resp, err = srvWithMax.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:             "long_timeout",
+						Cron:           "0 0 9 * * 1",
+						TimeoutSeconds: 2400, // 40 minutes — below the 60m max
+					},
+				})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should persist timeout_seconds", func() {
+				Expect(resp.GetSchedule().GetTimeoutSeconds()).To(Equal(int32(2400)))
+			})
+		})
+
+		Describe("when timeout_seconds is below the minimum (1–59)", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:             "tiny_timeout",
+						Cron:           "0 0 9 * * 1",
+						TimeoutSeconds: 30, // below the 60s minimum
+					},
+				})
+			})
+
+			It("should return InvalidArgument naming the minimum bound", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "minimum"))
+			})
+		})
+
+		Describe("when timeout_seconds exceeds the server maximum", func() {
+			// Test (c): above-max is rejected with INVALID_ARGUMENT.
+			var err error
+
+			BeforeEach(func() {
+				// Build a server with a 60-minute max timeout.
+				pages := newInMemoryPageStore()
+				sched := server.NewAgentScheduleStore(pages)
+				chatCtx := server.NewAgentChatContextStore(pages)
+				sched.SetBackgroundActivitySink(chatCtx)
+				srvWithMax := mustNewServer(&MockPageReaderMutator{}, nil, nil).
+					WithAgentScheduleStore(sched).
+					WithAgentChatContextStore(chatCtx).
+					WithAgentTurnMaxTimeout(60 * time.Minute)
+
+				_, err = srvWithMax.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:             "too_long_timeout",
+						Cron:           "0 0 9 * * 1",
+						TimeoutSeconds: 7200, // 2 hours — above the 60m max
+					},
+				})
+			})
+
+			It("should return InvalidArgument naming both the submitted value and the maximum", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "timeout_seconds"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "maximum"))
 			})
 		})
 	})
