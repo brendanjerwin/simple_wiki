@@ -3442,3 +3442,295 @@ describe('PageChatPanel composer (issue #1349)', () => {
     });
   });
 });
+
+interface FakeVisualViewport extends EventTarget {
+  height: number;
+  offsetTop: number;
+}
+
+function createFakeVisualViewport(height: number, offsetTop: number): FakeVisualViewport {
+  const viewport = new EventTarget() as FakeVisualViewport;
+  viewport.height = height;
+  viewport.offsetTop = offsetTop;
+  return viewport;
+}
+
+// Resolves on the next painted frame — the frame the component's coalescing
+// handler runs in after a burst of visual-viewport events.
+async function nextFrame(): Promise<void> {
+  await new Promise(requestAnimationFrame);
+}
+
+function restoreWindowProperty(
+  name: 'visualViewport' | 'innerHeight',
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor) {
+    Object.defineProperty(window, name, descriptor);
+    return;
+  }
+  Reflect.deleteProperty(window, name);
+}
+
+describe('PageChatPanel visual viewport sizing (issue #1445)', () => {
+  let el: PageChatPanel;
+  let panel: HTMLElement;
+  let viewport: FakeVisualViewport;
+  let addViewportListenerSpy: SinonSpy;
+  let removeViewportListenerSpy: SinonSpy;
+  let visualViewportDescriptor: PropertyDescriptor | undefined;
+  let innerHeightDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(async () => {
+    localStorageStub = {
+      getItem: stub(localStorage, 'getItem').returns(null),
+      setItem: stub(localStorage, 'setItem'),
+      removeItem: stub(localStorage, 'removeItem'),
+    };
+    fetchStub = stub(window, 'fetch').resolves(new Response(new Uint8Array(0), { status: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    startStreamStub = stub(PageChatPanel.prototype as any, 'startStream').resolves();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    pollChatStatusStub = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
+
+    viewport = createFakeVisualViewport(800, 0);
+    visualViewportDescriptor = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    innerHeightDescriptor = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+    Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => viewport });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => 800 });
+    addViewportListenerSpy = spy(viewport, 'addEventListener');
+    removeViewportListenerSpy = spy(viewport, 'removeEventListener');
+
+    el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+    el.agentConnected = true;
+    await el.updateComplete;
+    panel = el.shadowRoot!.querySelector<HTMLElement>('.panel')!;
+  });
+
+  afterEach(() => {
+    el.remove();
+    restoreWindowProperty('visualViewport', visualViewportDescriptor);
+    restoreWindowProperty('innerHeight', innerHeightDescriptor);
+    localStorageStub.getItem.restore();
+    localStorageStub.setItem.restore();
+    localStorageStub.removeItem.restore();
+    fetchStub.restore();
+    startStreamStub.restore();
+    pollChatStatusStub.restore();
+    resetForTesting();
+  });
+
+  // Assertions below compare primitives only: a failing chai assertion whose
+  // actual/expected values are live functions or elements wedges the WTR run.
+  describe('when the component is connected', () => {
+    let resizeHandlerCount: number;
+    let scrollHandlerCount: number;
+    let handlersMatch: boolean;
+
+    beforeEach(() => {
+      const calls = addViewportListenerSpy.getCalls();
+      const resizeHandlers = calls
+        .filter((call) => call.args[0] === 'resize')
+        .map((call) => call.args[1] as unknown);
+      const scrollHandlers = calls
+        .filter((call) => call.args[0] === 'scroll')
+        .map((call) => call.args[1] as unknown);
+      resizeHandlerCount = resizeHandlers.length;
+      scrollHandlerCount = scrollHandlers.length;
+      handlersMatch = scrollHandlers.length === 1 && scrollHandlers[0] === resizeHandlers[0];
+    });
+
+    it('should listen for visual viewport resize events', () => {
+      expect(resizeHandlerCount).to.equal(1);
+    });
+
+    it('should listen for visual viewport scroll events (offsetTop changes arrive as scroll)', () => {
+      expect(scrollHandlerCount).to.equal(1);
+    });
+
+    it('should use a single handler for both events so bursts coalesce', () => {
+      expect(handlersMatch).to.equal(true);
+    });
+  });
+
+  describe('when the component is disconnected', () => {
+    let removedEventTypes: string[];
+
+    beforeEach(() => {
+      el.remove();
+      removedEventTypes = removeViewportListenerSpy.getCalls().map((call) => String(call.args[0]));
+    });
+
+    it('should remove the resize listener', () => {
+      expect(removedEventTypes).to.include('resize');
+    });
+
+    it('should remove the scroll listener', () => {
+      expect(removedEventTypes).to.include('scroll');
+    });
+  });
+
+  describe('when the keyboard opens and the composer is scrolled into view', () => {
+    beforeEach(async () => {
+      el.openDrawer();
+      await el.updateComplete;
+      // Keyboard animation: the height shrinks while offsetTop is still 0, then
+      // the browser scrolls the focused composer into view. That offset change
+      // is delivered as a visual-viewport `scroll`, not `resize`.
+      viewport.height = 600;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.height = 450;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.offsetTop = 350;
+      viewport.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+    });
+
+    it('should size the panel to the settled visual viewport height', () => {
+      expect(panel.style.height).to.equal('450px');
+    });
+
+    it('should offset the panel to the settled visual viewport offsetTop', () => {
+      expect(panel.style.top).to.equal('350px');
+    });
+  });
+
+  describe('when only offsetTop changes while the keyboard is open', () => {
+    beforeEach(async () => {
+      el.drawerOpen = true;
+      await el.updateComplete;
+      viewport.height = 450;
+      viewport.dispatchEvent(new Event('resize'));
+      await nextFrame();
+      viewport.offsetTop = 120;
+      viewport.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+    });
+
+    it('should apply the new inline top', () => {
+      expect(panel.style.top).to.equal('120px');
+    });
+
+    it('should keep the inline height', () => {
+      expect(panel.style.height).to.equal('450px');
+    });
+  });
+
+  describe('when offsetTop returns to 0 while the keyboard is still open', () => {
+    beforeEach(async () => {
+      el.drawerOpen = true;
+      await el.updateComplete;
+      viewport.height = 450;
+      viewport.offsetTop = 200;
+      viewport.dispatchEvent(new Event('resize'));
+      await nextFrame();
+      viewport.offsetTop = 0;
+      viewport.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+    });
+
+    it('should clear the stale inline top', () => {
+      expect(panel.style.top).to.equal('');
+    });
+
+    it('should keep the inline height for the open keyboard', () => {
+      expect(panel.style.height).to.equal('450px');
+    });
+  });
+
+  describe('when the keyboard animation delivers a burst of events in one frame', () => {
+    let resizePanelSpy: SinonSpy;
+
+    beforeEach(async () => {
+      el.drawerOpen = true;
+      await el.updateComplete;
+      resizePanelSpy = spy(el as unknown as { resizePanel: () => void }, 'resizePanel');
+      viewport.height = 700;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.height = 600;
+      viewport.offsetTop = 100;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.height = 450;
+      viewport.offsetTop = 250;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+    });
+
+    it('should run a single sizing pass for the frame', () => {
+      expect(resizePanelSpy.callCount).to.equal(1);
+    });
+
+    it('should size the panel from the settled final-frame values', () => {
+      expect(panel.style.height).to.equal('450px');
+      expect(panel.style.top).to.equal('250px');
+    });
+  });
+
+  describe('when the keyboard opens on the first open of the drawer', () => {
+    beforeEach(async () => {
+      el.openDrawer();
+      await el.updateComplete;
+      viewport.height = 600;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.height = 450;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.offsetTop = 300;
+      viewport.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+    });
+
+    it('should focus the composer', () => {
+      expect(el.shadowRoot!.activeElement === el.shadowRoot!.querySelector('textarea')).to.equal(true);
+    });
+
+    it('should land on the settled viewport height', () => {
+      expect(panel.style.height).to.equal('450px');
+    });
+
+    it('should land on the settled viewport offsetTop', () => {
+      expect(panel.style.top).to.equal('300px');
+    });
+  });
+
+  describe('when the keyboard closes after having been open', () => {
+    beforeEach(async () => {
+      el.drawerOpen = true;
+      await el.updateComplete;
+      viewport.height = 450;
+      viewport.offsetTop = 200;
+      viewport.dispatchEvent(new Event('resize'));
+      await nextFrame();
+      viewport.height = 800;
+      viewport.offsetTop = 0;
+      viewport.dispatchEvent(new Event('resize'));
+      await nextFrame();
+    });
+
+    it('should remove the inline height', () => {
+      expect(panel.style.height).to.equal('');
+    });
+
+    it('should remove the inline top', () => {
+      expect(panel.style.top).to.equal('');
+    });
+  });
+
+  describe('when the viewport matches the window (desktop)', () => {
+    beforeEach(async () => {
+      el.drawerOpen = true;
+      await el.updateComplete;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+    });
+
+    it('should leave sizing to CSS (no inline height)', () => {
+      expect(panel.style.height).to.equal('');
+    });
+
+    it('should leave positioning to CSS (no inline top)', () => {
+      expect(panel.style.top).to.equal('');
+    });
+  });
+});

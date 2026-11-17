@@ -629,10 +629,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  private readonly chatClient: Client<typeof ChatService>;
  private readonly markdownRenderer: ChatMarkdownRenderer;
  private readonly _handleVisibilityChange: () => void;
- private readonly _handleViewportResize: () => void;
+ private readonly _handleViewportChange: () => void;
  private readonly _handleGlobalKeydown: (e: KeyboardEvent) => void;
  private readonly _handleGlobalClick: () => void;
  private userHasScrolled = false;
+ private _viewportFrame: number | undefined;
 
  private _restoreOpen = false;
  private _panelEverOpened = false;
@@ -661,7 +662,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   this.chatClient = createClient(ChatService, getGrpcWebTransport());
   this.markdownRenderer = new ChatMarkdownRenderer();
   this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
-  this._handleViewportResize = this.handleViewportResize.bind(this);
+  this._handleViewportChange = this.handleViewportChange.bind(this);
   this._handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   this._handleGlobalClick = this._closeAttachMenu.bind(this);
 
@@ -681,7 +682,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   document.addEventListener('visibilitychange', this._handleVisibilityChange);
   document.addEventListener('keydown', this._handleGlobalKeydown);
   document.addEventListener('click', this._handleGlobalClick);
-  window.visualViewport?.addEventListener('resize', this._handleViewportResize);
+  const viewport = window.visualViewport;
+  viewport?.addEventListener('resize', this._handleViewportChange);
+  viewport?.addEventListener('scroll', this._handleViewportChange);
   if (this._restoreOpen) {
    this.openDrawer();
    this._restoreOpen = false;
@@ -697,7 +700,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   document.removeEventListener('visibilitychange', this._handleVisibilityChange);
   document.removeEventListener('keydown', this._handleGlobalKeydown);
   document.removeEventListener('click', this._handleGlobalClick);
-  window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
+  const viewport = window.visualViewport;
+  viewport?.removeEventListener('resize', this._handleViewportChange);
+  viewport?.removeEventListener('scroll', this._handleViewportChange);
+  this.cancelPendingViewportSync();
   revokePreviews(this._pendingAttachments);
   this.stopStream();
   if (this.statusPollTimer) {
@@ -1400,24 +1406,52 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   // Only apply inline sizing when the visual viewport differs from the window
   // (e.g., mobile keyboard is open). On desktop, let CSS handle layout.
   const keyboardOpen = viewport.height < window.innerHeight * 0.85;
-  if (keyboardOpen) {
-   panel.style.height = `${viewport.height}px`;
-   if (viewport.offsetTop > 0) {
-    panel.style.top = `${viewport.offsetTop}px`;
-   }
-  } else {
+  if (!keyboardOpen) {
    panel.style.removeProperty('height');
+   panel.style.removeProperty('top');
+   return;
+  }
+
+  panel.style.height = `${viewport.height}px`;
+  // offsetTop changes are delivered as `scroll` on the visual viewport, and it
+  // can return to 0 while the keyboard is still open. Clear the inline top in
+  // that case instead of leaving a stale offset behind.
+  if (viewport.offsetTop > 0) {
+   panel.style.top = `${viewport.offsetTop}px`;
+  } else {
    panel.style.removeProperty('top');
   }
  }
 
- private handleViewportResize(): void {
+ /**
+  * Coalesce visual-viewport changes into one sizing pass on the next painted
+  * frame. Opening the keyboard delivers a burst of `resize` (height) and
+  * `scroll` (offsetTop) events while the panel slides in; measuring every one
+  * of them leaves the panel at whichever intermediate frame fired last.
+  */
+ private handleViewportChange(): void {
   if (!window.visualViewport) return;
-  this.resizePanel();
+  if (this._viewportFrame !== undefined) return;
+  this._viewportFrame = requestAnimationFrame(() => {
+   this._viewportFrame = undefined;
+   if (!this.isConnected) return;
+   this.resizePanel();
+  });
+ }
+
+ private cancelPendingViewportSync(): void {
+  if (this._viewportFrame === undefined) return;
+  cancelAnimationFrame(this._viewportFrame);
+  this._viewportFrame = undefined;
  }
 
  private handleVisibilityChange(): void {
   if (document.visibilityState !== 'visible') return;
+
+  // Frames are paused while the tab is hidden, so a pending sizing frame may
+  // never have run. Drop it and measure again for the restored viewport.
+  this.cancelPendingViewportSync();
+  this.handleViewportChange();
 
   if (this.drawerOpen && !this.userHasScrolled) {
    void this.updateComplete.then(() => this.scrollToBottom());
