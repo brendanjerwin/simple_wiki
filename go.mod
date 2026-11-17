@@ -1,6 +1,6 @@
 module github.com/brendanjerwin/simple_wiki
 
-go 1.27.3
+go 1.27.4
 
 require (
 	connectrpc.com/connect v1.21.1
@@ -48,7 +48,7 @@ require (
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
-	tailscale.com v1.104.5
+	tailscale.com v1.104.7
 )
 
 require (
