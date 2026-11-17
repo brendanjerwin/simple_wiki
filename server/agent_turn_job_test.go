@@ -411,13 +411,13 @@ var _ = Describe("AgentTurnJob", func() {
 		// Test (d): the TIMEOUT stamp in last_error_message reports the effective
 		// per-schedule timeout value, not the server-wide default.
 		var executeErr error
-		const perScheduleTimeoutMs = 75 * time.Millisecond
+		const perScheduleTimeout = 75 * time.Millisecond
 
 		BeforeEach(func() {
 			dispatcher.neverComplete = true
 			// Use an explicit per-schedule timeout distinct from the server-wide default
 			// (50ms) so we can assert the message mentions this specific duration.
-			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", perScheduleTimeoutMs)
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", perScheduleTimeout)
 
 			done := make(chan error, 1)
 			go func() {
@@ -443,7 +443,7 @@ var _ = Describe("AgentTurnJob", func() {
 			schedules, _ := store.List("p")
 			// The error message format is "scheduled turn timed out after <duration>".
 			// With a 75ms timeout the duration string is "75ms".
-			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring(perScheduleTimeoutMs.String()))
+			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring(perScheduleTimeout.String()))
 		})
 	})
 
