@@ -79,25 +79,8 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone %q: %v", tz, tzErr)
 		}
 	}
-	// Validate per-schedule timeout: 0 = inherit the server default; otherwise
-	// must be >= 60s and <= the server maximum. Both bounds are named in the
-	// error so an agent can correct the value without a second round-trip.
-	if ts := schedule.GetTimeoutSeconds(); ts != 0 {
-		const minTimeoutSeconds = 60
-		maxTimeout := s.agentTurnMaxTimeout
-		if maxTimeout <= 0 {
-			maxTimeout = server.DefaultAgentTurnMaxTimeout
-		}
-		maxTimeoutSeconds := int32(maxTimeout.Seconds())
-		if ts < minTimeoutSeconds {
-			return nil, status.Errorf(codes.InvalidArgument,
-				"timeout_seconds %d is below the minimum of %d seconds", ts, minTimeoutSeconds)
-		}
-		if ts > maxTimeoutSeconds {
-			return nil, status.Errorf(codes.InvalidArgument,
-				"timeout_seconds %d exceeds the server maximum of %d seconds (%s); lower the value or raise --agent-turn-max-timeout",
-				ts, maxTimeoutSeconds, maxTimeout)
-		}
+	if err := s.validateTimeoutSeconds(schedule.GetTimeoutSeconds()); err != nil {
+		return nil, err
 	}
 
 	// Strip wiki-managed fields so callers cannot forge status. The store
@@ -129,6 +112,32 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 	}
 	// Defensive fallback; the upsert should always be readable.
 	return &apiv1.UpsertScheduleResponse{Schedule: clean}, nil
+}
+
+// validateTimeoutSeconds returns an INVALID_ARGUMENT status when ts is
+// out-of-range: non-zero values must be >= 60s (minimum meaningful timeout)
+// and <= the server-configured maximum. Zero means "inherit server default"
+// and always passes.
+func (s *Server) validateTimeoutSeconds(ts int32) error {
+	if ts == 0 {
+		return nil
+	}
+	const minTimeoutSeconds = 60
+	maxTimeout := s.agentTurnMaxTimeout
+	if maxTimeout <= 0 {
+		maxTimeout = server.DefaultAgentTurnMaxTimeout
+	}
+	maxTimeoutSeconds := int32(maxTimeout.Seconds())
+	if ts < minTimeoutSeconds {
+		return status.Errorf(codes.InvalidArgument,
+			"timeout_seconds %d is below the minimum of %d seconds", ts, minTimeoutSeconds)
+	}
+	if ts > maxTimeoutSeconds {
+		return status.Errorf(codes.InvalidArgument,
+			"timeout_seconds %d exceeds the server maximum of %d seconds (%s); lower the value or raise --agent-turn-max-timeout",
+			ts, maxTimeoutSeconds, maxTimeout)
+	}
+	return nil
 }
 
 // DeleteSchedule implements the DeleteSchedule RPC. Idempotent.
