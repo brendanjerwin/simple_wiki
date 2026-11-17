@@ -407,6 +407,46 @@ var _ = Describe("AgentTurnJob", func() {
 		})
 	})
 
+	Describe("Execute when a per-schedule timeout elapses", func() {
+		// Test (d): the TIMEOUT stamp in last_error_message reports the effective
+		// per-schedule timeout value, not the server-wide default.
+		var executeErr error
+		const perScheduleTimeoutMs = 75 * time.Millisecond
+
+		BeforeEach(func() {
+			dispatcher.neverComplete = true
+			// Use an explicit per-schedule timeout distinct from the server-wide default
+			// (50ms) so we can assert the message mentions this specific duration.
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", perScheduleTimeoutMs)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case executeErr = <-done:
+			case <-time.After(time.Second):
+				Fail("Execute did not return within 1s; awaitOutcome timeout branch is likely broken")
+			}
+		})
+
+		It("should return nil from Execute", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should record terminal TIMEOUT status", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT))
+		})
+
+		It("should report the effective timeout duration in last_error_message", func() {
+			schedules, _ := store.List("p")
+			// The error message format is "scheduled turn timed out after <duration>".
+			// With a 75ms timeout the duration string is "75ms".
+			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring(perScheduleTimeoutMs.String()))
+		})
+	})
+
 	Describe("Execute when the hard timeout wins before a late OK completion", func() {
 		var (
 			completion chan *server.ScheduledTurnOutcome

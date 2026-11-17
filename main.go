@@ -141,6 +141,7 @@ func createSite(c *cli.Context) (*server.Site, error) {
 	site.AgentScheduleConcurrency = c.GlobalInt("agent-schedule-concurrency")
 	site.AgentScheduleQueueCap = c.GlobalInt("agent-schedule-queue-capacity")
 	site.AgentTurnHardTimeout = c.GlobalDuration("agent-turn-hard-timeout")
+	site.AgentTurnMaxTimeout = c.GlobalDuration("agent-turn-max-timeout")
 
 	// Now that the CLI-supplied agent-schedule sizing is on the site, register
 	// the AgentTurn queue and construct the AgentScheduler. LoadAll() runs
@@ -481,6 +482,11 @@ func agentScheduleFlags() []cli.Flag {
 			Name:  "agent-turn-hard-timeout",
 			Value: server.DefaultAgentTurnHardTimeout,
 			Usage: "wall-clock timeout for a scheduled-agent turn before the wiki records TIMEOUT",
+		},
+		cli.DurationFlag{
+			Name:  "agent-turn-max-timeout",
+			Value: server.DefaultAgentTurnMaxTimeout,
+			Usage: "upper bound on per-schedule timeout_seconds; UpsertSchedule rejects values above this",
 		},
 	}
 }

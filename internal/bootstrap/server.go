@@ -898,6 +898,7 @@ func setupGRPCServer(
 		WithFileStorer(site.FileStorer).
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
+		WithAgentTurnMaxTimeout(site.AgentTurnMaxTimeout).
 		WithAgentChatContextStore(site.AgentChatContextStore).
 		WithAgentInventory(site.AgentRegistry).
 		WithAgentPageBindingStore(site.AgentPageBindingStore).
