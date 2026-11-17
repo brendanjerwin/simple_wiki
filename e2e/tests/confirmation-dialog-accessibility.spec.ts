@@ -25,6 +25,15 @@ test.describe('ConfirmationDialog accessibility (via erasePage flow)', () => {
     await page.locator('.tools-menu').hover();
     await page.locator('#erasePage').click();
 
+    // Park the pointer off the tools menu before the dialog is torn down.
+    // Focus restoration prefers the opener while it is rendered, so leaving the
+    // pointer on this hover menu makes the restored target race the menu's
+    // :hover re-application (CI failure artifact: focus landed on #erasePage
+    // with the menu still open). With the menu closed, the opener is hidden and
+    // restoreFocus() deterministically falls back to #tools-menu.
+    await page.mouse.move(0, 0);
+    await expect(page.locator('#erasePage')).toBeHidden({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+
     await expect(page.locator('#page-deletion-dialog[open]')).toBeAttached({
       timeout: DIALOG_APPEAR_TIMEOUT_MS,
     });

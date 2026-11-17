@@ -44,12 +44,26 @@ const (
 	fmBackgroundActivityKey = "background_activity"
 )
 
+// computeBodyHash computes a SHA256 hash of the markdown body only, returned as
+// a lowercase hex string. This is the token used for optimistic concurrency
+// control on body-only writes (UpdatePageContent, WritePageSection) and in
+// ReadPageOutline / ReadPageSection responses.
+//
+// Using body-only hash means metadata-only writes (frontmatter changes such as
+// AppendBackgroundActivitySummary, checklist mutations, schedule stamps) do not
+// move the token, so agents holding a valid body hash are not spuriously rejected
+// with 409 when no body byte changed (issue #1440).
+func computeBodyHash(markdown wikipage.Markdown) string {
+	h := sha256.New()
+	_, _ = h.Write([]byte(markdown))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // computePageHash computes a SHA256 hash covering both frontmatter and markdown,
-// returned as a lowercase hex string. Used for optimistic concurrency control.
-// Including frontmatter ensures that frontmatter-only edits are visible to
-// callers holding an expected_version_hash, preventing silent data loss.
-// Nil or empty frontmatter contributes zero bytes, so pages with no frontmatter
-// yield the same hash as before (hash of markdown only).
+// returned as a lowercase hex string. This is the token handed out by ReadPage
+// and by whole-page write responses, and the OCC handle UpdateWholePage
+// compares, so frontmatter-only edits stay visible to callers replacing the
+// whole page (issue #1197). Nil or empty frontmatter contributes zero bytes.
 //
 // The wiki.page_app_state subtree is EXCLUDED (every caller, uniformly —
 // watch hashes and OCC handles must agree or a state flush invalidates the
@@ -70,27 +84,74 @@ func computePageHash(frontmatter wikipage.FrontMatter, markdown wikipage.Markdow
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// checkContentVersionHash verifies that the current full page state (frontmatter + markdown)
-// matches the expected version hash.
-// Returns an error if there is a version mismatch; returns nil if expectedHash is nil (no check requested).
+// contentVersionMismatchMessage is the Aborted message for a whole-page write
+// whose token no longer matches the page.
+const contentVersionMismatchMessage = "content version mismatch: page was modified since last read; re-read the page and retry"
+
+// bodyVersionMismatchMessage is the Aborted message for a body-only write whose
+// token no longer matches the body.
+const bodyVersionMismatchMessage = "content version mismatch: body content was modified by a concurrent write; re-read the page and retry"
+
+// matchesVersionHash reports whether two OCC tokens are byte-identical,
+// compared in constant time so a mismatch does not leak token bytes.
+func matchesVersionHash(currentHash, expectedHash string) bool {
+	return subtle.ConstantTimeCompare([]byte(currentHash), []byte(expectedHash)) == 1
+}
+
+// checkContentVersionHash verifies that the current full page state
+// (frontmatter + markdown) matches the expected version hash. Used by
+// UpdateWholePage, which replaces the whole page and must notice
+// frontmatter-only concurrent edits (issue #1197).
+// Returns an error if there is a version mismatch; returns nil if expectedHash is nil.
 func checkContentVersionHash(currentFrontMatter wikipage.FrontMatter, currentMarkdown wikipage.Markdown, expectedHash *string) error {
 	if expectedHash == nil {
 		return nil
 	}
 
-	currentHash := computePageHash(currentFrontMatter, currentMarkdown)
-	return checkContentVersionHashString(currentHash, expectedHash)
+	if !matchesVersionHash(computePageHash(currentFrontMatter, currentMarkdown), *expectedHash) {
+		return status.Error(codes.Aborted, contentVersionMismatchMessage)
+	}
+	return nil
 }
 
-func checkContentVersionHashString(currentHash string, expectedHash *string) error {
+// checkBodyWriteVersionHash verifies the OCC token of a body-only write
+// (UpdatePageContent, WritePageSection). Two token shapes are accepted:
+//
+//   - the body-only token returned by ReadPageOutline, ReadPageSection and a
+//     prior body write — the metadata-insensitive handle from issue #1440;
+//   - the full-page token returned by ReadPage, accepted while it still matches,
+//     i.e. nothing at all changed since that read.
+//
+// The second shape keeps the documented "pass the version_hash from a prior
+// ReadPage" flow working even though ReadPage's handle covers the whole page.
+// A metadata-only write moves the full-page hash but never the body hash, so a
+// caller holding the body token still lands (issue #1440); a genuine concurrent
+// body edit moves both, so it is still rejected.
+//
+// Returns an error if there is a mismatch; returns nil if expectedHash is nil.
+func checkBodyWriteVersionHash(currentFrontMatter wikipage.FrontMatter, currentMarkdown wikipage.Markdown, expectedHash *string) error {
 	if expectedHash == nil {
 		return nil
 	}
 
-	if subtle.ConstantTimeCompare([]byte(currentHash), []byte(*expectedHash)) != 1 {
-		return status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
+	if matchesVersionHash(computeBodyHash(currentMarkdown), *expectedHash) ||
+		matchesVersionHash(computePageHash(currentFrontMatter, currentMarkdown), *expectedHash) {
+		return nil
 	}
 
+	return status.Error(codes.Aborted, bodyVersionMismatchMessage)
+}
+
+// checkBodyVersionHashString verifies a caller-supplied token against the
+// already-computed body hash. Used by ReadPageSection, a read that must not pay
+// for a frontmatter-inclusive hash.
+func checkBodyVersionHashString(currentBodyHash string, expectedHash *string) error {
+	if expectedHash == nil {
+		return nil
+	}
+	if !matchesVersionHash(currentBodyHash, *expectedHash) {
+		return status.Error(codes.Aborted, bodyVersionMismatchMessage)
+	}
 	return nil
 }
 
@@ -765,6 +826,10 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 		return nil, status.Errorf(codes.Internal, "failed to marshal frontmatter: %v", err)
 	}
 
+	// version_hash covers frontmatter + markdown: the same handle also drives
+	// UpdateWholePage, which must notice frontmatter-only edits (issue #1197).
+	// Body-only writes accept it while it still matches, so the documented
+	// "pass this to UpdatePageContent" flow keeps working.
 	return &apiv1.ReadPageResponse{
 		ContentMarkdown:         string(markdown),
 		FrontMatterToml:         string(frontmatterToml),
@@ -1007,10 +1072,10 @@ func (s *Server) writeMarkdownAndVerify(
 		*capturedFM = funnelFM
 	}
 
-	// page_byte_size mirrors the history service's ByteSize unit: the whole
-	// page text (frontmatter + markdown) as combined on disk, so agents can
-	// compare a write's outcome directly against PageHistoryService entries.
-	return computePageSizeAndHash(*capturedFM, storedMarkdown)
+	// page_byte_size mirrors the history service's ByteSize unit (whole page),
+	// and version_hash is body-only so the returned token chains into the next
+	// body write without being invalidated by a metadata-only write (#1440).
+	return computeBodySizeAndHash(*capturedFM, storedMarkdown)
 }
 
 // updatePageContentModifier builds the atomic modifier for UpdatePageContent:
@@ -1035,10 +1100,13 @@ func updatePageContentModifier(req *apiv1.UpdatePageContentRequest, capturedFM *
 					"To force a full-page write without a version check, use UpdateWholePage.")
 		}
 
-		// Version hash check is now atomic with the write — no TOCTOU window.
-		// Hash covers both frontmatter and markdown so frontmatter-only edits
-		// are also detected (issue #1197).
-		if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
+		// OCC check is atomic with the write — no TOCTOU window.
+		// UpdatePageContent only writes the markdown body and always preserves
+		// frontmatter, so a metadata-only write (AppendBackgroundActivitySummary,
+		// checklist mutations) must never reject it (issue #1440). A body token
+		// from ReadPageOutline/ReadPageSection/this response is compared first;
+		// a full-page token from ReadPage is accepted while it still matches.
+		if err := checkBodyWriteVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
 			return nil, "", err
 		}
 
@@ -1360,7 +1428,9 @@ func mergeReservedSubtrees(fm, currentFM wikipage.FrontMatter) wikipage.FrontMat
 	return fmForWrite
 }
 
-// computePageSizeAndHash returns the whole-page byte size and version hash.
+// computePageSizeAndHash returns the whole-page byte size and full-page version
+// hash (frontmatter + markdown). Used by UpdatePage and UpdateWholePage
+// responses.
 // page_byte_size mirrors the history service's ByteSize unit: the whole page
 // text (frontmatter + markdown) as combined on disk, so agents can compare a
 // write's outcome directly against PageHistoryService entries.
@@ -1370,6 +1440,19 @@ func computePageSizeAndHash(fm wikipage.FrontMatter, md wikipage.Markdown) (stri
 		return "", 0, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
 	}
 	return computePageHash(fm, md), int64(len(wholeText)), nil
+}
+
+// computeBodySizeAndHash returns the whole-page byte size together with the
+// body-only version_hash (SHA256 of markdown only). Used by UpdatePageContent
+// and WritePageSection responses, so the returned token chains into the next
+// body write without being invalidated by an intervening metadata-only write
+// (issue #1440).
+func computeBodySizeAndHash(fm wikipage.FrontMatter, md wikipage.Markdown) (string, int64, error) {
+	wholeText, err := wikipage.CombineFrontMatterAndMarkdown(fm, md)
+	if err != nil {
+		return "", 0, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
+	}
+	return computeBodyHash(md), int64(len(wholeText)), nil
 }
 
 // updateWholePageResponse builds the success response for UpdateWholePage.
@@ -1539,7 +1622,7 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		return nil, authErr
 	}
 
-	markdown, frontmatter, err := s.readMarkdownAndFrontMatter(string(req.Page))
+	markdown, _, err := s.readMarkdownAndFrontMatter(string(req.Page))
 	if err != nil {
 		return nil, err
 	}
@@ -1547,7 +1630,7 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 	return &apiv1.ReadPageOutlineResponse{
 		Headings:    parseHeadings(string(markdown)),
 		TotalBytes:  int64(len(markdown)),
-		VersionHash: computePageHash(frontmatter, markdown),
+		VersionHash: computeBodyHash(markdown),
 	}, nil
 }
 
@@ -1581,13 +1664,13 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		return nil, authErr
 	}
 
-	markdown, frontmatter, err := s.readMarkdownAndFrontMatter(string(req.Page))
+	markdown, _, err := s.readMarkdownAndFrontMatter(string(req.Page))
 	if err != nil {
 		return nil, err
 	}
 
-	versionHash := computePageHash(frontmatter, markdown)
-	if err := checkContentVersionHashString(versionHash, req.ExpectedVersionHash); err != nil {
+	versionHash := computeBodyHash(markdown)
+	if err := checkBodyVersionHashString(versionHash, req.ExpectedVersionHash); err != nil {
 		return nil, err
 	}
 
@@ -1702,7 +1785,9 @@ func writePageSectionModifier(req *apiv1.WritePageSectionRequest, capturedFM *wi
 	return func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		*capturedFM = currentFM
 
-		if err := checkContentVersionHash(currentFM, currentMarkdown, &req.ExpectedVersionHash); err != nil {
+		// Body-write OCC check: WritePageSection writes only the body, so a
+		// metadata-only write must not cause a spurious rejection (issue #1440).
+		if err := checkBodyWriteVersionHash(currentFM, currentMarkdown, &req.ExpectedVersionHash); err != nil {
 			return nil, "", err
 		}
 

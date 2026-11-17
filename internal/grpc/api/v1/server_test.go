@@ -2598,9 +2598,11 @@ var _ = Describe("Server", func() {
 		// test cases that aren't specifically testing hash behaviour don't need
 		// boilerplate. Find-and-replace tests (OldContentMarkdown set) skip this.
 		// Concurrent-edit tests supply the hash of the concurrent content explicitly.
+		// Uses body-only hash because UpdatePageContent only writes the body
+		// (issue #1440).
 		JustBeforeEach(func() {
 			if req.OldContentMarkdown == nil && req.ExpectedVersionHash == nil {
-				h := computeExpectedPageHash(mockPageReaderMutator.Frontmatter, string(mockPageReaderMutator.Markdown))
+				h := computeExpectedPageHash(nil, string(mockPageReaderMutator.Markdown))
 				req.ExpectedVersionHash = &h
 			}
 		})
@@ -2780,12 +2782,10 @@ var _ = Describe("Server", func() {
 				concurrent := wikipage.Markdown(strings.Repeat("Concurrent line.\n", 400))
 				mockPageReaderMutator.ConcurrentModificationMarkdown = &concurrent
 
-				// The caller supplies the hash of the concurrent content to pass the
-				// full-page hash binding check, so the shrink breaker (not the hash
-				// check) decides the outcome.
-				concurrentHash := computeExpectedPageHash(
-					mockPageReaderMutator.Frontmatter, string(concurrent),
-				)
+				// UpdateWholePage uses full-page hash (frontmatter + markdown); pass the
+				// full-page hash of the concurrent content so the hash check passes and
+				// the shrink breaker (not the hash check) decides the outcome.
+				concurrentHash := computeExpectedPageHash(mockPageReaderMutator.Frontmatter, string(concurrent))
 				req.ExpectedVersionHash = &concurrentHash
 			})
 
@@ -2824,9 +2824,11 @@ var _ = Describe("Server", func() {
 		// matching-hash scenarios) override this in their own BeforeEach. Tests
 		// that set OldContentMarkdown (find-and-replace mode) skip hash binding.
 		// Tests that want to assert the no-hash rejection path set skipAutoHash.
+		// Uses body-only hash because UpdatePageContent only writes the body
+		// (issue #1440).
 		JustBeforeEach(func() {
 			if !skipAutoHash && req.OldContentMarkdown == nil && req.ExpectedVersionHash == nil {
-				h := computeExpectedPageHash(mockPageReaderMutator.Frontmatter, string(mockPageReaderMutator.Markdown))
+				h := computeExpectedPageHash(nil, string(mockPageReaderMutator.Markdown))
 				req.ExpectedVersionHash = &h
 			}
 		})
@@ -2912,11 +2914,10 @@ var _ = Describe("Server", func() {
 				Expect(resp.Error).To(BeEmpty())
 			})
 
-			It("should return the version_hash of the stored content covering frontmatter+markdown", func() {
-				expectedHash := computeExpectedPageHash(
-					wikipage.FrontMatter{"identifier": "test-page"},
-					"# New Content",
-				)
+			It("should return the body-only version_hash of the stored content", func() {
+				// UpdatePageContent OCC is body-only (issue #1440), so the response
+				// hash is also body-only so callers can use it directly in the next call.
+				expectedHash := computeExpectedPageHash(nil, "# New Content")
 				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 
@@ -2957,14 +2958,12 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("expected_version_hash matches current full-page hash", func() {
+		When("expected_version_hash matches current body hash", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Markdown = "# Old Content"
-				// Hash covers frontmatter + markdown (issue #1197)
-				expectedHash := computeExpectedPageHash(
-					wikipage.FrontMatter{"identifier": "test-page"},
-					"# Old Content",
-				)
+				// Body-only hash (issue #1440): frontmatter changes must not invalidate
+				// a hash held by the caller when only the body matters.
+				expectedHash := computeExpectedPageHash(nil, "# Old Content")
 				req.ExpectedVersionHash = &expectedHash
 			})
 
@@ -3147,11 +3146,8 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown(expectedContent)))
 			})
 
-			It("should return the version_hash covering frontmatter+markdown of stored content", func() {
-				expectedHash := computeExpectedPageHash(
-					wikipage.FrontMatter{"identifier": "test-page"},
-					expectedContent,
-				)
+			It("should return the body-only version_hash of stored content", func() {
+				expectedHash := computeExpectedPageHash(nil, expectedContent)
 				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 		})
@@ -3299,11 +3295,8 @@ var _ = Describe("Server", func() {
 				concurrentContent := wikipage.Markdown("# Concurrently Modified Content")
 
 				mockPageReaderMutator.Markdown = originalContent
-				// Hash covers frontmatter + markdown so both types of concurrent edits are detected
-				originalHash := computeExpectedPageHash(
-					wikipage.FrontMatter{"identifier": "test-page"},
-					string(originalContent),
-				)
+				// Hash covers body-only so only body edits are detected
+				originalHash := computeExpectedPageHash(nil, string(originalContent))
 				req.ExpectedVersionHash = &originalHash
 				req.NewContentMarkdown = "# My New Content"
 
@@ -3326,8 +3319,9 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		// Issue #1197: version hash now covers frontmatter+markdown so frontmatter-only
-		// concurrent edits are also detected, not just markdown changes.
+		// Issue #1440: version hash is now body-only so frontmatter-only concurrent edits
+		// do NOT cause a 409 — UpdatePageContent never touches frontmatter, so it's safe
+		// to allow the write even when frontmatter was concurrently changed.
 		When("the page's frontmatter is concurrently changed between the pre-read and the atomic write", func() {
 			BeforeEach(func() {
 				originalFM := wikipage.FrontMatter{"identifier": "test-page"}
@@ -3336,9 +3330,8 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.Frontmatter = originalFM
 				mockPageReaderMutator.Markdown = originalMD
 
-				// This is the hash the caller would have received from ReadPage before
-				// the concurrent frontmatter edit.
-				originalHash := computeExpectedPageHash(originalFM, string(originalMD))
+				// The body-only hash is stable across metadata-only writes.
+				originalHash := computeExpectedPageHash(nil, string(originalMD))
 				req.ExpectedVersionHash = &originalHash
 				req.NewContentMarkdown = "# My New Content"
 
@@ -3348,16 +3341,12 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.ConcurrentModificationFrontMatter = &concurrentFM
 			})
 
-			It("should detect the frontmatter version mismatch and return Aborted", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			It("should allow the write since UpdatePageContent never touches frontmatter", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should not return a response", func() {
-				Expect(resp).To(BeNil())
-			})
-
-			It("should not overwrite the concurrently modified content", func() {
-				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
 			})
 		})
 	})
@@ -3572,7 +3561,9 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return the version_hash covering frontmatter+markdown of written content", func() {
-				// Hash reflects new FM (parsed from new_whole_markdown) + new MD
+				// Hash reflects new FM (parsed from new_whole_markdown) + new MD.
+				// UpdateWholePage replaces the whole page, so its OCC handle keeps
+				// covering frontmatter and markdown (issue #1197).
 				expectedHash := computeExpectedPageHash(
 					wikipage.FrontMatter{"identifier": "test-page", "title": "New Title"},
 					"# New Content",
@@ -5281,7 +5272,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return a consistent version_hash covering frontmatter+markdown", func() {
-				// Hash covers both frontmatter and markdown (issue #1197)
+				// Hash covers both frontmatter and markdown (issue #1197) because
+				// the same handle drives UpdateWholePage.
 				expectedHash := computeExpectedPageHash(
 					wikipage.FrontMatter{"title": "Test Page", "tags": []any{"test"}},
 					"# Test Page\n\nThis is test content.",
@@ -7409,7 +7401,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an aborted error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry"))
+				Expect(err).To(HaveGrpcStatus(codes.Aborted, "content version mismatch: body content was modified by a concurrent write; re-read the page and retry"))
 			})
 
 			It("should not write", func() {
@@ -7518,7 +7510,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an aborted error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry"))
+				Expect(err).To(HaveGrpcStatus(codes.Aborted, "content version mismatch: body content was modified by a concurrent write; re-read the page and retry"))
 			})
 
 			It("should return no response", func() {
