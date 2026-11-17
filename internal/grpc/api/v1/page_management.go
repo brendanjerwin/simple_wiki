@@ -968,7 +968,7 @@ func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (
 	// fence validates before the write lands. There is no prior body, so
 	// this is pure validation (no prose to guard).
 	fmAny := wikipage.FrontMatter(fm)
-	if err := validateChangedPageAppFence(fmAny, "", string(markdown)); err != nil {
+	if err := validateChangedPageAppFence(fmAny, "", string(markdown), false); err != nil {
 		return &apiv1.CreatePageResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -1025,6 +1025,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 		ctx,
 		wikipage.PageIdentifier(req.Page),
 		originalMarkdown,
+		req.GetAllowShrink(),
 		updatePageContentModifier(req, &capturedFM),
 		&capturedFM,
 	)
@@ -1043,14 +1044,19 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 // page (restoring originalMarkdown if it did), and returns the version hash and
 // byte size of the page as written. capturedFM must be the pointer the modifier
 // fills with the current frontmatter.
+//
+// allowShrink is forwarded to the page-app funnel: when true the prose guard
+// is bypassed for a changed-fence write (mirrors the allow_shrink field on
+// UpdatePageContent / WritePageSection / UpdateWholePage).
 func (s *Server) writeMarkdownAndVerify(
 	ctx context.Context,
 	pageID wikipage.PageIdentifier,
 	originalMarkdown wikipage.Markdown,
+	allowShrink bool,
 	modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
 	capturedFM *wikipage.FrontMatter,
 ) (string, int64, error) {
-	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(ctx, pageID, modifier)
+	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(ctx, pageID, allowShrink, modifier)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
 			return "", 0, modifyErr
@@ -1322,7 +1328,7 @@ func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1
 	// Artifact funnel (criterion 6): a changed wiki-page-app fence in the
 	// new content validates before the write lands.
 	if _, currentMD, readErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page)); readErr == nil {
-		if err := validateChangedPageAppFence(fm, currentMD, req.NewWholeMarkdown); err != nil {
+		if err := validateChangedPageAppFence(fm, currentMD, req.NewWholeMarkdown, req.GetAllowShrink()); err != nil {
 			return nil, "", err
 		}
 	}
@@ -1367,6 +1373,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
+		req.GetAllowShrink(),
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			if err := checkUpdateWholePageGuards(currentFM, currentMarkdown, md, req.ExpectedVersionHash, req.GetAllowShrink()); err != nil {
 				return nil, "", err
@@ -1765,6 +1772,7 @@ func (s *Server) WritePageSection(ctx context.Context, req *apiv1.WritePageSecti
 		ctx,
 		wikipage.PageIdentifier(req.Page),
 		originalMarkdown,
+		req.GetAllowShrink(),
 		writePageSectionModifier(req, &capturedFM),
 		&capturedFM,
 	)
