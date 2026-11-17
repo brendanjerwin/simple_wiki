@@ -1102,6 +1102,7 @@ ADRs should document significant architectural decisions that have long-term imp
 ## Orchestration Hardening for the wiki-core@3 Codebase (post-mortem of the #1320 run)
 
 ### Multi-worker conflict hygiene
+
 - When multiple concurrent worker PRs each touch `static/js/openui-lang/library.ts` /
   `library.test.ts` / `renderer.test.ts` / `page-app-design-system.ts` /
   `internal/syspage/embedded/help_page_apps.md`, enforce APPEND-ONLY discipline per
@@ -1111,7 +1112,7 @@ ADRs should document significant architectural decisions that have long-term imp
 - NEVER bulk-union duplicate headings or prose in `help_page_apps.md`. Enumerations
   are shared; a union resolve duplicates the Overview. Verify the file after every
   resolution round with `:conflicts` reads and a duplicate-heading sweep
-  (repeated `## ` headings must have unique names).
+  (repeated `##` headings must have unique names).
 - When a rebase is solved via mergiraf, re-diff the solved region against
   `origin/main` normalized-whitespace before staging; a false deletion verdict comes
   from whitespace realignment, not real loss. Watch for silently-reshuffled blocks

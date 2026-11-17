@@ -3,3 +3,4 @@ vendor/
 data/
 internal/syspage/embedded/
 goals/
+e2e/test-data/
