@@ -77,12 +77,14 @@ func (s *AgentChatContextStore) Read(page string) (*apiv1.ChatContext, error) {
 //   - Scalar string fields (last_conversation_summary, key_context) replace
 //     when the update sets them; an empty update string leaves the prior
 //     value alone.
-//   - Repeated string fields (user_goals, pending_items) are unioned; the
-//     order of first appearance is preserved.
+//   - Repeated string fields (user_goals, pending_items) are unioned when
+//     replaceArrays is false; the order of first appearance is preserved.
+//     When replaceArrays is true the stored values are replaced verbatim —
+//     an empty slice clears the field.
 //   - background_activity is a ring buffer managed by the
 //     AppendBackgroundActivity* helpers and is NOT touched by UpdateMerge.
 //   - last_updated is server-stamped on every call.
-func (s *AgentChatContextStore) UpdateMerge(page string, update *apiv1.ChatContext) (*apiv1.ChatContext, error) {
+func (s *AgentChatContextStore) UpdateMerge(page string, update *apiv1.ChatContext, replaceArrays bool) (*apiv1.ChatContext, error) {
 	if update == nil {
 		return nil, errors.New("update is required")
 	}
@@ -93,7 +95,7 @@ func (s *AgentChatContextStore) UpdateMerge(page string, update *apiv1.ChatConte
 		if decErr != nil {
 			return nil, md, decErr
 		}
-		merged = mergeChatContext(existing, update)
+		merged = mergeChatContext(existing, update, replaceArrays)
 		merged.LastUpdated = timestamppb.New(time.Now().UTC())
 		if wErr := writeChatContext(fm, merged); wErr != nil {
 			return nil, md, wErr
@@ -446,7 +448,11 @@ func writeChatContext(fm wikipage.FrontMatter, ctx *apiv1.ChatContext) error {
 
 // mergeChatContext combines an existing context with an update, applying the
 // merge rules documented on UpdateMerge.
-func mergeChatContext(existing, update *apiv1.ChatContext) *apiv1.ChatContext {
+//
+// When replaceArrays is true, user_goals and pending_items in the result are
+// copied directly from update (an empty slice clears the stored value).
+// When replaceArrays is false (the default), the existing union semantics apply.
+func mergeChatContext(existing, update *apiv1.ChatContext, replaceArrays bool) *apiv1.ChatContext {
 	if existing == nil {
 		existing = &apiv1.ChatContext{}
 	}
@@ -467,8 +473,13 @@ func mergeChatContext(existing, update *apiv1.ChatContext) *apiv1.ChatContext {
 	if update.GetKeyContext() != "" {
 		merged.KeyContext = update.GetKeyContext()
 	}
-	merged.UserGoals = unionStrings(merged.UserGoals, update.GetUserGoals())
-	merged.PendingItems = unionStrings(merged.PendingItems, update.GetPendingItems())
+	if replaceArrays {
+		merged.UserGoals = append([]string{}, update.GetUserGoals()...)
+		merged.PendingItems = append([]string{}, update.GetPendingItems()...)
+	} else {
+		merged.UserGoals = unionStrings(merged.UserGoals, update.GetUserGoals())
+		merged.PendingItems = unionStrings(merged.PendingItems, update.GetPendingItems())
+	}
 	return merged
 }
 

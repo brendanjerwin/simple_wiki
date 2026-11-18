@@ -447,7 +447,7 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				_, err := contexts.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "hello",
 					UserGoals:               []string{"a"},
-				})
+				}, false)
 				Expect(err).NotTo(HaveOccurred())
 
 				resp, err = srv.GetChatContext(ctx, &apiv1.GetChatContextRequest{Page: "p"})
@@ -487,6 +487,71 @@ var _ = Describe("AgentMetadataService handlers", func() {
 			It("should persist the conversation summary", func() {
 				ctx, _ := contexts.Read("p")
 				Expect(ctx.GetLastConversationSummary()).To(Equal("I asked about pastry"))
+			})
+		})
+
+		Describe("when replace_arrays is true and arrays are non-empty", func() {
+			var resp *apiv1.UpdateChatContextResponse
+
+			BeforeEach(func() {
+				// Seed existing arrays.
+				_, err := srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{
+					Page: "p",
+					ChatContext: &apiv1.ChatContext{
+						UserGoals:    []string{"stale-goal"},
+						PendingItems: []string{"stale-item"},
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				resp, err = srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{
+					Page:          "p",
+					ReplaceArrays: true,
+					ChatContext: &apiv1.ChatContext{
+						UserGoals:    []string{"fresh-goal"},
+						PendingItems: []string{"fresh-item"},
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should replace user_goals verbatim", func() {
+				Expect(resp.GetChatContext().GetUserGoals()).To(ConsistOf("fresh-goal"))
+			})
+
+			It("should replace pending_items verbatim", func() {
+				Expect(resp.GetChatContext().GetPendingItems()).To(ConsistOf("fresh-item"))
+			})
+		})
+
+		Describe("when replace_arrays is true and arrays are empty", func() {
+			var resp *apiv1.UpdateChatContextResponse
+
+			BeforeEach(func() {
+				// Seed stale arrays.
+				_, err := srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{
+					Page: "p",
+					ChatContext: &apiv1.ChatContext{
+						UserGoals:    []string{"stale"},
+						PendingItems: []string{"stale"},
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				resp, err = srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{
+					Page:          "p",
+					ReplaceArrays: true,
+					ChatContext:   &apiv1.ChatContext{},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should clear user_goals", func() {
+				Expect(resp.GetChatContext().GetUserGoals()).To(BeEmpty())
+			})
+
+			It("should clear pending_items", func() {
+				Expect(resp.GetChatContext().GetPendingItems()).To(BeEmpty())
 			})
 		})
 	})
@@ -589,7 +654,7 @@ func (*stubAgentChatContextStore) Read(string) (*apiv1.ChatContext, error) {
 	return &apiv1.ChatContext{}, nil
 }
 
-func (*stubAgentChatContextStore) UpdateMerge(string, *apiv1.ChatContext) (*apiv1.ChatContext, error) {
+func (*stubAgentChatContextStore) UpdateMerge(string, *apiv1.ChatContext, bool) (*apiv1.ChatContext, error) {
 	return &apiv1.ChatContext{}, nil
 }
 
