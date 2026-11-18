@@ -99,6 +99,7 @@ type AgentScheduleStore interface {
 type AgentChatContextStore interface {
 	Read(page string) (*apiv1.ChatContext, error)
 	UpdateMerge(page string, update *apiv1.ChatContext) (*apiv1.ChatContext, error)
+	ReplaceArrays(page string, update *apiv1.ChatContext) (*apiv1.ChatContext, error)
 	AppendBackgroundActivitySummary(page, scheduleID, summary string) (*apiv1.BackgroundActivityEntry, error)
 }
 

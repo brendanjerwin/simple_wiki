@@ -343,6 +343,86 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(fm["title"]).To(Equal("My Page"))
 			})
 		})
+
+		Describe("when replaceArrays is true", func() {
+			Describe("with existing arrays and a non-empty replacement", func() {
+				var merged *apiv1.ChatContext
+
+				BeforeEach(func() {
+					_, err := store.UpdateMerge("p", &apiv1.ChatContext{
+						UserGoals:    []string{"old-goal"},
+						PendingItems: []string{"old-item"},
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					merged, err = store.ReplaceArrays("p", &apiv1.ChatContext{
+						UserGoals:    []string{"new-goal"},
+						PendingItems: []string{"new-item"},
+					})
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should replace user_goals verbatim", func() {
+					Expect(merged.GetUserGoals()).To(ConsistOf("new-goal"))
+				})
+
+				It("should replace pending_items verbatim", func() {
+					Expect(merged.GetPendingItems()).To(ConsistOf("new-item"))
+				})
+			})
+
+			Describe("with an empty replacement list", func() {
+				var merged *apiv1.ChatContext
+
+				BeforeEach(func() {
+					_, err := store.UpdateMerge("p", &apiv1.ChatContext{
+						UserGoals:    []string{"stale-goal"},
+						PendingItems: []string{"stale-item"},
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					merged, err = store.ReplaceArrays("p", &apiv1.ChatContext{
+						UserGoals:    []string{},
+						PendingItems: []string{},
+					})
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should clear user_goals", func() {
+					Expect(merged.GetUserGoals()).To(BeEmpty())
+				})
+
+				It("should clear pending_items", func() {
+					Expect(merged.GetPendingItems()).To(BeEmpty())
+				})
+			})
+		})
+
+		Describe("when replaceArrays is false (default union behaviour)", func() {
+			var merged *apiv1.ChatContext
+
+			BeforeEach(func() {
+				_, err := store.UpdateMerge("p", &apiv1.ChatContext{
+					UserGoals:    []string{"existing"},
+					PendingItems: []string{"existing-item"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				merged, err = store.UpdateMerge("p", &apiv1.ChatContext{
+					UserGoals:    []string{"new"},
+					PendingItems: []string{"new-item"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should union user_goals (no replace)", func() {
+				Expect(merged.GetUserGoals()).To(ConsistOf("existing", "new"))
+			})
+
+			It("should union pending_items (no replace)", func() {
+				Expect(merged.GetPendingItems()).To(ConsistOf("existing-item", "new-item"))
+			})
+		})
 	})
 
 	Describe("AppendBackgroundActivityAutomatic", func() {

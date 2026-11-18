@@ -196,7 +196,11 @@ func (s *Server) UpdateChatContext(_ context.Context, req *apiv1.UpdateChatConte
 	if req.GetChatContext() == nil {
 		return nil, status.Error(codes.InvalidArgument, "chat_context is required")
 	}
-	merged, err := s.agentChatContextStore.UpdateMerge(req.GetPage(), req.GetChatContext())
+	merge := s.agentChatContextStore.UpdateMerge
+	if req.GetReplaceArrays() {
+		merge = s.agentChatContextStore.ReplaceArrays
+	}
+	merged, err := merge(req.GetPage(), req.GetChatContext())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "update chat context: %v", err)
 	}

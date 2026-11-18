@@ -56,7 +56,8 @@ service AgentMetadataService {
     option (api.v1.description) =
         "Deep-merge updates into agent.chat_context. Scalars replace, arrays "
         "union, last_updated is server-stamped. Interactive chat agents MUST "
-        "call this every turn to persist memory.";
+        "call this every turn to persist memory. Set replace_arrays=true to "
+        "replace user_goals and pending_items verbatim (empty list clears).";
   }
 
   // AppendBackgroundActivitySummary — see (api.v1.description).
@@ -209,6 +210,11 @@ message GetChatContextResponse {
 message UpdateChatContextRequest {
   string page = 1;
   ChatContext chat_context = 2;
+  // When true, repeated fields in chat_context (user_goals, pending_items)
+  // replace the stored values verbatim — an empty list clears the field.
+  // When false (default), the existing union-merge behaviour is preserved so
+  // existing callers are unaffected.
+  bool replace_arrays = 3;
 }
 
 message UpdateChatContextResponse {
