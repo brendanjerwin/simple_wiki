@@ -447,7 +447,7 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				_, err := contexts.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "hello",
 					UserGoals:               []string{"a"},
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
 				resp, err = srv.GetChatContext(ctx, &apiv1.GetChatContextRequest{Page: "p"})
@@ -654,7 +654,11 @@ func (*stubAgentChatContextStore) Read(string) (*apiv1.ChatContext, error) {
 	return &apiv1.ChatContext{}, nil
 }
 
-func (*stubAgentChatContextStore) UpdateMerge(string, *apiv1.ChatContext, bool) (*apiv1.ChatContext, error) {
+func (*stubAgentChatContextStore) UpdateMerge(string, *apiv1.ChatContext) (*apiv1.ChatContext, error) {
+	return &apiv1.ChatContext{}, nil
+}
+
+func (*stubAgentChatContextStore) ReplaceArrays(string, *apiv1.ChatContext) (*apiv1.ChatContext, error) {
 	return &apiv1.ChatContext{}, nil
 }
 

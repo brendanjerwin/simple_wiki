@@ -111,7 +111,7 @@ var _ = Describe("AgentChatContextStore", func() {
 				bad := server.NewAgentChatContextStore(errStore)
 				_, err = bad.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "hello",
-				}, false)
+				})
 			})
 
 			It("should return an error", func() {
@@ -256,7 +256,7 @@ var _ = Describe("AgentChatContextStore", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = store.UpdateMerge("p", nil, false)
+				_, err = store.UpdateMerge("p", nil)
 			})
 
 			It("should return an error", func() {
@@ -275,7 +275,7 @@ var _ = Describe("AgentChatContextStore", func() {
 				out, err := store.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "first turn",
 					UserGoals:               []string{"goal-a"},
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 				written = out
 			})
@@ -299,14 +299,14 @@ var _ = Describe("AgentChatContextStore", func() {
 					UserGoals:               []string{"a"},
 					PendingItems:            []string{"x"},
 					KeyContext:              "kept",
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
 				merged, err = store.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "second",
 					UserGoals:               []string{"b", "a"},
 					PendingItems:            []string{"y"},
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -334,7 +334,7 @@ var _ = Describe("AgentChatContextStore", func() {
 				}, wikipage.AnonymousIdentity)
 				_, err := store.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "hello",
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -352,13 +352,13 @@ var _ = Describe("AgentChatContextStore", func() {
 					_, err := store.UpdateMerge("p", &apiv1.ChatContext{
 						UserGoals:    []string{"old-goal"},
 						PendingItems: []string{"old-item"},
-					}, false)
+					})
 					Expect(err).NotTo(HaveOccurred())
 
-					merged, err = store.UpdateMerge("p", &apiv1.ChatContext{
+					merged, err = store.ReplaceArrays("p", &apiv1.ChatContext{
 						UserGoals:    []string{"new-goal"},
 						PendingItems: []string{"new-item"},
-					}, true)
+					})
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -378,13 +378,13 @@ var _ = Describe("AgentChatContextStore", func() {
 					_, err := store.UpdateMerge("p", &apiv1.ChatContext{
 						UserGoals:    []string{"stale-goal"},
 						PendingItems: []string{"stale-item"},
-					}, false)
+					})
 					Expect(err).NotTo(HaveOccurred())
 
-					merged, err = store.UpdateMerge("p", &apiv1.ChatContext{
+					merged, err = store.ReplaceArrays("p", &apiv1.ChatContext{
 						UserGoals:    []string{},
 						PendingItems: []string{},
-					}, true)
+					})
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -405,13 +405,13 @@ var _ = Describe("AgentChatContextStore", func() {
 				_, err := store.UpdateMerge("p", &apiv1.ChatContext{
 					UserGoals:    []string{"existing"},
 					PendingItems: []string{"existing-item"},
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
 				merged, err = store.UpdateMerge("p", &apiv1.ChatContext{
 					UserGoals:    []string{"new"},
 					PendingItems: []string{"new-item"},
-				}, false)
+				})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
