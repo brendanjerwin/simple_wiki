@@ -72,6 +72,10 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github-actions
+          # Pin a CLI where OAuth client authkeys are compiled in: the action's
+          # default 1.42.0 hard-gates them behind TS_EXPERIMENT_OAUTH_AUTHKEY,
+          # which no longer survives `sudo -E` on the ubuntu-26.04 runner image.
+          version: 1.102.3
 
       - name: Prepare deployment files
         env:
