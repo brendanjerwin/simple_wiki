@@ -444,7 +444,7 @@ func convertDraftMapToSlice(itemsMap map[string]any, now string) []any {
 // Assigns uid + sort_order if missing, fills in timestamps from old-draft
 // metadata when available, otherwise stamps `now`. Pre-existing items are
 // recorded as automated=false (no retroactive attribution).
-func promoteAndJoinItem(itemMap map[string]any, oldDraftMeta map[string]any, idx int, ulids ulid.Generator, now string) map[string]any {
+func promoteAndJoinItem(itemMap, oldDraftMeta map[string]any, idx int, ulids ulid.Generator, now string) map[string]any {
 	uid := stringFromMap(itemMap, uidFMKey)
 	if uid == "" {
 		uid = ulids.NewULID()

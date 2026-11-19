@@ -945,7 +945,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 	})
 })
 
-func (noOpChatBufferManager) RequestPermission(_ context.Context, _ string, _ string, _ string, _ string, _ []chatbuffer.PermissionOption) string {
+func (noOpChatBufferManager) RequestPermission(_ context.Context, _, _, _, _ string, _ []chatbuffer.PermissionOption) string {
 	return ""
 }
 

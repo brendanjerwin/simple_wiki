@@ -71,7 +71,7 @@ func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, _ time
 	return f.listTasksResp, nil
 }
 
-func (f *fakeTasksClient) InsertTask(_ context.Context, _ string, _, _ string, _ gateway.TaskStatus, _ time.Time, _ string) (gateway.Task, error) {
+func (f *fakeTasksClient) InsertTask(_ context.Context, _, _, _ string, _ gateway.TaskStatus, _ time.Time, _ string) (gateway.Task, error) {
 	if f.insertTaskErr != nil {
 		return gateway.Task{}, f.insertTaskErr
 	}

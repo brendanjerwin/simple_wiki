@@ -991,7 +991,7 @@ func (f *fakeScheduledConn) Done() <-chan struct{} { return f.doneCh }
 // via the *int32 pointer.
 func fakeScheduledConnSpawn(conn *fakeScheduledConn, innerCalls *int32) func(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
 	var once sync.Once
-	return func(_ context.Context, page string, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+	return func(_ context.Context, page, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
 		client := newScheduledTurnClient(page, maxTurns, allowedTools, cancelTurn)
 		sec := &scheduledEphemeralConnection{
 			connection: conn,

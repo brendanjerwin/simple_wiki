@@ -92,7 +92,7 @@ var _ = Describe("HTTP handler chain", func() {
 })
 
 // request performs one request and returns the response with its fully read body.
-func request(client *http.Client, url string, method string) (*http.Response, []byte) {
+func request(client *http.Client, url, method string) (*http.Response, []byte) {
 	req, err := http.NewRequest(method, url, nil)
 	Expect(err).NotTo(HaveOccurred())
 

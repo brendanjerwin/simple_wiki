@@ -2068,7 +2068,7 @@ func listenForCancelSignal(ctx context.Context, cancel context.CancelFunc, cance
 // if available, consuming both so they are only prepended once. If senderName
 // is non-empty, the message is prefixed with "[senderName]: " to identify the
 // speaker in group chats.
-func buildPromptText(chatClient *wikiChatClient, senderName string, messageContent string) string {
+func buildPromptText(chatClient *wikiChatClient, senderName, messageContent string) string {
 	chatClient.mu.Lock()
 	pageContext := chatClient.pageContext
 	chatClient.pageContext = "" // only prepend once

@@ -59,8 +59,7 @@ func (e *Engine) RunPreconditionRecoveryForTest(
 // without staging a full Sync.
 func (e *Engine) RecordPushFailureForTest(
 	binding connectors.Binding,
-	uid string,
-	op string,
+	uid, op string,
 	pushErr error,
 ) connectors.Binding {
 	return e.recordPushFailure(binding, uid, op, pushErr)

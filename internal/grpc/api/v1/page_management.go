@@ -1401,7 +1401,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 // version-hash binding (issue #1197, frontmatter + markdown together) and the
 // shrink circuit breaker (issue #1299). Both must stay inside the funnel callback
 // so they evaluate against the write's current content.
-func checkUpdateWholePageGuards(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown, md wikipage.Markdown, expectedHash *string, allowShrink bool) error {
+func checkUpdateWholePageGuards(currentFM wikipage.FrontMatter, currentMarkdown, md wikipage.Markdown, expectedHash *string, allowShrink bool) error {
 	// Hash covers both frontmatter and markdown so frontmatter-only concurrent
 	// edits are detected (issue #1197) — checked atomically inside the funnel's write.
 	if err := checkContentVersionHash(currentFM, currentMarkdown, expectedHash); err != nil {
