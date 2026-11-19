@@ -1231,7 +1231,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 			fakeConn := newFakeScheduledConn()
 
 			daemon := &poolDaemon{
-				scheduledTurnSpawnFn: func(_ context.Context, page string, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+				scheduledTurnSpawnFn: func(_ context.Context, page, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
 					client := newScheduledTurnClient(page, 1, allowedTools, cancelTurn)
 					// Trigger HitLimit by sending one AgentMessageChunk (maxTurns=1).
 					_ = client.SessionUpdate(context.Background(), acp.SessionNotification{
