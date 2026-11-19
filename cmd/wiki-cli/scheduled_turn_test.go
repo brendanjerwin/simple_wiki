@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -78,6 +79,129 @@ var _ = Describe("scheduledTurnClient SessionUpdate max_turns enforcement", func
 			It("should still report HitLimit as true", func() {
 				Expect(client.HitLimit()).To(BeTrue())
 			})
+		})
+	})
+})
+
+var _ = Describe("scheduledTurnClient SessionUpdate message-boundary turn counting", func() {
+	When("multiple chunks share the same messageId", func() {
+		var (
+			client      *scheduledTurnClient
+			cancelCalls atomic.Int32
+		)
+
+		BeforeEach(func() {
+			cancelCalls.Store(0)
+			client = newScheduledTurnClient("test-page", 500, nil, func() {
+				cancelCalls.Add(1)
+			})
+
+			msgID := "msg-uuid-1"
+			chunkWithID := acp.SessionNotification{
+				SessionId: "session-1",
+				Update: acp.SessionUpdate{
+					AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+						Content:   acp.TextBlock("chunk"),
+						MessageId: &msgID,
+					},
+				},
+			}
+
+			// Send 100 chunks, all belonging to the same message.
+			for range 100 {
+				Expect(client.SessionUpdate(context.Background(), chunkWithID)).To(Succeed())
+			}
+		})
+
+		It("should count them as exactly one turn", func() {
+			Expect(client.turnCount.Load()).To(Equal(int32(1)))
+		})
+
+		It("should not trip the 500-turn budget", func() {
+			Expect(client.HitLimit()).To(BeFalse())
+		})
+
+		It("should not invoke cancel", func() {
+			Expect(cancelCalls.Load()).To(Equal(int32(0)))
+		})
+	})
+
+	When("chunks arrive with distinct messageIds", func() {
+		var (
+			client      *scheduledTurnClient
+			cancelCalls atomic.Int32
+		)
+
+		BeforeEach(func() {
+			cancelCalls.Store(0)
+			client = newScheduledTurnClient("test-page", 500, nil, func() {
+				cancelCalls.Add(1)
+			})
+
+			// Send 3 messages, each with 10 chunks — total 30 chunks, 3 turns.
+			for msgNum := range 3 {
+				msgID := fmt.Sprintf("msg-uuid-%d", msgNum)
+				chunk := acp.SessionNotification{
+					SessionId: "session-1",
+					Update: acp.SessionUpdate{
+						AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+							Content:   acp.TextBlock("chunk"),
+							MessageId: &msgID,
+						},
+					},
+				}
+				for range 10 {
+					Expect(client.SessionUpdate(context.Background(), chunk)).To(Succeed())
+				}
+			}
+		})
+
+		It("should count 3 turns for 3 distinct message IDs", func() {
+			Expect(client.turnCount.Load()).To(Equal(int32(3)))
+		})
+
+		It("should not trip the 500-turn budget", func() {
+			Expect(client.HitLimit()).To(BeFalse())
+		})
+	})
+
+	When("exactly maxTurns distinct messageIds arrive", func() {
+		var (
+			client      *scheduledTurnClient
+			cancelCalls atomic.Int32
+		)
+
+		BeforeEach(func() {
+			cancelCalls.Store(0)
+			client = newScheduledTurnClient("test-page", 500, nil, func() {
+				cancelCalls.Add(1)
+			})
+
+			// Send 500 distinct messages, each with multiple chunks.
+			for msgNum := range 500 {
+				msgID := fmt.Sprintf("msg-uuid-%d", msgNum)
+				chunk := acp.SessionNotification{
+					SessionId: "session-1",
+					Update: acp.SessionUpdate{
+						AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+							Content:   acp.TextBlock("chunk"),
+							MessageId: &msgID,
+						},
+					},
+				}
+				// Each message has 3 streaming chunks.
+				for range 3 {
+					Expect(client.SessionUpdate(context.Background(), chunk)).To(Succeed())
+				}
+			}
+		})
+
+		It("should trip the 500-turn budget", func() {
+			Expect(client.HitLimit()).To(BeTrue())
+		})
+
+		It("should call cancel exactly once", func() {
+			Expect(cancelCalls.Load()).To(Equal(int32(1)))
 		})
 	})
 })
