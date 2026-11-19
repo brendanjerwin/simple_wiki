@@ -9,9 +9,10 @@ import (
 
 import (
 	"context"
+	"encoding/json"
+	jsontext "github.com/go-json-experiment/json/jsontext"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	"encoding/json"
 	"google.golang.org/protobuf/encoding/protojson"
 	"connectrpc.com/connect"
 	grpc "google.golang.org/grpc"

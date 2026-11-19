@@ -10,6 +10,11 @@
 # version is a no-op; any mismatch triggers a reinstall. This prevents a stale
 # binary (built from an older pin) from silently producing output that disagrees
 # with what CI or a fresh clone would produce.
+#
+# Never install this tool with `@latest`: an unpinned generator emits schemas
+# typed as `jsontext.Value` (jsonv2), which does not compile against the
+# `json.RawMessage` fields of the mcp-go version pinned in go.mod. Always let
+# this script resolve the version from go.mod.
 
 set -e
 
@@ -24,7 +29,9 @@ if [ ! -x "$BINARY" ]; then
     echo "protoc-gen-go-mcp binary not found, installing..."
     NEED_INSTALL=true
 else
-    INSTALLED_VERSION="$(go version -m "$BINARY" 2>/dev/null | awk '/^\t mod/{print $3}')"
+    # `go version -m` prints tab-separated fields: "", "mod", module path, version.
+    INSTALLED_VERSION="$(go version -m "$BINARY" 2>/dev/null \
+        | awk -F'\t' '$2 == "mod" && $3 == "github.com/redpanda-data/protoc-gen-go-mcp" { print $4 }')"
     if [ "$INSTALLED_VERSION" != "$DESIRED_VERSION" ]; then
         echo "protoc-gen-go-mcp is at $INSTALLED_VERSION but go.mod pins $DESIRED_VERSION, reinstalling..."
         NEED_INSTALL=true
