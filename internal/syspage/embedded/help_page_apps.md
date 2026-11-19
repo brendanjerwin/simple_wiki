@@ -8,7 +8,7 @@ system = true
 
 # Page Apps: Agent-Authored OpenUI Lang Apps
 
-A **page app page** renders an app the agent wrote, composed **above** the page's markdown content. The agent writes **OpenUI Lang** (against the wiki's own component library, `wiki-core@3`); the wiki parses and renders it in-page with its own Lit components — **no arbitrary HTML/JS executes anywhere**. State persists server-side via `PageAppStateService`, so it survives reloads, devices, and other users.
+A **page app page** renders an app the agent wrote, composed **above** the page's markdown content. The agent writes **OpenUI Lang** (against the wiki's own component library, `wiki-core@4`); the wiki parses and renders it in-page with its own Lit components — **no arbitrary HTML/JS executes anywhere**. State persists server-side via `PageAppStateService`, so it survives reloads, devices, and other users.
 
 Use `PageAppService` and `PageAppStateService` for authoring and state. Both are exposed as gRPC and MCP tools (auto-generated from the proto).
 
@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Sparkline`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `DatePicker`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@4` (no `Sparkline`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `DatePicker`, `Dialog`, `Toast`, `Drawer`, and `MicButton` exist as of `wiki-core@4`.)
 
 ## Time-based apps: `Countdown`
 
@@ -57,6 +57,41 @@ Each timer's fourth positional argument binds its `$running` gate. Completing a 
 `@Beep(kind?)` is an **action step** (usable anywhere an action runs: a `Button`'s action or a `Countdown`'s `onComplete`; compose with `Action([...])`). It plays a short synthesized tone — no external audio files, no agent round-trip. Kinds: `@Beep()` (single 880 Hz tone), `@Beep("double")` (two quick beeps), `@Beep("low")` (a lower-pitched 440 Hz tone). Use it for eyes-free timing apps — a stretch routine's `onComplete` beeps so you can hold a pose looking away from the screen.
 
 Autoplay policy: the user's first interaction with the page (e.g. pressing the start button) unlocks audio; a `Countdown` the user themselves started with that click then beeps on completion, playing through that unlock. A timer that starts without any prior interaction (e.g. a persisted `$running = true` re-armed by a reload) stays silent — audio is feedback, never control flow.
+
+## Voice input: `MicButton`
+
+`MicButton(label, template?, mode?, disabled?, onResult?, lang?, interim?)` renders a voice-input button that transcribes the user's speech via the browser's Web Speech API and dispatches a `continue_conversation` action back to you with the recognised text.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `label` | string | — | Button label (required). Also used as the accessible `aria-label`. |
+| `template` | string | — | Optional message template. `{{transcript}}` is replaced with the recognised text. Absent or empty → raw transcript is sent. Each `{{transcript}}` occurrence is replaced, so the same utterance can appear more than once. |
+| `mode` | `"hold"` \| `"tap"` | `"hold"` | **Hold**: recognition runs while the button is physically held (pointerdown → pointerup/leave/cancel). Pointercancel and Escape abort without sending. **Tap**: first click starts, second click (or Escape) stops; Escape aborts. |
+| `disabled` | boolean | `false` | Disables the button. |
+| `onResult` | action | — | Optional extra action plan to run *after* the `continue_conversation` step (e.g. `@Beep()` for audio feedback). |
+| `lang` | string | `navigator.language` | BCP-47 language tag, e.g. `"en-US"`. |
+| `interim` | boolean | `true` | Show live interim transcript as a caption below the button while recording. |
+
+**The `{{transcript}}` placeholder** — use it to give the agent context:
+
+```
+mic = MicButton("Add note", "Add a training note: {{transcript}}", "tap")
+root = Card("Training log", mic)
+```
+
+The user speaks; the recognised text replaces `{{transcript}}`; the agent receives `"Add a training note: <what they said>"`.
+
+**Browser support** — `MicButton` requires Chrome, Edge, or Safari (desktop and mobile). Firefox does not expose `SpeechRecognition` today; on unsupported browsers the button renders as visually disabled with a tooltip. The app always renders — it never crashes.
+
+**Gesture constraint** — recognition starts synchronously from the button's pointer/keyboard handler (browser policy requires microphone access to be triggered by a user gesture). An `onResult` `@Beep()` benefits from the same unlock.
+
+```
+$notes = ""
+mic = MicButton("Dictate", "Append note: {{transcript}}", "tap", false, @Beep())
+root = Card("Voice notes", mic)
+```
 
 ## Variants, spacing, and progress
 
@@ -397,7 +432,7 @@ The single write door. Program source goes in `source`; OCC via `expected_versio
 - Iterating: **send the full updated program** via `SetPageApp` with the hash you read (`GetPageApp`/`WatchPageApp`). (The browser host merges streamed patches itself; your reliable agent loop is read→modify→write with OCC.)
 - Conflict (`Aborted`): the page app changed since you read it. Re-run `GetPageApp`, re-apply your change, retry.
 - Server validation is **conservative** (structural: non-empty, has `root =`, size cap 64 KiB, must not contain a ``` fence terminator — the wiki wraps the source itself). It cannot fully parse the language — that happens in the browser. Gross violations reject with `InvalidArgument`; partial-but-renderable programs accept.
-- **Stamps are server-managed**: `lang = "openui-lang"`, `version`, `version_hash`, `library = "wiki-core@3"`, `updated_at`/`updated_by`/`automated`. Never hand-write them via frontmatter tools — the `wiki.*` namespace rejects generic frontmatter writes and names the right service.
+- **Stamps are server-managed**: `lang = "openui-lang"`, `version`, `version_hash`, `library = "wiki-core@4"`, `updated_at`/`updated_by`/`automated`. Never hand-write them via frontmatter tools — the `wiki.*` namespace rejects generic frontmatter writes and names the right service.
 
 ### Reading the current app: `api_v1_PageAppService_GetPageApp`
 
@@ -532,7 +567,21 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (no `Sparkline`, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a pipedream component", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`, `DatePicker`, `Dialog`, `Toast`, and `Drawer`.)
+**Voice input (MicButton)** — transcribe speech and send it to the agent (hold-mode; tap-mode replaces `"hold"` with `"tap"`). Use `{{transcript}}` in the template to give the agent context:
+
+```
+mic = MicButton("Dictate note", "Append training note: {{transcript}}", "hold")
+root = Card("Voice notes", mic)
+```
+
+With `@Beep()` audio confirmation and an extra action after transcription:
+
+```
+mic = MicButton("Record", "Log: {{transcript}}", "hold", false, @Beep())
+root = Card("Voice log", mic)
+```
+
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@4` doesn't have (no `Sparkline`, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a pipedream component", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@4` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, `Avatar`, `Badge`, `Icon`, `Skeleton`, `List`, `Image`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Textarea`, `DatePicker`, `Dialog`, `Toast`, `Drawer`, and `MicButton`.)
 
 ## See Also
 

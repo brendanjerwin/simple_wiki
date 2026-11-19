@@ -1,14 +1,14 @@
 /**
  * Wiki component library for OpenUI Lang page app pages.
  *
- * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@3`) over
+ * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@4`) over
  * `@openuidev/lang-core` and renders with Lit templates. Wiki-native
  * components (Checklist, Map, Survey) render the existing wiki custom
  * elements; interactive components dispatch `wiki-page-app-action`
  * CustomEvents that the page app host executes (state sets, chat, URLs).
  */
 import { css, html, LitElement, nothing, svg, type SVGTemplateResult, type TemplateResult } from 'lit';
-import { property } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { z } from 'zod';
 import {
  action,
@@ -21,6 +21,7 @@ import {
  type ToolDescriptor,
 } from '@openuidev/lang-core';
 import { asPlan, type PlanLike } from './narrow.js';
+import { ensureAudioUnlocked } from './audio.js';
 
 /** The id type of `window.setInterval` handles (`number` in the browser; node typings widen it). */
 type IntervalId = ReturnType<typeof window.setInterval>;
@@ -28,7 +29,7 @@ type IntervalId = ReturnType<typeof window.setInterval>;
 /**
  * The wiki library version stamped on page app programs.
  */
-export const WIKI_LIBRARY_VERSION = 'wiki-core@3';
+export const WIKI_LIBRARY_VERSION = 'wiki-core@4';
 
 /** Renderer contract: evaluated props in, Lit template out. */
 export type WikiRenderer = (props: Record<string, unknown>) => TemplateResult;
@@ -279,6 +280,482 @@ export class WikiPageAppCountdown extends LitElement {
 }
 
 customElements.define(WikiPageAppCountdown.is, WikiPageAppCountdown);
+
+/**
+ * Minimal local types for the Web Speech API (SpeechRecognition and related
+ * events). The TypeScript DOM typings ship SpeechRecognitionResult /
+ * SpeechRecognitionAlternative but omit SpeechRecognition itself and its event
+ * types in the version bundled here — declare the shapes we need locally.
+ */
+interface SpeechRecognitionInstance {
+ continuous: boolean;
+ interimResults: boolean;
+ maxAlternatives: number;
+ lang: string;
+ onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+ onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+ onend: (() => void) | null;
+ start(): void;
+ stop(): void;
+ abort(): void;
+}
+
+interface SpeechRecognitionResultEvent {
+ readonly resultIndex: number;
+ readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent {
+ readonly error: string;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionInstance;
+
+/** Get the SpeechRecognition constructor, normalising the webkit prefix. */
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | undefined {
+ const g = globalThis as typeof globalThis & {
+  SpeechRecognition?: SpeechRecognitionCtor;
+  webkitSpeechRecognition?: SpeechRecognitionCtor;
+ };
+ return g.SpeechRecognition ?? g.webkitSpeechRecognition;
+}
+
+/**
+ * Interpolate the `{{transcript}}` placeholder in a MicButton template string.
+ * If `template` is absent or empty the raw `transcript` is returned as-is.
+ * Every occurrence of `{{transcript}}` is replaced, so a single template can
+ * echo the utterance more than once.
+ */
+export function interpolateMicTemplate(template: string | undefined, transcript: string): string {
+ if (typeof template !== 'string' || template === '') {
+  return transcript;
+ }
+ return template.replaceAll('{{transcript}}', transcript);
+}
+
+/**
+ * `wiki-page-app-mic-button` — the interactive control behind the
+ * `MicButton` component. Owns the full browser SpeechRecognition pipeline:
+ * starts recognition synchronously from a pointer/keyboard gesture (required
+ * for the browser's autoplay / microphone-access policy), accumulates interim
+ * results in a live `aria-live` caption, and on the final result dispatches a
+ * `wiki-page-app-action` event with a `continue_conversation` step whose
+ * message is the `template` with `{{transcript}}` filled in.
+ *
+ * Hold mode (default): recognition runs while the button is physically held
+ * (pointerdown → pointerup/leave/cancel/blur/Escape). Pointercancel and
+ * Escape abort without sending.
+ *
+ * Tap mode: first click starts, second click (or Escape) stops; Escape aborts.
+ *
+ * Degrades gracefully when `SpeechRecognition`/`webkitSpeechRecognition` are
+ * absent (e.g. Firefox today): renders a visually disabled button with an
+ * accessible tooltip — never throws, never blocks the rest of the app.
+ *
+ * Chrome caps a single recognition session at ~60 s and fires `onend`; this
+ * element treats an unexpected `onend` while still nominally held as a natural
+ * stop, sending whatever transcript was accumulated.
+ */
+export class WikiPageAppMicButton extends LitElement {
+ static override readonly styles = css`
+  :host {
+   display: inline-flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 4px;
+  }
+
+  .mic-btn {
+   align-self: flex-start;
+   padding: 8px 16px;
+   border: none;
+   border-radius: 8px;
+   background: var(--color-action-confirm, #007bff);
+   color: #ffffff;
+   font-size: 0.9rem;
+   font-weight: 600;
+   cursor: pointer;
+   user-select: none;
+   touch-action: none;
+   transition: background 120ms ease, box-shadow 120ms ease;
+   font-family: inherit;
+   line-height: 1.4;
+  }
+
+  .mic-btn:not(:disabled):hover {
+   background: var(--color-action-confirm-hover, #0056b3);
+  }
+
+  .mic-btn:not(:disabled):active {
+   transform: translateY(1px);
+  }
+
+  .mic-btn:disabled {
+   opacity: 0.5;
+   cursor: not-allowed;
+  }
+
+  .mic-btn[data-listening='true'] {
+   background: var(--color-action-danger, #dc3545);
+  }
+
+  @keyframes mic-pulse {
+   0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-action-danger, #dc3545) 40%, transparent);
+   }
+   50% {
+    box-shadow: 0 0 0 8px transparent;
+   }
+  }
+
+  .mic-btn[data-listening='true'] {
+   animation: mic-pulse 1.5s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+   .mic-btn {
+    transition: none;
+   }
+   .mic-btn[data-listening='true'] {
+    animation: none;
+    outline: 2px solid var(--color-action-danger, #dc3545);
+    outline-offset: 2px;
+   }
+  }
+
+  .mic-status {
+   font-size: 0.8rem;
+   color: var(--color-warning, #ca8a04);
+   font-family: inherit;
+   line-height: 1.4;
+  }
+
+  .mic-status[data-kind='error'] {
+   color: var(--color-danger, #ef4444);
+  }
+
+  .mic-interim {
+   font-size: 0.85rem;
+   color: var(--color-text-muted, #707070);
+   font-style: italic;
+   overflow-wrap: anywhere;
+   font-family: inherit;
+   line-height: 1.4;
+  }
+
+  .mic-unsupported-label {
+   font-size: 0.75rem;
+   color: var(--color-text-muted, #707070);
+   font-style: italic;
+   font-family: inherit;
+  }
+ `;
+
+ /** Visible label (also the aria-label on the button). */
+ @property({ type: String })
+ declare label: string;
+
+ /**
+  * Template with `{{transcript}}` placeholder. If absent or empty the raw
+  * transcript is sent. Every `{{transcript}}` occurrence is replaced.
+  */
+ @property({ attribute: false })
+ declare template: string | undefined;
+
+ /** Interaction mode: `hold` (press-and-hold, default) or `tap` (toggle). */
+ @property({ attribute: false })
+ declare mode: 'hold' | 'tap';
+
+ /** Disables the button. */
+ @property({ type: Boolean })
+ declare disabled: boolean;
+
+ /** Optional extra action plan to run after the continue_conversation step. */
+ @property({ attribute: false })
+ declare onResult: unknown;
+
+ /**
+  * BCP-47 language tag passed to the browser recogniser (e.g. `"en-US"`).
+  * Defaults to `navigator.language` when absent. Named `recognitionLang`
+  * to avoid shadowing `HTMLElement.lang` (which is `string`, not `string|undefined`).
+  */
+ @property({ attribute: false })
+ declare recognitionLang: string | undefined;
+
+ /** Show live interim transcript below the button (default true). */
+ @property({ type: Boolean })
+ declare interim: boolean;
+
+ @state()
+ declare private isListening: boolean;
+
+ @state()
+ declare private interimText: string;
+
+ @state()
+ declare private statusMessage: string | undefined;
+
+ @state()
+ declare private statusKind: 'info' | 'error';
+
+ @state()
+ declare private speechSupported: boolean;
+
+ private recognition: SpeechRecognitionInstance | null = null;
+ private aborted = false;
+ private finalTranscript = '';
+ /** True while a keyboard Space/Enter is physically held (hold mode). */
+ private keyHeld = false;
+ /** True after a permission-denial to prevent retry loops. */
+ private permissionDenied = false;
+
+ constructor() {
+  super();
+  this.label = 'Speak';
+  this.template = undefined;
+  this.mode = 'hold';
+  this.disabled = false;
+  this.onResult = undefined;
+  this.recognitionLang = undefined;
+  this.interim = true;
+  this.isListening = false;
+  this.interimText = '';
+  this.statusMessage = undefined;
+  this.statusKind = 'info';
+  this.speechSupported = false;
+ }
+
+ static get is(): string {
+  return 'wiki-page-app-mic-button';
+ }
+
+ override connectedCallback(): void {
+  super.connectedCallback();
+  this.speechSupported = getSpeechRecognitionCtor() != null;
+ }
+
+ /**
+  * Start recognition synchronously — MUST be called from a live user-gesture
+  * call stack (pointerdown or keydown). Deferred calls may fail silently
+  * in browsers that require a gesture for microphone access.
+  */
+ private startRecognition(): void {
+  const SR = getSpeechRecognitionCtor();
+  if (SR == null || this.permissionDenied || this.isListening) return;
+
+  this.aborted = false;
+  this.finalTranscript = '';
+  this.interimText = '';
+  this.statusMessage = undefined;
+
+  const rec = new SR();
+  rec.continuous = this.mode === 'tap'; // tap mode uses continuous; hold stops on release
+  rec.interimResults = this.interim;
+  rec.maxAlternatives = 1;
+  if (typeof this.recognitionLang === 'string' && this.recognitionLang !== '') {
+   rec.lang = this.recognitionLang;
+  }
+
+  rec.onresult = (event: SpeechRecognitionResultEvent): void => {
+   let interimAccum = '';
+   for (let i = event.resultIndex; i < event.results.length; i++) {
+    const result = event.results[i];
+    if (result == null) continue;
+    const alt = result[0];
+    const transcript = alt?.transcript ?? '';
+    if (result.isFinal) {
+     this.finalTranscript += transcript;
+    } else {
+     interimAccum += transcript;
+    }
+   }
+   this.interimText = interimAccum;
+  };
+
+  rec.onerror = (event: SpeechRecognitionErrorEvent): void => {
+   switch (event.error) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+     this.permissionDenied = true;
+     this.statusMessage = 'Microphone access was blocked; allow it in your browser settings.';
+     this.statusKind = 'error';
+     break;
+    case 'no-speech':
+     this.statusMessage = "Didn't catch that — try again.";
+     this.statusKind = 'info';
+     break;
+    case 'network':
+     this.statusMessage = 'Speech recognition needs a network connection.';
+     this.statusKind = 'error';
+     break;
+    default:
+     break;
+   }
+   this.isListening = false;
+  };
+
+  rec.onend = (): void => {
+   this.isListening = false;
+   this.recognition = null;
+   this.keyHeld = false;
+   if (!this.aborted) {
+    this.dispatchTranscript();
+   }
+   this.interimText = '';
+  };
+
+  this.recognition = rec;
+  this.isListening = true;
+  rec.start(); // synchronous within the gesture call stack
+ }
+
+ private stopRecognition(abort: boolean): void {
+  this.aborted = abort;
+  if (this.recognition != null) {
+   this.recognition.stop(); // triggers onend asynchronously
+  } else {
+   this.isListening = false;
+  }
+ }
+
+ private dispatchTranscript(): void {
+  const transcript = this.finalTranscript.trim();
+  if (transcript === '') return; // empty/whitespace → no send
+
+  const message = interpolateMicTemplate(this.template, transcript);
+  const extraSteps = asPlan(this.onResult)?.steps ?? [];
+  const plan: PlanLike = {
+   steps: [
+    { type: 'continue_conversation', message },
+    ...extraSteps,
+   ],
+  };
+  this.dispatchEvent(
+   new CustomEvent<PageAppActionEventDetail>(PAGE_APP_ACTION_EVENT, {
+    detail: { plan },
+    bubbles: true,
+    composed: true,
+   }),
+  );
+ }
+
+ // --- hold-mode pointer handlers ---
+
+ private readonly onPointerDown = (event: PointerEvent): void => {
+  if (this.disabled || this.permissionDenied || this.mode !== 'hold') return;
+  event.preventDefault(); // prevent text selection / focus stealing on some browsers
+  ensureAudioUnlocked(); // unlock audio while gesture is live for any @Beep in onResult
+  this.startRecognition(); // synchronous — must stay in this call stack
+ };
+
+ private readonly onPointerUp = (): void => {
+  if (this.mode === 'hold' && this.isListening) {
+   this.stopRecognition(false);
+  }
+ };
+
+ private readonly onPointerCancel = (): void => {
+  if (this.mode === 'hold' && this.isListening) {
+   this.stopRecognition(true); // cancel = abort, no send
+  }
+ };
+
+ private readonly onPointerLeave = (): void => {
+  if (this.mode === 'hold' && this.isListening) {
+   this.stopRecognition(false);
+  }
+ };
+
+ // --- tap-mode click handler ---
+
+ private readonly onClickTap = (): void => {
+  if (this.disabled || this.permissionDenied || this.mode !== 'tap') return;
+  if (this.isListening) {
+   this.stopRecognition(false);
+  } else {
+   ensureAudioUnlocked();
+   this.startRecognition();
+  }
+ };
+
+ // --- keyboard handler (both modes) ---
+
+ private readonly onKeyDown = (event: KeyboardEvent): void => {
+  const isActivate = event.code === 'Space' || event.code === 'Enter';
+  const isEscape = event.code === 'Escape';
+
+  if (isEscape && this.isListening) {
+   this.stopRecognition(true); // Escape = abort, no send
+   event.preventDefault();
+   return;
+  }
+
+  if (this.mode === 'hold' && isActivate && !this.keyHeld && !this.isListening) {
+   this.keyHeld = true;
+   event.preventDefault(); // prevent Space from scrolling
+   ensureAudioUnlocked();
+   this.startRecognition();
+  }
+ };
+
+ private readonly onKeyUp = (event: KeyboardEvent): void => {
+  const isActivate = event.code === 'Space' || event.code === 'Enter';
+  if (this.mode === 'hold' && isActivate && this.keyHeld) {
+   this.keyHeld = false;
+   if (this.isListening) {
+    this.stopRecognition(false);
+   }
+  }
+ };
+
+ private readonly onBlur = (): void => {
+  if (this.isListening) {
+   this.stopRecognition(false);
+  }
+  this.keyHeld = false;
+ };
+
+ protected override render(): TemplateResult {
+  if (!this.speechSupported) {
+   return html`<span>
+    <button
+     class="mic-btn"
+     disabled
+     aria-disabled="true"
+     aria-label="${this.label} (voice input not supported in this browser)"
+     title="Voice input isn't supported in this browser"
+    >${this.label}</button>
+    <span class="mic-unsupported-label">Voice input not supported</span>
+   </span>`;
+  }
+
+  return html`<div>
+   <button
+    class="mic-btn"
+    data-listening=${this.isListening ? 'true' : 'false'}
+    aria-label=${this.label}
+    aria-pressed=${this.isListening ? 'true' : 'false'}
+    ?disabled=${this.disabled || this.permissionDenied}
+    @pointerdown=${this.onPointerDown}
+    @pointerup=${this.onPointerUp}
+    @pointercancel=${this.onPointerCancel}
+    @pointerleave=${this.onPointerLeave}
+    @click=${this.onClickTap}
+    @keydown=${this.onKeyDown}
+    @keyup=${this.onKeyUp}
+    @blur=${this.onBlur}
+   >${this.label}${this.isListening ? html` ●` : nothing}</button>
+   ${this.statusMessage != null
+    ? html`<span class="mic-status" data-kind=${this.statusKind} role="status">${this.statusMessage}</span>`
+    : nothing}
+   ${this.interim && this.isListening && this.interimText !== ''
+    ? html`<span class="mic-interim" aria-live="polite">${this.interimText}</span>`
+    : nothing}
+  </div>`;
+ }
+}
+
+customElements.define(WikiPageAppMicButton.is, WikiPageAppMicButton);
 
 /**
  * The curated icon names the wiki `Icon` component accepts. Unknown names
@@ -682,6 +1159,45 @@ function buildLibrary(): Library {
        ${back}${next}
      </div>`;
   }) as WikiRenderer,
+ });
+
+ /**
+  * MicButton renders a voice-input button that transcribes speech via the
+  * browser's Web Speech API and submits the transcript to the page's chat as
+  * a `continue_conversation` turn. `template` lets the page app encode intent
+  * around the utterance — `{{transcript}}` is replaced with the recognised
+  * text. Hold mode (default) records while the button is pressed and held;
+  * tap mode toggles recording on and off with successive clicks.
+  *
+  * Browsers that do not support `SpeechRecognition` / `webkitSpeechRecognition`
+  * (e.g. Firefox) render a disabled, labelled button — no errors, no blocking.
+  * Note: Chrome's implementation sends audio to Google's servers; inform users
+  * of this for self-hosted, privacy-sensitive deployments.
+  */
+ const MicButtonSchema = z.object({
+  label: z.string(),
+  template: z.string().optional(),
+  mode: z.enum(['hold', 'tap']).optional(),
+  disabled: z.boolean().optional(),
+  onResult: action().optional(),
+  lang: z.string().optional(),
+  interim: z.boolean().optional(),
+ });
+ const MicButton = defineComponent({
+  name: 'MicButton',
+  props: MicButtonSchema,
+  description:
+   'A voice-input button that records speech (Web Speech API) and sends the recognised text to the page\'s chat assistant as a `continue_conversation` turn. `label` is the button text. `template` frames the utterance for the assistant — write any context and use `{{transcript}}` as the placeholder for the recognised speech (e.g. `"Research and price-check this idea: {{transcript}}"`); when absent the raw transcript is sent. `mode`: `"hold"` (press-and-hold, default) or `"tap"` (click to start, click again to stop). `disabled` disables the button. `onResult` is an optional extra action plan that runs in addition to the send (e.g. `@Set($draft, "")`). `lang` overrides the browser\'s default recognition language (BCP-47, e.g. `"en-US"`). `interim` controls whether a live partial transcript shows below the button while recording (default true). Degrades gracefully to a disabled control in browsers without SpeechRecognition support (Firefox). Note: browser-based speech recognition typically sends audio to an external service (e.g. Google) — inform users in privacy-sensitive deployments.',
+  component: (({ label, template, mode, disabled, onResult, lang, interim }) =>
+   html`<wiki-page-app-mic-button
+    .label=${typeof label === 'string' ? label : 'Speak'}
+    .template=${typeof template === 'string' ? template : undefined}
+    .mode=${mode === 'tap' ? 'tap' : 'hold'}
+    .disabled=${disabled === true}
+    .onResult=${onResult}
+    .recognitionLang=${typeof lang === 'string' ? lang : undefined}
+    .interim=${interim !== false}
+   ></wiki-page-app-mic-button>`) as WikiRenderer,
  });
 
  /**
@@ -1640,6 +2156,7 @@ function buildLibrary(): Library {
   Skeleton.ref,
   List.ref,
   Image.ref,
+  MicButton.ref,
  ]);
 
  /**
@@ -1696,6 +2213,7 @@ function buildLibrary(): Library {
    Skeleton,
    List,
    Image,
+   MicButton,
   ],
   actions: [Beep],
   root: WIKI_ROOT_COMPONENT,

@@ -18,6 +18,7 @@ import {
  generateWikiSystemPrompt,
  ICON_LIBRARY,
  ICON_NAMES,
+ interpolateMicTemplate,
  PAGE_APP_ACTION_EVENT,
  WIKI_LIBRARY_VERSION,
  WIKI_ROOT_COMPONENT,
@@ -27,11 +28,12 @@ import {
 import type {
  PageAppActionEventDetail,
  WikiPageAppCountdown,
+ WikiPageAppMicButton,
 } from './library.js';
 
 describe('wikiLibrary', () => {
- it('should export the wiki-core@3 version id', () => {
-  expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@3');
+ it('should export the wiki-core@4 version id', () => {
+  expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@4');
   expect(wikiLibrary.id).to.equal(WIKI_LIBRARY_VERSION);
  });
 
@@ -42,7 +44,7 @@ describe('wikiLibrary', () => {
 
  it('should expose the built-in and wiki-native components', () => {
   const names = Object.keys(wikiLibrary.components);
-  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps', 'Tooltip']) {
+  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps', 'Tooltip', 'MicButton']) {
    expect(names, name).to.include(name);
   }
  });
@@ -50,7 +52,7 @@ describe('wikiLibrary', () => {
  it('should produce a JSON schema whose properties name every composable component', () => {
   const schema: LibraryJSONSchema = wikiLibrary.toJSONSchema();
   const props = schema.properties ?? {};
-  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps', 'Tooltip']) {
+  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps', 'Tooltip', 'MicButton']) {
    expect(Object.keys(props), name).to.include(name);
   }
  });
@@ -1760,5 +1762,125 @@ describe('when parsing Image', () => {
    ']))',
   ].join('\n'));
   expect(result.meta.errors).to.deep.equal([]);
+ });
+});
+
+describe('interpolateMicTemplate', () => {
+ describe('when template is undefined', () => {
+  it('should return the transcript unchanged', () => {
+   expect(interpolateMicTemplate(undefined, 'hello world')).to.equal('hello world');
+  });
+ });
+
+ describe('when template is an empty string', () => {
+  it('should return the transcript unchanged', () => {
+   expect(interpolateMicTemplate('', 'hello world')).to.equal('hello world');
+  });
+ });
+
+ describe('when template has no placeholder', () => {
+  it('should return the template string as-is', () => {
+   expect(interpolateMicTemplate('add note', 'hello world')).to.equal('add note');
+  });
+ });
+
+ describe('when template contains the {{transcript}} placeholder once', () => {
+  it('should replace the placeholder with the transcript', () => {
+   expect(interpolateMicTemplate('add note: {{transcript}}', 'hello world')).to.equal('add note: hello world');
+  });
+ });
+
+ describe('when template contains the {{transcript}} placeholder multiple times', () => {
+  it('should replace every occurrence', () => {
+   expect(interpolateMicTemplate('{{transcript}} (repeat: {{transcript}})', 'yo')).to.equal('yo (repeat: yo)');
+  });
+ });
+});
+
+describe('WikiPageAppMicButton', () => {
+ describe('when SpeechRecognition is not available (degradation path)', () => {
+  let savedSR: unknown;
+  let savedWebkitSR: unknown;
+
+  beforeEach(() => {
+   const g = globalThis as Record<string, unknown>;
+   savedSR = g['SpeechRecognition'];
+   savedWebkitSR = g['webkitSpeechRecognition'];
+   delete g['SpeechRecognition'];
+   delete g['webkitSpeechRecognition'];
+  });
+
+  afterEach(() => {
+   const g = globalThis as Record<string, unknown>;
+   if (savedSR !== undefined) g['SpeechRecognition'] = savedSR;
+   if (savedWebkitSR !== undefined) g['webkitSpeechRecognition'] = savedWebkitSR;
+  });
+
+  describe('when element is connected', () => {
+   let el: WikiPageAppMicButton;
+
+   beforeEach(async () => {
+    const { fixture } = await import('@open-wc/testing');
+    const { html: litHtml } = await import('lit');
+    el = await fixture<WikiPageAppMicButton>(litHtml`<wiki-page-app-mic-button .label=${'Speak'}></wiki-page-app-mic-button>`);
+    await el.updateComplete;
+   });
+
+   it('should render a disabled button', () => {
+    const btn = el.shadowRoot?.querySelector('button');
+    expect(btn?.disabled).to.equal(true);
+   });
+
+   it('should include the label text in the button', () => {
+    const btn = el.shadowRoot?.querySelector('button');
+    expect(btn?.textContent?.trim()).to.include('Speak');
+   });
+
+   it('should render the unsupported label', () => {
+    const label = el.shadowRoot?.querySelector('.mic-unsupported-label');
+    expect(label).to.exist;
+   });
+  });
+ });
+
+ describe('when parsing MicButton in the wiki library', () => {
+  let parser: ReturnType<typeof createParser>;
+
+  beforeEach(() => {
+   parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+  });
+
+  it('should parse MicButton with label as the first positional arg', () => {
+   const result = parser.parse('root = Card("t", [m])\nm = MicButton("Dictate")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const mic = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(mic.typeName).to.equal('MicButton');
+   expect(mic.props['label']).to.equal('Dictate');
+  });
+
+  it('should parse MicButton with label and template', () => {
+   const result = parser.parse('root = Card("t", [m])\nm = MicButton("Speak", "note: {{transcript}}")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const mic = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(mic.props['label']).to.equal('Speak');
+   expect(mic.props['template']).to.equal('note: {{transcript}}');
+  });
+
+  it('should parse MicButton with mode tap as the third positional arg', () => {
+   const result = parser.parse('root = Card("t", [m])\nm = MicButton("Speak", undefined, "tap")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const mic = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(mic.props['mode']).to.equal('tap');
+  });
+
+  it('should reject an unknown mode value', () => {
+   const result = parser.parse('root = Card("t", [m])\nm = MicButton("Speak", undefined, "push")');
+   const codes = result.meta.errors.map((e) => e.code);
+   expect(codes).to.include('type-mismatch');
+  });
+
+  it('should include MicButton in the library component list', () => {
+   expect(Object.keys(wikiLibrary.components)).to.include('MicButton');
+  });
  });
 });
