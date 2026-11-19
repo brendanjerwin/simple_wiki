@@ -40,7 +40,7 @@ type BleveIndexQueryer interface {
 	// each result page to carry every tag in requiredTags, and applies a tag
 	// boost for each token in boostTokens (so plain-text queries that happen
 	// to match an indexed tag rank higher than untagged matches).
-	QueryWithTags(text string, requiredTags []string, boostTokens []string) ([]SearchResult, error)
+	QueryWithTags(text string, requiredTags, boostTokens []string) ([]SearchResult, error)
 }
 
 // tagsField is the document field used to store extracted page-level
@@ -308,7 +308,7 @@ func (b *Index) Query(queryText string) ([]SearchResult, error) {
 // title and content (with the same scoring as Query), additionally requiring
 // every entry in requiredTags to be present on the result page, and applying
 // a should-clause tag boost for each token in boostTokens.
-func (b *Index) QueryWithTags(text string, requiredTags []string, boostTokens []string) ([]SearchResult, error) {
+func (b *Index) QueryWithTags(text string, requiredTags, boostTokens []string) ([]SearchResult, error) {
 	q := buildSearchQuery(text, requiredTags, boostTokens)
 
 	searchReq := bleve.NewSearchRequest(q)
@@ -346,7 +346,7 @@ func (b *Index) QueryWithTags(text string, requiredTags []string, boostTokens []
 // buildSearchQuery composes the free-text scoring disjunction (title-exact +
 // title-prefix + content) with the optional required-tag conjunction and
 // tag-boost should clauses.
-func buildSearchQuery(text string, requiredTags []string, boostTokens []string) query.Query {
+func buildSearchQuery(text string, requiredTags, boostTokens []string) query.Query {
 	textPortion := buildTextScoringQuery(text, boostTokens)
 
 	if len(requiredTags) == 0 {

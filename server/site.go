@@ -157,8 +157,7 @@ func (s *Site) LoadCustomCSS(cssFile string) error {
 // To configure custom CSS, call site.LoadCustomCSS after creation.
 // To configure file uploads, set site.Fileuploads, site.MaxUploadSize, and site.MaxDocumentSize after creation.
 func NewSite(
-	filepathToData string,
-	defaultPage string,
+	filepathToData, defaultPage string,
 	debounce int,
 	secret string,
 	logger *lumber.ConsoleLogger,

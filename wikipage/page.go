@@ -196,7 +196,7 @@ func RenderMarkdownToHTML(markdown []byte, renderer MarkdownToHTMLRenderer) ([]b
 // The pageIdentifier is injected into the frontmatter (if not already present) so
 // template functions can reference the page's identifier.
 // It returns both the HTML, the template-expanded markdown, and the frontmatter JSON.
-func RenderPageWithTemplates(content string, pageIdentifier string, reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) (RenderingResult, error) {
+func RenderPageWithTemplates(content, pageIdentifier string, reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) (RenderingResult, error) {
 	var result RenderingResult
 
 	// Validate required dependencies

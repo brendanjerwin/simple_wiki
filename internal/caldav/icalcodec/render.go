@@ -30,7 +30,7 @@ import (
 // Defaults to standards-only rendering — for client-specific shapes
 // (e.g. embedding tags into SUMMARY for Apple Reminders) call
 // RenderItemWithOptions.
-func RenderItem(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time) []byte {
+func RenderItem(item *apiv1.ChecklistItem, page, listName, baseURL string, nowFn func() time.Time) []byte {
 	return RenderItemWithOptions(item, page, listName, baseURL, nowFn, RenderOptions{})
 }
 
@@ -60,7 +60,7 @@ type RenderOptions struct {
 // Used by the backend when the request context indicates a client
 // family (e.g. Apple Reminders) that benefits from non-default
 // rendering.
-func RenderItemWithOptions(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time, opts RenderOptions) []byte {
+func RenderItemWithOptions(item *apiv1.ChecklistItem, page, listName, baseURL string, nowFn func() time.Time, opts RenderOptions) []byte {
 	cal := renderToCalendar(item, page, listName, baseURL, nowFn, opts)
 	if cal == nil {
 		return nil
@@ -195,7 +195,7 @@ func appendTodoAlarmIfPresent(todo *ical.Component, item *apiv1.ChecklistItem) {
 // it. Split out of RenderItem so future callers (e.g., the multiget
 // REPORT handler that wants a *ical.Calendar to merge) can reuse the
 // mapping logic without going through bytes.
-func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time, opts RenderOptions) *ical.Calendar {
+func renderToCalendar(item *apiv1.ChecklistItem, page, listName, baseURL string, nowFn func() time.Time, opts RenderOptions) *ical.Calendar {
 	if item == nil {
 		return nil
 	}

@@ -206,7 +206,7 @@ func (m *Mutator) ListResponses(ctx context.Context, page, surveyName string) ([
 }
 
 // DeleteResponse removes a response by user, or by submittedAt when provided.
-func (m *Mutator) DeleteResponse(ctx context.Context, page, surveyName, user string, submittedAt *time.Time, expected *time.Time) (*apiv1.Survey, error) {
+func (m *Mutator) DeleteResponse(ctx context.Context, page, surveyName, user string, submittedAt, expected *time.Time) (*apiv1.Survey, error) {
 	return m.mutateSurvey(ctx, page, surveyName, expected, func(survey *apiv1.Survey) error {
 		idx := findResponseToDelete(survey, user, submittedAt)
 		if idx < 0 {
