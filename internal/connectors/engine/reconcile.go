@@ -433,9 +433,7 @@ func (e *Engine) applyInboundOneItem(
 	binding connectors.Binding,
 	remoteItem connectors.RemoteItem,
 	classification map[string]EventClassification,
-	idMap map[string]string,
-	refToUID map[string]string,
-	wikiByText map[string]string,
+	idMap, refToUID, wikiByText map[string]string,
 ) error {
 	if remoteItem.Deleted {
 		return e.handleInboundDelete(ctx, binding, remoteItem, classification, idMap, refToUID)
@@ -506,8 +504,7 @@ func (e *Engine) handleInboundDelete(
 	binding connectors.Binding,
 	remoteItem connectors.RemoteItem,
 	classification map[string]EventClassification,
-	idMap map[string]string,
-	refToUID map[string]string,
+	idMap, refToUID map[string]string,
 ) error {
 	uid, hasUID := refToUID[string(remoteItem.Ref)]
 	if !hasUID {
@@ -627,9 +624,7 @@ func (e *Engine) applyInboundDedupByText(
 	binding connectors.Binding,
 	wikiItem connectors.WikiItem,
 	remoteItem connectors.RemoteItem,
-	idMap map[string]string,
-	refToUID map[string]string,
-	wikiByText map[string]string,
+	idMap, refToUID, wikiByText map[string]string,
 ) (bool, error) {
 	matchUID, found := wikiByText[wikiItem.Text]
 	if !found {
@@ -882,9 +877,7 @@ func (e *Engine) pushOneInsert(
 	binding connectors.Binding,
 	uid string,
 	wikiItem connectors.WikiItem,
-	idMap map[string]string,
-	fingerprints map[string]string,
-	boundUIDByText map[string]string,
+	idMap, fingerprints, boundUIDByText map[string]string,
 ) (updated connectors.Binding, bail bool, authFailed bool, err error) {
 	if skip, reason := e.shouldSkipPush(binding, uid); skip {
 		e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=%s",
@@ -1036,11 +1029,9 @@ func (e *Engine) pushOnePatch(ctx context.Context, opts pushOnePatchOpts) (conne
 func (e *Engine) pushOneDelete(
 	ctx context.Context,
 	binding connectors.Binding,
-	uid string,
-	ref string,
+	uid, ref string,
 	currentUIDs map[string]*apiv1.ChecklistItem,
-	idMap map[string]string,
-	fingerprints map[string]string,
+	idMap, fingerprints map[string]string,
 ) (connectors.Binding, bool, error) {
 	if _, stillThere := currentUIDs[uid]; stillThere {
 		return binding, false, nil

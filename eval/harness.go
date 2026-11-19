@@ -188,7 +188,7 @@ func runOneCase(ctx context.Context, c Case, cfg Config, configLabel string) (Ca
 
 // buildUserMessage assembles the tool catalog + user message + page context
 // into the prompt the LLM sees.
-func buildUserMessage(surface ToolSurface, userSays string, pageContext string) string {
+func buildUserMessage(surface ToolSurface, userSays, pageContext string) string {
 	// Compact the tool catalog: name + description only (drop inputSchema for now
 	// to keep token costs manageable; can be toggled on later).
 	tools := make([]map[string]string, len(surface.Tools))

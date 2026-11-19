@@ -23,7 +23,7 @@ type Printer interface {
 }
 
 // PrintLabel prints a label using the specified template and identifier.
-func PrintLabel(templateIdentifier string, identifier string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
+func PrintLabel(templateIdentifier, identifier string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
 	resolvedTemplateID, templateData, err := site.ReadMarkdown(wikipage.PageIdentifier(templateIdentifier))
 	if err != nil {
 		return err

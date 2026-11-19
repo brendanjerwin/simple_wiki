@@ -89,8 +89,7 @@ type pushFailureRecord struct {
 // is still updated so subsequent ticks see the dead-letter state.
 func (e *Engine) recordPushFailure(
 	binding connectors.Binding,
-	uid string,
-	op string,
+	uid, op string,
 	pushErr error,
 ) connectors.Binding {
 	failures := readPushFailures(binding.AdapterState)
