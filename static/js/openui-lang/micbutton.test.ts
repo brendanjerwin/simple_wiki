@@ -148,7 +148,7 @@ describe('WikiPageAppMicButton (supported browser)', () => {
    expect(btn.disabled).to.equal(false);
    expect(btn.getAttribute('aria-label')).to.equal('Speak');
    expect(btn.getAttribute('aria-pressed')).to.equal('false');
-   expect(el.shadowRoot?.querySelector('.mic-unsupported-label')).to.equal(null);
+   expect(el.shadowRoot?.querySelector('.mic-unsupported-label')).to.be.null;
   });
  });
 
@@ -183,7 +183,7 @@ describe('WikiPageAppMicButton (supported browser)', () => {
    await el.updateComplete;
    expect(actions).to.have.length(1);
    expect(actions[0]?.plan?.steps[0]).to.deep.equal({ type: 'continue_conversation', message: 'add oat milk' });
-   expect(el.shadowRoot?.querySelector('.mic-interim')).to.equal(null);
+   expect(el.shadowRoot?.querySelector('.mic-interim')).to.be.null;
   });
 
   it('should interpolate the {{transcript}} template', async () => {
@@ -351,7 +351,7 @@ describe('WikiPageAppMicButton (supported browser)', () => {
  describe('visual state', () => {
   it('should render a mic-circle element', async () => {
    const el = await mount();
-   expect(el.shadowRoot?.querySelector('.mic-circle')).to.not.equal(null);
+   expect(el.shadowRoot?.querySelector('.mic-circle')).to.not.be.null;
   });
 
   describe('when idle', () => {
