@@ -557,7 +557,7 @@ func (m *MockBleveIndexQueryer) Query(_ string) ([]bleve.SearchResult, error) {
 
 // QueryWithTags returns the same Results regardless of tag filtering — tests
 // that need to assert tag-aware behavior should override on a per-test basis.
-func (m *MockBleveIndexQueryer) QueryWithTags(_ string, _ []string, _ []string) ([]bleve.SearchResult, error) {
+func (m *MockBleveIndexQueryer) QueryWithTags(_ string, _, _ []string) ([]bleve.SearchResult, error) {
 	if m.Err != nil {
 		return nil, m.Err
 	}
@@ -8971,7 +8971,7 @@ var _ = Describe("makeReportJobCallback", func() {
 	})
 })
 
-func (noOpChatBufferManager) RequestPermission(_ context.Context, _ string, _ string, _ string, _ string, _ []chatbuffer.PermissionOption) string {
+func (noOpChatBufferManager) RequestPermission(_ context.Context, _, _, _, _ string, _ []chatbuffer.PermissionOption) string {
 	return ""
 }
 

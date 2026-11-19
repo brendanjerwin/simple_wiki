@@ -913,7 +913,7 @@ func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID 
 
 // removeAndWriteItems removes items from the list and writes back the updated frontmatter.
 // Returns the count of removed items and any error from writing frontmatter.
-func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inv map[string]any, items []any, itemsToRemove map[string]bool) (int, error) {
+func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm, inv map[string]any, items []any, itemsToRemove map[string]bool) (int, error) {
 	removedCount := 0
 	var newItems []any
 

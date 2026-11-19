@@ -65,8 +65,7 @@ func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 	_ context.Context,
 	page, listName, uid string,
 	args UpsertFromCalDAVArgs,
-	ifMatch string,
-	ifNoneMatch string,
+	ifMatch, ifNoneMatch string,
 	identity tailscale.IdentityValue,
 ) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)

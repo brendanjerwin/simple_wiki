@@ -75,7 +75,7 @@ func (m *GRPCMetrics) RequestStarted(ctx context.Context, method string) {
 }
 
 // RequestFinished records the completion of a gRPC request.
-func (m *GRPCMetrics) RequestFinished(ctx context.Context, method string, code string, duration time.Duration) {
+func (m *GRPCMetrics) RequestFinished(ctx context.Context, method, code string, duration time.Duration) {
 	attrs := []attribute.KeyValue{
 		attribute.String(attrRPCMethod, method),
 		attribute.String(attrRPCStatusCode, code),
