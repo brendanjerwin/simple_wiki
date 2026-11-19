@@ -1,19 +1,39 @@
 #!/bin/sh
 
-# Install protoc-gen-go-mcp from source if not already present.
+# Install protoc-gen-go-mcp from source, reinstalling when the go.mod pin changes.
 # This tool is not available in nixpkgs, so we install it via go install
 # (same pattern as ensure_staticcheck.sh).
 # Required by buf.gen.yaml for MCP tool generation from proto services.
+#
+# Version-awareness: uses `go version -m` to read the module version embedded
+# in the installed binary and compares it against the go.mod pin. A matching
+# version is a no-op; any mismatch triggers a reinstall. This prevents a stale
+# binary (built from an older pin) from silently producing output that disagrees
+# with what CI or a fresh clone would produce.
 
 set -e
 
 GOBIN_DIR="${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin"
 BINARY="$GOBIN_DIR/protoc-gen-go-mcp"
 
+DESIRED_VERSION="$(go list -m -f '{{.Version}}' github.com/redpanda-data/protoc-gen-go-mcp)"
+
+NEED_INSTALL=false
+
 if [ ! -x "$BINARY" ]; then
+    echo "protoc-gen-go-mcp binary not found, installing..."
+    NEED_INSTALL=true
+else
+    INSTALLED_VERSION="$(go version -m "$BINARY" 2>/dev/null | awk '/^\t mod/{print $3}')"
+    if [ "$INSTALLED_VERSION" != "$DESIRED_VERSION" ]; then
+        echo "protoc-gen-go-mcp is at $INSTALLED_VERSION but go.mod pins $DESIRED_VERSION, reinstalling..."
+        NEED_INSTALL=true
+    fi
+fi
+
+if [ "$NEED_INSTALL" = true ]; then
     mkdir -p "$GOBIN_DIR"
-    VERSION="$(go list -m -f '{{.Version}}' github.com/redpanda-data/protoc-gen-go-mcp)"
-    echo "Installing protoc-gen-go-mcp..."
-    GOBIN="$GOBIN_DIR" go install github.com/redpanda-data/protoc-gen-go-mcp/cmd/protoc-gen-go-mcp@"$VERSION"
-    echo "protoc-gen-go-mcp installed in $GOBIN_DIR"
+    echo "Installing protoc-gen-go-mcp $DESIRED_VERSION..."
+    GOBIN="$GOBIN_DIR" go install github.com/redpanda-data/protoc-gen-go-mcp/cmd/protoc-gen-go-mcp@"$DESIRED_VERSION"
+    echo "protoc-gen-go-mcp $DESIRED_VERSION installed in $GOBIN_DIR"
 fi
