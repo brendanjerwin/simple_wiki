@@ -1831,9 +1831,14 @@ describe('WikiPageAppMicButton', () => {
     expect(btn?.disabled).to.equal(true);
    });
 
-   it('should include the label text in the button', () => {
+   it('should include the label text in the mic-label', () => {
+    const label = el.shadowRoot?.querySelector('.mic-label');
+    expect(label?.textContent?.trim()).to.include('Speak');
+   });
+
+   it('should expose the label as the accessible name', () => {
     const btn = el.shadowRoot?.querySelector('button');
-    expect(btn?.textContent?.trim()).to.include('Speak');
+    expect(btn?.getAttribute('aria-label')).to.include('Speak');
    });
 
    it('should render the unsupported label', () => {

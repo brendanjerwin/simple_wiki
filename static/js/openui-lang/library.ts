@@ -334,6 +334,17 @@ export function interpolateMicTemplate(template: string | undefined, transcript:
 }
 
 /**
+ * Microphone glyph (Material Design filled mic icon) used as the visual
+ * centrepiece of WikiPageAppMicButton. Defined once so both render paths
+ * (supported / unsupported) share the same SVG content without duplication.
+ * Uses `currentColor` via the parent `<svg fill="currentColor">` wrapper.
+ */
+const MIC_GLYPH: SVGTemplateResult = svg`
+  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+  <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+`;
+
+/**
  * `wiki-page-app-mic-button` — the interactive control behind the
  * `MicButton` component. Owns the full browser SpeechRecognition pipeline:
  * starts recognition synchronously from a pointer/keyboard gesture (required
@@ -365,50 +376,127 @@ export class WikiPageAppMicButton extends LitElement {
    gap: 4px;
   }
 
+  /* ── Square skeuomorphic button ─────────────────────────────────── */
   .mic-btn {
    align-self: flex-start;
-   padding: 8px 16px;
+   position: relative;
+   width: 72px;
+   height: 72px;
+   padding: 0;
    border: none;
-   border-radius: 8px;
-   background: var(--color-action-confirm, #007bff);
-   color: #ffffff;
-   font-size: 0.9rem;
-   font-weight: 600;
+   border-radius: 14px;
+   /* Skeuomorphic gradient: brighter top-left → darker bottom-right */
+   background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-action-confirm, #007bff) 85%, white),
+    color-mix(in srgb, var(--color-action-confirm, #007bff) 75%, black)
+   );
    cursor: pointer;
    user-select: none;
    touch-action: none;
-   transition: background 120ms ease, box-shadow 120ms ease;
+   transition: box-shadow 120ms ease, transform 100ms ease, background 120ms ease;
    font-family: inherit;
-   line-height: 1.4;
+   /* Layered shadows: inset highlight + inset base shadow + drop shadow */
+   box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 15%, transparent),
+    0 4px 10px color-mix(in srgb, var(--color-action-confirm, #007bff) 25%, black),
+    0 1px 3px color-mix(in srgb, black 30%, transparent),
+    0 2px 0 color-mix(in srgb, var(--color-action-confirm, #007bff) 50%, black);
+   display: flex;
+   align-items: center;
+   justify-content: center;
   }
 
+  /* Visible focus ring */
+  .mic-btn:focus-visible {
+   outline: 3px solid color-mix(in srgb, var(--color-action-confirm, #007bff) 70%, white);
+   outline-offset: 3px;
+  }
+
+  /* Hover: lifts slightly, stronger glow */
   .mic-btn:not(:disabled):hover {
-   background: var(--color-action-confirm-hover, #0056b3);
+   background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-action-confirm-hover, #0056b3) 85%, white),
+    color-mix(in srgb, var(--color-action-confirm-hover, #0056b3) 75%, black)
+   );
+   box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 35%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 20%, transparent),
+    0 6px 16px color-mix(in srgb, var(--color-action-confirm-hover, #0056b3) 30%, black),
+    0 2px 5px color-mix(in srgb, black 35%, transparent),
+    0 2px 0 color-mix(in srgb, var(--color-action-confirm-hover, #0056b3) 55%, black);
+   transform: translateY(-1px);
   }
 
+  /* Pressed/active: depresses into the surface */
   .mic-btn:not(:disabled):active {
-   transform: translateY(1px);
+   box-shadow:
+    inset 0 2px 4px color-mix(in srgb, black 20%, transparent),
+    0 1px 2px color-mix(in srgb, black 20%, transparent),
+    0 1px 0 color-mix(in srgb, var(--color-action-confirm, #007bff) 50%, black);
+   transform: translateY(2px);
   }
 
+  /* Disabled */
   .mic-btn:disabled {
-   opacity: 0.5;
+   opacity: 0.45;
    cursor: not-allowed;
+   box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 15%, transparent),
+    0 1px 3px color-mix(in srgb, black 15%, transparent);
   }
 
+  /* Recording state: red gradient */
   .mic-btn[data-listening='true'] {
-   background: var(--color-action-danger, #dc3545);
+   background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-action-danger, #dc3545) 85%, white),
+    color-mix(in srgb, var(--color-action-danger, #dc3545) 75%, black)
+   );
+   box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 15%, transparent),
+    0 4px 12px color-mix(in srgb, var(--color-action-danger, #dc3545) 35%, black),
+    0 1px 3px color-mix(in srgb, black 30%, transparent),
+    0 2px 0 color-mix(in srgb, var(--color-action-danger, #dc3545) 55%, black);
   }
 
+  /* ── Circular mic element inside the square ─────────────────────── */
+  .mic-circle {
+   width: 48px;
+   height: 48px;
+   border-radius: 50%;
+   background: color-mix(in srgb, white 12%, transparent);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   color: color-mix(in srgb, white 95%, transparent);
+   box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 10%, transparent);
+   transition: box-shadow 120ms ease;
+   pointer-events: none;
+  }
+
+  /* ── Recording animation: pulsing ring on .mic-circle ───────────── */
   @keyframes mic-pulse {
    0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-action-danger, #dc3545) 40%, transparent);
+    box-shadow:
+     inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
+     inset 0 -1px 0 color-mix(in srgb, black 10%, transparent),
+     0 0 0 0 color-mix(in srgb, var(--color-action-danger, #dc3545) 70%, transparent);
    }
    50% {
-    box-shadow: 0 0 0 8px transparent;
+    box-shadow:
+     inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
+     inset 0 -1px 0 color-mix(in srgb, black 10%, transparent),
+     0 0 0 10px transparent;
    }
   }
 
-  .mic-btn[data-listening='true'] {
+  .mic-btn[data-listening='true'] .mic-circle {
    animation: mic-pulse 1.5s ease-in-out infinite;
   }
 
@@ -416,11 +504,25 @@ export class WikiPageAppMicButton extends LitElement {
    .mic-btn {
     transition: none;
    }
-   .mic-btn[data-listening='true'] {
+
+   .mic-circle {
+    transition: none;
+   }
+
+   /* Static outline replaces animation */
+   .mic-btn[data-listening='true'] .mic-circle {
     animation: none;
-    outline: 2px solid var(--color-action-danger, #dc3545);
+    outline: 3px solid color-mix(in srgb, var(--color-action-danger, #dc3545) 70%, white);
     outline-offset: 2px;
    }
+  }
+
+  /* ── Text labels below the button ───────────────────────────────── */
+  .mic-label {
+   font-size: 0.8rem;
+   color: var(--color-text-primary, #333333);
+   font-family: inherit;
+   line-height: 1.4;
   }
 
   .mic-status {
@@ -716,6 +818,11 @@ export class WikiPageAppMicButton extends LitElement {
  };
 
  protected override render(): TemplateResult {
+  const micGlyph = html`
+   <span class="mic-circle">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${MIC_GLYPH}</svg>
+   </span>`;
+
   if (!this.speechSupported) {
    return html`<span>
     <button
@@ -724,7 +831,8 @@ export class WikiPageAppMicButton extends LitElement {
      aria-disabled="true"
      aria-label="${this.label} (voice input not supported in this browser)"
      title="Voice input isn't supported in this browser"
-    >${this.label}</button>
+    >${micGlyph}</button>
+    <span class="mic-label">${this.label}</span>
     <span class="mic-unsupported-label">Voice input not supported</span>
    </span>`;
   }
@@ -744,7 +852,8 @@ export class WikiPageAppMicButton extends LitElement {
     @keydown=${this.onKeyDown}
     @keyup=${this.onKeyUp}
     @blur=${this.onBlur}
-   >${this.label}${this.isListening ? html` ●` : nothing}</button>
+   >${micGlyph}</button>
+   <span class="mic-label">${this.label}</span>
    ${this.statusMessage != null
     ? html`<span class="mic-status" data-kind=${this.statusKind} role="status">${this.statusMessage}</span>`
     : nothing}
