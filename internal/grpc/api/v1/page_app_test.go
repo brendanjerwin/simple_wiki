@@ -3,6 +3,10 @@ package v1_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"regexp"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,6 +35,29 @@ func pageAppStampsFromFM(fm wikipage.FrontMatter) map[string]any {
 	pageApp, ok := wiki["page_app"].(map[string]any)
 	ExpectWithOffset(1, ok).To(BeTrue())
 	return pageApp
+}
+
+// wikiLibraryVersionPattern extracts the client library's WIKI_LIBRARY_VERSION
+// literal so the Go stamp and the shipped JS library cannot silently drift.
+var wikiLibraryVersionPattern = regexp.MustCompile(`WIKI_LIBRARY_VERSION\s*=\s*'([^']+)'`)
+
+// clientLibrarySourcePath locates the bundled client library source from this
+// package's directory (go test runs with the working directory set to it).
+const clientLibrarySourcePath = "../../../../static/js/openui-lang/library.ts"
+
+// readClientWikiLibraryVersion reads the version the bundled client library
+// reports. The two literals live in different languages, so a test is the only
+// place their agreement can be enforced.
+func readClientWikiLibraryVersion() (string, error) {
+	source, err := os.ReadFile(clientLibrarySourcePath)
+	if err != nil {
+		return "", fmt.Errorf("read client library source: %w", err)
+	}
+	matches := wikiLibraryVersionPattern.FindStringSubmatch(string(source))
+	if len(matches) < 2 {
+		return "", errors.New("no WIKI_LIBRARY_VERSION literal in client library source")
+	}
+	return matches[1], nil
 }
 
 var _ = Describe("PageAppService", func() {
@@ -96,7 +123,7 @@ var _ = Describe("PageAppService", func() {
 			It("should stamp version 1 and a hash", func() {
 				Expect(resp.GetVersion()).To(Equal(int64(1)))
 				Expect(resp.GetVersionHash()).To(HavePrefix("sha256:"))
-				Expect(resp.GetLibrary()).To(Equal("wiki-core@3"))
+				Expect(resp.GetLibrary()).To(Equal("wiki-core@4"))
 			})
 
 			It("should write the fence into the markdown body, preserving prose", func() {
@@ -110,7 +137,7 @@ var _ = Describe("PageAppService", func() {
 				stamps := pageAppStampsFromFM(mock.Frontmatter)
 				Expect(stamps["lang"]).To(Equal("openui-lang"))
 				Expect(stamps["version"]).To(Equal(int64(1)))
-				Expect(stamps["library"]).To(Equal("wiki-core@3"))
+				Expect(stamps["library"]).To(Equal("wiki-core@4"))
 				Expect(stamps["version_hash"]).To(Equal(resp.GetVersionHash()))
 			})
 		})
@@ -405,6 +432,28 @@ var _ = Describe("page app placement guard", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(mock.Markdown)).NotTo(ContainSubstring("Substantial roadmap prose."))
 			Expect(string(mock.Markdown)).To(ContainSubstring(wikipage.PageAppFenceOpen))
+		})
+	})
+})
+
+var _ = Describe("PageAppLibrary stamp", func() {
+	When("compared with the client component library version", func() {
+		var (
+			clientVersion string
+			readErr       error
+		)
+
+		BeforeEach(func() {
+			clientVersion, readErr = readClientWikiLibraryVersion()
+		})
+
+		It("should read the client library version", func() {
+			Expect(readErr).NotTo(HaveOccurred())
+		})
+
+		It("should match the client library version so the stamp cannot drift", func() {
+			Expect(readErr).NotTo(HaveOccurred())
+			Expect(v1.PageAppLibrary).To(Equal(clientVersion))
 		})
 	})
 })

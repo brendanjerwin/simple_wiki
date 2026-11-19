@@ -27,8 +27,10 @@ const (
 	// PageAppLangOpenuiLang is the only page app language in this scope.
 	PageAppLangOpenuiLang = "openui-lang"
 	// PageAppLibrary is the wiki component library version the shipped
-	// help page teaches.
-	PageAppLibrary = "wiki-core@3"
+	// help page teaches and every page app is stamped against.
+	// internal/grpc/api/v1/page_app_test.go pins it to WIKI_LIBRARY_VERSION
+	// in static/js/openui-lang/library.ts so the two cannot drift.
+	PageAppLibrary = "wiki-core@4"
 )
 
 const (
