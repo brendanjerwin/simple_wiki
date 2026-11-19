@@ -83,6 +83,8 @@ root = Card("Training log", mic)
 
 The user speaks; the recognised text replaces `{{transcript}}`; the agent receives `"Add a training note: <what they said>"`.
 
+**Visual design** — the button renders as a square skeuomorphic control (depth, gradient, inset highlights) with a circular microphone icon centred inside it. The `label` text appears below the button as a caption. While recording the button turns red and the mic circle pulses — users can tell at a glance that recording is active. Animation stops when recording stops and is suppressed under `prefers-reduced-motion: reduce`.
+
 **Browser support** — `MicButton` requires Chrome, Edge, or Safari (desktop and mobile). Firefox does not expose `SpeechRecognition` today; on unsupported browsers the button renders as visually disabled with a tooltip. The app always renders — it never crashes.
 
 **Gesture constraint** — recognition starts synchronously from the button's pointer/keyboard handler (browser policy requires microphone access to be triggered by a user gesture). An `onResult` `@Beep()` benefits from the same unlock.

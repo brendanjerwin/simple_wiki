@@ -132,6 +132,85 @@ export const UnsupportedBrowser: Story = {
   },
 };
 
+export const RecordingActive: Story = {
+  name: 'Recording active state (animated)',
+  parameters: {
+    docs: {
+      description: {
+        story: [
+          'Button in the active recording state: `data-listening="true"`. The red gradient replaces the blue, and a **pulsing ring** animates around the circular mic element.',
+          '',
+          'Under `prefers-reduced-motion: reduce` the animation is suppressed and replaced by a static outline so the state remains visible.',
+          '',
+          'State is simulated with a fake `SpeechRecognition` that starts but never fires `onend` — the button stays in the recording state.',
+        ].join('\n'),
+      },
+    },
+  },
+  render: () => {
+    const g = globalThis as Record<string, unknown>;
+    const savedSR = g['SpeechRecognition'];
+    const savedWebkitSR = g['webkitSpeechRecognition'];
+
+    class PersistentFakeSR {
+      continuous = false;
+      interimResults = false;
+      maxAlternatives = 1;
+      lang = '';
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      start(): void { /* intentionally never fires onend */ }
+      stop(): void {}
+      abort(): void {}
+    }
+
+    g['SpeechRecognition'] = PersistentFakeSR;
+    delete g['webkitSpeechRecognition'];
+
+    const el = document.createElement('wiki-page-app-mic-button') as WikiPageAppMicButton;
+    el.label = 'Hold to Speak';
+    el.mode = 'hold';
+
+    void el.updateComplete.then(() => {
+      const btn = el.shadowRoot?.querySelector('button');
+      btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true, pointerId: 1 }));
+      // Restore globals after the element has started recording
+      if (savedSR !== undefined) g['SpeechRecognition'] = savedSR;
+      else delete g['SpeechRecognition'];
+      if (savedWebkitSR !== undefined) g['webkitSpeechRecognition'] = savedWebkitSR;
+    });
+
+    return html`${el}`;
+  },
+};
+
+export const HoverAndPressStates: Story = {
+  name: 'Interactive: hover and press states',
+  args: {
+    label: 'Hold to Speak',
+    mode: 'hold',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: [
+          'Demonstrates the skeuomorphic **hover** and **press** states.',
+          '',
+          '- **Hover**: button lifts slightly (`translateY(-1px)`) with enhanced drop-shadow',
+          '- **Press/active**: button depresses (`translateY(2px)`) with compressed inset shadows — a tactile push-in effect',
+          '',
+          'Hover over or press the button to see these states.',
+        ].join('\n'),
+      },
+    },
+  },
+  render: (args) => html`<wiki-page-app-mic-button
+    .label=${args['label']}
+    .mode=${args['mode']}
+  ></wiki-page-app-mic-button>`,
+};
+
 export const InteractiveFiringAction: Story = {
   name: 'Interactive: wiki-page-app-action fired on recognition end',
   args: {

@@ -347,4 +347,91 @@ describe('WikiPageAppMicButton (supported browser)', () => {
    expect(rec.interimResults).to.equal(false);
   });
  });
+
+ describe('visual state', () => {
+  it('should render a mic-circle element', async () => {
+   const el = await mount();
+   expect(el.shadowRoot?.querySelector('.mic-circle')).to.not.equal(null);
+  });
+
+  describe('when idle', () => {
+   let el: WikiPageAppMicButton;
+
+   beforeEach(async () => {
+    el = await mount();
+   });
+
+   it('should have data-listening false', () => {
+    expect(button(el).getAttribute('data-listening')).to.equal('false');
+   });
+
+   it('should have aria-pressed false', () => {
+    expect(button(el).getAttribute('aria-pressed')).to.equal('false');
+   });
+  });
+
+  describe('when recording is active', () => {
+   let el: WikiPageAppMicButton;
+
+   beforeEach(async () => {
+    el = await mount();
+    press(button(el), 'pointerdown');
+    await el.updateComplete;
+   });
+
+   it('should have data-listening true', () => {
+    expect(button(el).getAttribute('data-listening')).to.equal('true');
+   });
+
+   it('should have aria-pressed true', () => {
+    expect(button(el).getAttribute('aria-pressed')).to.equal('true');
+   });
+  });
+ });
+
+ describe('aria-label per state', () => {
+  describe('when idle', () => {
+   let el: WikiPageAppMicButton;
+
+   beforeEach(async () => {
+    el = await mount({ label: 'Dictate' });
+   });
+
+   it('should have the label as aria-label', () => {
+    expect(button(el).getAttribute('aria-label')).to.equal('Dictate');
+   });
+  });
+
+  describe('when recording is active', () => {
+   let el: WikiPageAppMicButton;
+
+   beforeEach(async () => {
+    el = await mount({ label: 'Dictate' });
+    press(button(el), 'pointerdown');
+    await el.updateComplete;
+   });
+
+   it('should include the label in aria-label', () => {
+    expect(button(el).getAttribute('aria-label')).to.include('Dictate');
+   });
+  });
+
+  describe('when disabled via prop', () => {
+   let el: WikiPageAppMicButton;
+
+   beforeEach(async () => {
+    el = await fixture<WikiPageAppMicButton>(html`
+     <wiki-page-app-mic-button .label=${'Speak'} .disabled=${true}></wiki-page-app-mic-button>`);
+    await el.updateComplete;
+   });
+
+   it('should be disabled', () => {
+    expect(button(el).disabled).to.equal(true);
+   });
+
+   it('should have the label as aria-label', () => {
+    expect(button(el).getAttribute('aria-label')).to.equal('Speak');
+   });
+  });
+ });
 });
