@@ -3681,7 +3681,7 @@ describe('PageChatPanel visual viewport sizing (issue #1445)', () => {
     });
 
     it('should focus the composer', () => {
-      expect(el.shadowRoot!.activeElement === el.shadowRoot!.querySelector('textarea')).to.equal(true);
+      expect(el.shadowRoot!.activeElement).to.equal(el.shadowRoot!.querySelector('textarea'));
     });
 
     it('should land on the settled viewport height', () => {
