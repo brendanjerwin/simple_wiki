@@ -34,8 +34,8 @@ const scheduledTurnPreamble = `You are a scheduled background agent acting on wi
 const wildcardPattern = "*"
 
 // scheduledTurnClient implements the acp.Client interface for one ephemeral
-// scheduled-turn instance. It counts AgentMessageChunk callbacks and cancels
-// the prompt context when the count reaches maxTurns.
+// scheduled-turn instance. It counts distinct assistant messages (real turns)
+// and cancels the prompt context when the count reaches maxTurns.
 type scheduledTurnClient struct {
 	page         string
 	maxTurns     int32
@@ -43,8 +43,9 @@ type scheduledTurnClient struct {
 	turnCount    atomic.Int32
 	cancelPrompt context.CancelFunc
 
-	mu       sync.Mutex
-	hitLimit bool
+	mu            sync.Mutex
+	hitLimit      bool
+	lastMessageID *string // guards message-boundary detection for turn counting
 }
 
 // newScheduledTurnClient constructs a client. cancelPrompt is the function
@@ -58,12 +59,37 @@ func newScheduledTurnClient(page string, maxTurns int32, allowedTools []string, 
 	}
 }
 
-// SessionUpdate implements acp.Client. It counts agent message chunks and
-// triggers cancellation when the count reaches maxTurns.
+// SessionUpdate implements acp.Client. It counts distinct assistant messages
+// (real turns) and triggers cancellation when the count reaches maxTurns.
+//
+// Each assistant message may be streamed as many AgentMessageChunk notifications.
+// When the messageId field is present, all chunks sharing the same messageId
+// belong to one message and are counted as a single turn. When messageId is
+// absent (the field is marked unstable in the ACP spec), every chunk is counted
+// to avoid silent under-counting.
 func (c *scheduledTurnClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
-	if n.Update.AgentMessageChunk == nil {
+	chunk := n.Update.AgentMessageChunk
+	if chunk == nil {
 		return nil
 	}
+
+	// Count real turns (one per distinct assistant message), not streaming
+	// chunks. When messageId is populated, skip chunks that belong to the
+	// same message we already started counting. When messageId is absent,
+	// fall back to counting every chunk.
+	if chunk.MessageId != nil {
+		c.mu.Lock()
+		isNewMessage := c.lastMessageID == nil || *c.lastMessageID != *chunk.MessageId
+		if isNewMessage {
+			id := *chunk.MessageId
+			c.lastMessageID = &id
+		}
+		c.mu.Unlock()
+		if !isNewMessage {
+			return nil
+		}
+	}
+
 	count := c.turnCount.Add(1)
 	if c.maxTurns > 0 && count >= c.maxTurns {
 		c.mu.Lock()
