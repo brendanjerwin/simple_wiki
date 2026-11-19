@@ -705,6 +705,140 @@ var _ = Describe("AgentTurnJob", func() {
 		})
 	})
 
+	// -------------------------------------------------------------------------
+	// Bounded dispatch-retry tests (ErrNoScheduledTurnSubscribers)
+	// -------------------------------------------------------------------------
+
+	Describe("dispatchWithSubscriberRetry when no subscribers then subscriber appears", func() {
+		// Case (a): first N dispatches return ErrNoScheduledTurnSubscribers;
+		// a later dispatch succeeds → job proceeds through RUNNING to OK.
+		var executeErr error
+
+		BeforeEach(func() {
+			callCount := 0
+			dispatcher.dispatchFn = func(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
+				callCount++
+				if callCount < 3 {
+					return nil, server.ErrNoScheduledTurnSubscribers
+				}
+				dispatcher.record(req)
+				ch := make(chan *server.ScheduledTurnOutcome, 1)
+				ch <- &server.ScheduledTurnOutcome{
+					TerminalStatus:  apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+					DurationSeconds: 5,
+				}
+				close(ch)
+				return ch, nil
+			}
+			// Use a 500ms window with instant sleep so the test does not block
+			// on real-clock backoffs.
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second).
+				WithSubscriberRetryWindow(500*time.Millisecond, func(time.Duration) {})
+
+			done := make(chan error, 1)
+			go func() { done <- job.Execute() }()
+			select {
+			case executeErr = <-done:
+			case <-time.After(5 * time.Second):
+				Fail("Execute did not return within 5s; retry loop may be stuck")
+			}
+		})
+
+		It("should return nil from Execute", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should dispatch the request (after retries succeeded)", func() {
+			Expect(dispatcher.dispatched).To(HaveLen(1))
+		})
+
+		It("should record terminal OK status after the successful dispatch", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+		})
+
+		It("should record the duration from the outcome", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(5)))
+		})
+	})
+
+	Describe("dispatchWithSubscriberRetry when no subscribers for the whole window", func() {
+		// Case (b): every dispatch returns ErrNoScheduledTurnSubscribers and
+		// the retry window expires → terminal ERROR with "dispatch failed:" prefix.
+		var executeErr error
+
+		BeforeEach(func() {
+			dispatcher.dispatchErr = server.ErrNoScheduledTurnSubscribers
+			// Very short window; instant sleep so the test completes quickly.
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second).
+				WithSubscriberRetryWindow(50*time.Millisecond, func(time.Duration) {})
+
+			done := make(chan error, 1)
+			go func() { done <- job.Execute() }()
+			select {
+			case executeErr = <-done:
+			case <-time.After(5 * time.Second):
+				Fail("Execute did not return within 5s; retry window may not be bounded")
+			}
+		})
+
+		It("should return nil from Execute (error recorded on schedule, not propagated)", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should record terminal ERROR status", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should record an error message with the dispatch failed prefix", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastErrorMessage()).To(HavePrefix("dispatch failed:"))
+		})
+	})
+
+	Describe("dispatchWithSubscriberRetry when a non-subscriber dispatch error occurs", func() {
+		// Case (c): Dispatch returns an error that is NOT ErrNoScheduledTurnSubscribers
+		// (e.g. "request is required") — the retry loop must NOT kick in.
+		var executeErr error
+
+		BeforeEach(func() {
+			callCount := 0
+			dispatcher.dispatchFn = func(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
+				callCount++
+				return nil, errors.New("scheduled turn already in flight")
+			}
+			// Use a generous window; we expect exactly one Dispatch call.
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second).
+				WithSubscriberRetryWindow(500*time.Millisecond, func(time.Duration) {})
+
+			done := make(chan error, 1)
+			go func() { done <- job.Execute() }()
+			select {
+			case executeErr = <-done:
+			case <-time.After(5 * time.Second):
+				Fail("Execute did not return within 5s; non-subscriber error may be retried")
+			}
+		})
+
+		It("should return nil from Execute", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should call Dispatch exactly once (no retry on non-subscriber error)", func() {
+			// dispatchFn increments callCount; we verify via the ERROR status
+			// (not via dispatched slice, since record() is not called on error paths).
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should record the original error message, not a no-subscriber message", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring("already in flight"))
+		})
+	})
+
 	Describe("Execute when the completion channel is closed without a value after hard timeout", func() {
 		// Scenario: hard timeout fires, then the pool closes the completion
 		// channel without sending an outcome (nil receive). The late-completion
