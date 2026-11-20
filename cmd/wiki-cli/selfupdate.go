@@ -64,12 +64,16 @@ func downloadMatchingBinary(wikiURL, exePath string) (string, error) {
 		return "", fmt.Errorf("self-update: %s returned HTTP %d", downloadURL, resp.StatusCode)
 	}
 
-	tmpPath := filepath.Join(filepath.Dir(exePath), "."+binaryName+".update")
-	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	tmpFile, err := os.CreateTemp(filepath.Dir(exePath), "."+binaryName+".update-*")
 	if err != nil {
-		return "", fmt.Errorf("self-update: could not create %s: %w", tmpPath, err)
+		return "", fmt.Errorf("self-update: could not create temp file beside %s: %w", exePath, err)
 	}
-
+	tmpPath := tmpFile.Name()
+	if err := tmpFile.Chmod(0o755); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("self-update: could not make %s executable: %w", tmpPath, err)
+	}
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)

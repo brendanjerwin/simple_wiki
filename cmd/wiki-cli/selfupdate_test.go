@@ -52,6 +52,21 @@ var _ = Describe("downloadMatchingBinary", func() {
 			server.Close()
 		})
 
+		It("uses a distinct temp path per download so concurrent updaters cannot share an inode", func() {
+			// A fixed temp name let two updaters write the same inode; when one
+			// renamed it over the running executable, the other's exec failed
+			// with ETXTBSY (simple_wiki #1485).
+			first, err := downloadMatchingBinary(server.URL, exePath)
+			Expect(err).NotTo(HaveOccurred())
+			second, err := downloadMatchingBinary(server.URL, exePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(second).NotTo(Equal(first))
+			_, statErr := os.Stat(first)
+			Expect(statErr).NotTo(HaveOccurred())
+			_, statErr = os.Stat(second)
+			Expect(statErr).NotTo(HaveOccurred())
+		})
+
 		It("writes the body to a sibling temp file", func() {
 			newPath, err := downloadMatchingBinary(server.URL, exePath)
 			Expect(err).NotTo(HaveOccurred())

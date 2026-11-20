@@ -63,8 +63,8 @@ func main() {
 		if err := checkVersionCompatibility(url); err != nil {
 			// The binary is stale relative to the running server. If this is a
 			// committed build, self-update: download the matching binary, swap
-			// it in, and re-exec. Retry once; if self-update is impossible or
-			// fails, surface the mismatch error as before.
+			// it in, and re-exec. If self-update is impossible or fails,
+			// surface the mismatch error as before.
 			if attemptSelfUpdateAndReExec(url) {
 				os.Exit(0)
 			}
