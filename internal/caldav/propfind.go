@@ -415,13 +415,13 @@ type comp struct {
 // read+write — so we emit the standard read+write privilege set
 // unconditionally on collection responses.
 type privilegeSet struct {
-	Read                          *empty `xml:"privilege>read,omitempty"`
-	Write                         *empty `xml:"privilege>write,omitempty"`
-	WriteContent                  *empty `xml:"privilege>write-content,omitempty"`
-	WriteProperties               *empty `xml:"privilege>write-properties,omitempty"`
-	Bind                          *empty `xml:"privilege>bind,omitempty"`
-	Unbind                        *empty `xml:"privilege>unbind,omitempty"`
-	ReadCurrentUserPrivilegeSet   *empty `xml:"privilege>read-current-user-privilege-set,omitempty"`
+	Read                        *empty `xml:"privilege>read,omitempty"`
+	Write                       *empty `xml:"privilege>write,omitempty"`
+	WriteContent                *empty `xml:"privilege>write-content,omitempty"`
+	WriteProperties             *empty `xml:"privilege>write-properties,omitempty"`
+	Bind                        *empty `xml:"privilege>bind,omitempty"`
+	Unbind                      *empty `xml:"privilege>unbind,omitempty"`
+	ReadCurrentUserPrivilegeSet *empty `xml:"privilege>read-current-user-privilege-set,omitempty"`
 }
 
 // fullPrivilegeSet is the canonical "this principal can do everything
@@ -438,4 +438,3 @@ func fullPrivilegeSet() *privilegeSet {
 		ReadCurrentUserPrivilegeSet: &empty{},
 	}
 }
-

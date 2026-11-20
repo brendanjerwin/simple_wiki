@@ -76,13 +76,13 @@ type parityTasksClient struct {
 	mu sync.Mutex
 
 	// Programmable behavior.
-	listTasks         []tasksgw.Task
-	listTasksErr      error
-	insertErr         error
-	patchErr          error
-	deleteErr         error
-	listTaskListsErr  error
-	taskLists         []tasksgw.TaskList
+	listTasks        []tasksgw.Task
+	listTasksErr     error
+	insertErr        error
+	patchErr         error
+	deleteErr        error
+	listTaskListsErr error
+	taskLists        []tasksgw.TaskList
 
 	// patchEtagGate, when non-empty, makes PatchTask return
 	// patchEtagGateErr unless the inbound etag matches. Used to model
@@ -92,10 +92,10 @@ type parityTasksClient struct {
 	patchEtagGateErr error
 
 	// Recorded calls.
-	listTasksCalls    int
-	insertCalls       []parityTasksInsertCall
-	patchCalls        []parityTasksPatchCall
-	deleteCalls       []parityTasksDeleteCall
+	listTasksCalls int
+	insertCalls    []parityTasksInsertCall
+	patchCalls     []parityTasksPatchCall
+	deleteCalls    []parityTasksDeleteCall
 
 	nextInsertID int
 }
@@ -284,15 +284,15 @@ type parityContext struct {
 	kind         connectors.ConnectorKind
 
 	// Engine wiring.
-	store    *enginetesting.FakeBindingStore
-	lease    *connectors.LeaseTable
-	clock    *enginetesting.FakeClock
-	reader   *recordingChecklistReader
-	tracker  *orderTracker
-	mutator  *trackingChecklistMutator
-	supr     *recordingSuppressor
-	logger   *captureLogger
-	engine   *engine.Engine
+	store   *enginetesting.FakeBindingStore
+	lease   *connectors.LeaseTable
+	clock   *enginetesting.FakeClock
+	reader  *recordingChecklistReader
+	tracker *orderTracker
+	mutator *trackingChecklistMutator
+	supr    *recordingSuppressor
+	logger  *captureLogger
+	engine  *engine.Engine
 
 	// Backend-specific gateway fakes (only one is non-nil per context).
 	tasksClient *parityTasksClient
@@ -434,10 +434,10 @@ func newKeepParityContext() *parityContext {
 				}
 			}
 			return connectors.AdapterState{
-				"item_id_map":                            engineIDMap,
-				googlekeep.AdapterStateKeyItemMapping:    adapterMapping,
-				googlekeep.AdapterStateKeyKeepCursor:     "v100",
-				googlekeep.AdapterStateKeyLabelIDs:       map[string]any{},
+				"item_id_map":                              engineIDMap,
+				googlekeep.AdapterStateKeyItemMapping:      adapterMapping,
+				googlekeep.AdapterStateKeyKeepCursor:       "v100",
+				googlekeep.AdapterStateKeyLabelIDs:         map[string]any{},
 				googlekeep.AdapterStateKeyKeepNoteClientID: "client-list-parity-1",
 			}
 		},
@@ -1152,8 +1152,8 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				// Seed the binding with a stored etag for this task so the
 				// adapter can detect RemoteDiverged when a new etag arrives.
 				adapterState := connectors.AdapterState{
-					googletasks.AdapterStateKeyItemIDMap: map[string]string{knownUID: ref},
-					googletasks.AdapterStateKeyItemEtags: map[string]any{ref: "old-etag"},
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "old-etag"},
 					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
 				}
 				// Wiki diverged: user edited since last sync (seq 11 > LastSyncedSeq 10).

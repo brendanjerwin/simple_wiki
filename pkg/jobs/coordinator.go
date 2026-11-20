@@ -72,7 +72,6 @@ func NewJobQueueCoordinatorWithFactory(logger logging.Logger, factory Dispatcher
 	}
 }
 
-
 // RegisterQueue pre-registers a named queue with explicit worker and capacity
 // settings. This is used when the default 1-worker / 10-slot auto-registration
 // is not appropriate (e.g., a queue that needs concurrent workers, or a backlog
@@ -232,7 +231,7 @@ func (c *JobQueueCoordinator) GetJobProgress() JobProgress {
 			IsActive:      stats.IsActive,
 		}
 		allQueues = append(allQueues, queueCopy)
-		
+
 		if stats.IsActive {
 			activeQueues++
 		}

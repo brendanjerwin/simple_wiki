@@ -58,14 +58,14 @@ var ErrNotYetImplemented = errors.New("connectors/engine: not yet implemented (P
 // safe for concurrent use across the scheduler tick, mutator-driven
 // debouncer fires, and gRPC handler calls.
 type Engine struct {
-	adapter   connectors.BackendAdapter
-	lease     *connectors.LeaseTable
-	checklist ChecklistReader
-	mutator   ChecklistMutator
+	adapter    connectors.BackendAdapter
+	lease      *connectors.LeaseTable
+	checklist  ChecklistReader
+	mutator    ChecklistMutator
 	suppressor SyncSuppressor
-	logger    Logger
-	clock     Clocker
-	store     BindingStore
+	logger     Logger
+	clock      Clocker
+	store      BindingStore
 
 	// adaptiveTicker, when set, drives activity-driven follow-up syncs
 	// after each successful Sync. Optional: nil in tests by default; the
@@ -116,14 +116,14 @@ func NewEngine( // NOSONAR go:S107
 		return nil, errors.New("connectors/engine: bindingStore must not be nil")
 	}
 	return &Engine{
-		adapter:   adapter,
-		lease:     lease,
-		checklist: checklist,
-		mutator:   mutator,
+		adapter:    adapter,
+		lease:      lease,
+		checklist:  checklist,
+		mutator:    mutator,
 		suppressor: suppressor,
-		logger:    logger,
-		clock:     clock,
-		store:     store,
+		logger:     logger,
+		clock:      clock,
+		store:      store,
 	}, nil
 }
 

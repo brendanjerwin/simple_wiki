@@ -100,21 +100,21 @@ func (j *JSONArchiveMigrationJob) Execute() error {
 	// Find available filename with incrementing number if needed
 	destPath := filepath.Join(deletedDir, j.jsonFilename)
 	counter := 0
-	
+
 	// Keep incrementing until we find an available filename
 	for {
 		if _, err := os.Stat(destPath); os.IsNotExist(err) {
 			// File doesn't exist, we can use this path
 			break
 		}
-		
+
 		// File exists, try with incremented counter
 		counter++
-		
+
 		// Extract base name and extension
 		ext := filepath.Ext(j.jsonFilename)
 		baseName := strings.TrimSuffix(j.jsonFilename, ext)
-		
+
 		// Create new filename with counter
 		newFilename := fmt.Sprintf("%s_%d%s", baseName, counter, ext)
 		destPath = filepath.Join(deletedDir, newFilename)

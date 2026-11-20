@@ -28,10 +28,10 @@ var _ = Describe("InventoryManagementService", func() {
 
 	Describe("CreateInventoryItem", func() {
 		var (
-			req                      *apiv1.CreateInventoryItemRequest
-			resp                     *apiv1.CreateInventoryItemResponse
-			err                      error
-			mockPageReaderMutator    *MockPageReaderMutator
+			req                         *apiv1.CreateInventoryItemRequest
+			resp                        *apiv1.CreateInventoryItemResponse
+			err                         error
+			mockPageReaderMutator       *MockPageReaderMutator
 			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
 		)
 
@@ -251,10 +251,10 @@ var _ = Describe("InventoryManagementService", func() {
 
 	Describe("MoveInventoryItem", func() {
 		var (
-			req                      *apiv1.MoveInventoryItemRequest
-			resp                     *apiv1.MoveInventoryItemResponse
-			err                      error
-			mockPageReaderMutator    *MockPageReaderMutator
+			req                   *apiv1.MoveInventoryItemRequest
+			resp                  *apiv1.MoveInventoryItemResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
 		)
 
 		BeforeEach(func() {
@@ -379,7 +379,7 @@ var _ = Describe("InventoryManagementService", func() {
 			BeforeEach(func() {
 				req.NewContainer = ""
 				mockPageReaderMutator.Frontmatter = map[string]any{
-					"title": "Test Item",
+					"title":     "Test Item",
 					"inventory": map[string]any{},
 				}
 			})
@@ -475,7 +475,7 @@ var _ = Describe("InventoryManagementService", func() {
 		When("moving root-level item into container", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Frontmatter = map[string]any{
-					"title": "Test Item",
+					"title":     "Test Item",
 					"inventory": map[string]any{},
 				}
 			})
@@ -552,7 +552,7 @@ var _ = Describe("InventoryManagementService", func() {
 						},
 					},
 					"new_container": {
-						"title": "New Container",
+						"title":     "New Container",
 						"inventory": map[string]any{}, // No items list
 					},
 				}
@@ -663,7 +663,7 @@ var _ = Describe("InventoryManagementService", func() {
 						},
 					},
 					"new_container": {
-						"title": "New Container",
+						"title":     "New Container",
 						"inventory": map[string]any{},
 					},
 				}

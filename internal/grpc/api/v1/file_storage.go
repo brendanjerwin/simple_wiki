@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"os"
 
-	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/filestore"
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

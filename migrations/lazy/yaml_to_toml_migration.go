@@ -52,7 +52,7 @@ func (*YAMLToTOMLMigration) Apply(content []byte) ([]byte, error) {
 		return content, nil
 	}
 
-	// Parse YAML frontmatter 
+	// Parse YAML frontmatter
 	var yamlData any
 	if err := yaml.Unmarshal([]byte(parts.frontmatter), &yamlData); err != nil {
 		return content, fmt.Errorf("failed to parse YAML frontmatter: %w", err)
@@ -84,7 +84,7 @@ type yamlParts struct {
 
 func extractYAMLFrontmatter(content []byte) (*yamlParts, error) {
 	str := string(content)
-	
+
 	if !strings.HasPrefix(str, yamlDelimiter) {
 		return nil, errors.New("content does not start with YAML delimiter")
 	}
@@ -94,20 +94,20 @@ func extractYAMLFrontmatter(content []byte) (*yamlParts, error) {
 	if !strings.HasPrefix(rest, "\n") {
 		return nil, errors.New("YAML delimiter not followed by newline")
 	}
-	
+
 	rest = rest[1:] // Skip the newline after opening delimiter
-	
+
 	closingIndex := strings.Index(rest, "\n"+yamlDelimiter)
 	if closingIndex == -1 {
 		return nil, errors.New("closing YAML delimiter not found")
 	}
 
 	frontmatter := rest[:closingIndex]
-	
+
 	// Find the body content after the closing delimiter
 	// remainingContent starts with "\n---\n" or "\n---"
 	remainingContent := rest[closingIndex:]
-	
+
 	// Look for content after the closing delimiter
 	// We expect format like: "\n---\n<body content>"
 	if strings.HasPrefix(remainingContent, "\n---\n") {
@@ -124,7 +124,7 @@ func extractYAMLFrontmatter(content []byte) (*yamlParts, error) {
 			body:        "",
 		}, nil
 	}
-	
+
 	// Fallback for other cases
 	return &yamlParts{
 		frontmatter: frontmatter,

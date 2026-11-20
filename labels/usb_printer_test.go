@@ -33,7 +33,7 @@ var _ = Describe("USBPrinter", func() {
 
 				// This will likely fail because no USB device is connected
 				_, err := labels.GetUSBPrinter(config)
-				
+
 				// This test validates vendor ID parameter handling specifically.
 				// The assertion verifies that if an error occurs, it's NOT due to missing vendor ID.
 				// In hardware-dependent tests, both nil (device found) and other errors (device issues)

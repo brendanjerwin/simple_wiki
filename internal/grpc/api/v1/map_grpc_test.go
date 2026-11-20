@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/filestore"
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server/mapmutator"
@@ -647,14 +647,14 @@ var _ = Describe("MapService handlers - track management", func() {
 
 	Describe("track operations", func() {
 		var (
-			trackResp     *apiv1.AddTrackResponse
-			updateResp    *apiv1.UpdateTrackResponse
-			getGeomResp   *apiv1.GetTrackGeometryResponse
+			trackResp      *apiv1.AddTrackResponse
+			updateResp     *apiv1.UpdateTrackResponse
+			getGeomResp    *apiv1.GetTrackGeometryResponse
 			getElementResp *apiv1.GetElementResponse
-			listMapsResp  *apiv1.ListMapsResponse
-			deleteResp    *apiv1.DeleteTrackResponse
-			trackUID      string
-			fileStorer    *mapMockFileStorer
+			listMapsResp   *apiv1.ListMapsResponse
+			deleteResp     *apiv1.DeleteTrackResponse
+			trackUID       string
+			fileStorer     *mapMockFileStorer
 		)
 
 		BeforeEach(func() {
@@ -1057,4 +1057,3 @@ var _ = Describe("MapService handlers - track management", func() {
 		})
 	})
 })
-

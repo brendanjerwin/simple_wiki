@@ -27,7 +27,6 @@ var _ = Describe("JobQueueCoordinator", func() {
 		Expect(coordinator).NotTo(BeNil())
 	})
 
-
 	Describe("when enqueueing a job", func() {
 		var blockingJob *jobs.BlockingMockJob
 		var enqueueErr error

@@ -33,8 +33,8 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 	"github.com/google/uuid"
 
-	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"connectrpc.com/connect"
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 )
 
 // ─── pool-side config ───────────────────────────────────────────────────────
@@ -127,16 +127,16 @@ const (
 
 // SSE field key constants.
 const (
-	sseKeyMessageID   = "messageId"
-	sseKeyToolCallID  = "toolCallId"
+	sseKeyMessageID    = "messageId"
+	sseKeyToolCallID   = "toolCallId"
 	sseKeyToolCallName = "toolCallName"
-	sseKeyDelta       = "delta"
-	sseKeyRole        = "role"
-	sseKeyStatus      = "status"
-	sseKeyType        = "type"
-	sseKeyMessage     = "message"
-	sseKeyCode        = "code"
-	sseKeyInterrupts  = "interrupts"
+	sseKeyDelta        = "delta"
+	sseKeyRole         = "role"
+	sseKeyStatus       = "status"
+	sseKeyType         = "type"
+	sseKeyMessage      = "message"
+	sseKeyCode         = "code"
+	sseKeyInterrupts   = "interrupts"
 )
 
 // agUIRunInput is the request body for starting a run.

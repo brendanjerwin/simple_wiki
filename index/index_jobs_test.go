@@ -14,10 +14,10 @@ import (
 
 // MockIndexOperator is a test implementation of index.IndexOperator.
 type MockIndexOperator struct {
-	AddPageToIndexFunc    func(identifier wikipage.PageIdentifier) error
+	AddPageToIndexFunc      func(identifier wikipage.PageIdentifier) error
 	RemovePageFromIndexFunc func(identifier wikipage.PageIdentifier) error
-	addCalled             []wikipage.PageIdentifier
-	removeCalled          []wikipage.PageIdentifier
+	addCalled               []wikipage.PageIdentifier
+	removeCalled            []wikipage.PageIdentifier
 }
 
 func (m *MockIndexOperator) AddPageToIndex(identifier wikipage.PageIdentifier) error {

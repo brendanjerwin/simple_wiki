@@ -325,9 +325,9 @@ const validSyncTokenErrorBody = xmlDecl +
 //     collection URL (`/<page>/<list>/`). Anything else is 404.
 //  3. Call CalendarBackend.SyncCollection, mapping its sentinel
 //     errors:
-//       - ErrCollectionNotFound -> 404
-//       - ErrInvalidSyncToken   -> 403 + DAV:valid-sync-token body
-//       - other                 -> 500
+//     - ErrCollectionNotFound -> 404
+//     - ErrInvalidSyncToken   -> 403 + DAV:valid-sync-token body
+//     - other                 -> 500
 //  4. On success, emit one multistatus response per changed item plus
 //     one 404-response per deleted uid, and append the new sync-token
 //     element after the responses.

@@ -277,11 +277,11 @@ const statusForbidden = "HTTP/1.1 403 Forbidden"
 // flagging the calendar as read-only without forcing the wiki to
 // store anything.
 var acceptedCosmeticProps = map[string]struct{}{
-	"displayname":           {},
-	"calendar-color":        {},
-	"calendar-order":        {},
-	"calendar-timezone":     {},
-	"calendar-description":  {},
+	"displayname":            {},
+	"calendar-color":         {},
+	"calendar-order":         {},
+	"calendar-timezone":      {},
+	"calendar-description":   {},
 	"calendar-free-busy-set": {},
 }
 
@@ -294,4 +294,3 @@ func isAcceptedCosmeticProp(p proppatchProp) bool {
 	_, ok := acceptedCosmeticProps[strings.ToLower(p.XMLName.Local)]
 	return ok
 }
-

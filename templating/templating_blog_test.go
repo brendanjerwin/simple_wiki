@@ -155,8 +155,8 @@ var _ = Describe("BuildBlog", func() {
 				"my_blog": {"post_xss"},
 			}
 			mockIndex.values["post_xss"] = map[string]string{
-				"title":               "XSS Post",
-				"blog.external_url":   "javascript:alert(1)",
+				"title":             "XSS Post",
+				"blog.external_url": "javascript:alert(1)",
 			}
 
 			result = blogFunc("my_blog", 10)
@@ -221,8 +221,8 @@ var _ = Describe("BuildBlog", func() {
 				"my_blog": {"post_sub"},
 			}
 			mockIndex.values["post_sub"] = map[string]string{
-				"title":          "Post With Subtitle",
-				"blog.subtitle":  "A helpful subtitle",
+				"title":         "Post With Subtitle",
+				"blog.subtitle": "A helpful subtitle",
 			}
 
 			result = blogFunc("my_blog", 10)
@@ -243,8 +243,8 @@ var _ = Describe("BuildBlog", func() {
 				"my_blog": {"post_dated"},
 			}
 			mockIndex.values["post_dated"] = map[string]string{
-				"title":                "Dated Post",
-				"blog.published-date":  "2024-01-15",
+				"title":               "Dated Post",
+				"blog.published-date": "2024-01-15",
 			}
 
 			result = blogFunc("my_blog", 10)

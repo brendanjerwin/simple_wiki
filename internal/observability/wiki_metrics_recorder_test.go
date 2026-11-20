@@ -968,8 +968,8 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				modifyErr := &testError{msg: "atomic modify failed"}
 				mock := &atomicPageModifier{
 					mockPageReaderWriter: newMockPageReaderWriter(),
-					failModify:          true,
-					failErr:             modifyErr,
+					failModify:           true,
+					failErr:              modifyErr,
 				}
 				logger = &mockLogger{}
 				recorder := createRecorderWithAtomicModifier(mock, logger)

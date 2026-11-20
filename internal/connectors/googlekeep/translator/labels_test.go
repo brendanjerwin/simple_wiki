@@ -198,8 +198,8 @@ var _ = Describe("MergeKeepLabels", func() {
 
 		BeforeEach(func() {
 			persisted := map[string]string{
-				"household": "",          // empty MainID — should not be used
-				"urgent":    "good-mid",  // good
+				"household": "",         // empty MainID — should not be used
+				"urgent":    "good-mid", // good
 			}
 			labelPush, listLabelIDs, err = translator.MergeKeepLabels(
 				[]string{"household", "urgent"}, persisted, nil, now)

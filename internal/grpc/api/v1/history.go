@@ -36,18 +36,18 @@ type PageVersionMetadata struct {
 
 // HistorySearchFilter holds the filter parameters for a global history search.
 type HistorySearchFilter struct {
-	Query          string
-	PageFilter string
-	AuthorFilter   string
-	From           time.Time
-	To             time.Time
+	Query        string
+	PageFilter   string
+	AuthorFilter string
+	From         time.Time
+	To           time.Time
 }
 
 // HistorySearchResult is a single result from a history search.
 type HistorySearchResult struct {
-	Page string
-	Version  PageVersionMetadata
-	Snippet  string
+	Page    string
+	Version PageVersionMetadata
+	Snippet string
 }
 
 // HistorySearcher is the contract for searching page history.
@@ -57,7 +57,7 @@ type HistorySearcher interface {
 }
 
 const (
-	errHistoryPageRequired       = "page is required"
+	errHistoryPageRequired        = "page is required"
 	errHistoryReaderNotConfigured = "history reader not configured"
 )
 
@@ -191,9 +191,9 @@ func (s *Server) SearchHistory(_ context.Context, req *apiv1.SearchHistoryReques
 	}
 
 	filter := HistorySearchFilter{
-		Query:          req.GetQuery(),
-		PageFilter: req.GetPageFilter(),
-		AuthorFilter:   req.GetAuthorFilter(),
+		Query:        req.GetQuery(),
+		PageFilter:   req.GetPageFilter(),
+		AuthorFilter: req.GetAuthorFilter(),
 	}
 
 	if req.From != nil {
@@ -232,9 +232,9 @@ func convertVersionMetadata(v PageVersionMetadata) *apiv1.PageVersion {
 // convertHistorySearchResult converts the internal HistorySearchResult to the proto type.
 func convertHistorySearchResult(r HistorySearchResult) *apiv1.HistorySearchResult {
 	return &apiv1.HistorySearchResult{
-		Page: r.Page,
-		Version:  convertVersionMetadata(r.Version),
-		Snippet:  r.Snippet,
+		Page:    r.Page,
+		Version: convertVersionMetadata(r.Version),
+		Snippet: r.Snippet,
 	}
 }
 

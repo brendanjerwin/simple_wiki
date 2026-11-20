@@ -96,12 +96,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // drift between metric and span attributes would silently break the
 // OTLP-side dashboards.
 const (
-	methodLabelOptions  = "options"
-	methodLabelPropfind = "propfind"
-	methodLabelReport   = "report"
-	methodLabelGet      = "get"
-	methodLabelPut      = "put"
-	methodLabelDelete   = "delete"
+	methodLabelOptions   = "options"
+	methodLabelPropfind  = "propfind"
+	methodLabelReport    = "report"
+	methodLabelGet       = "get"
+	methodLabelPut       = "put"
+	methodLabelDelete    = "delete"
 	methodLabelProppatch = "proppatch"
 )
 
@@ -238,7 +238,6 @@ func validateUID(uid string) error {
 	}
 	return nil
 }
-
 
 // icsSuffix is the file extension on item resource URLs.
 const icsSuffix = ".ics"
@@ -492,14 +491,19 @@ func parseItemPath(w http.ResponseWriter, r *http.Request) (page, list, uid stri
 // servePUT handles PUT against /<page>/<list>/<uid>.ics. The flow is:
 //
 //  1. requireIdentity — anonymous callers get 403.
+//
 //  2. parsePath — the URL must name an item resource (page, list,
 //     uid all populated); anything else is 400 Bad Request.
+//
 //  3. Validate Content-Type starts with text/calendar; mismatched
 //     types get 415 Unsupported Media Type.
+//
 //  4. Read the body through an io.LimitReader capped at
 //     maxPUTBodyBytes. If the read produces more bytes than the cap
 //     allows, return 413 Payload Too Large.
+//
 //  5. Extract If-Match / If-None-Match preconditions for the backend.
+//
 //  6. Call CalendarBackend.PutItem and map its result:
 //
 //     created=true  -> 201 Created  + ETag header
@@ -558,8 +562,11 @@ func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
 // flow mirrors servePUT but is much simpler:
 //
 //  1. requireIdentity — 403 on anonymous.
+//
 //  2. parsePath — non-item URLs return 400.
+//
 //  3. Read If-Match for precondition enforcement.
+//
 //  4. CalendarBackend.DeleteItem. Map its error:
 //
 //     nil                     -> 204 No Content

@@ -10,11 +10,11 @@ import "time"
 type NodeType string
 
 const (
-	NodeTypeNote        NodeType = "NOTE"
-	NodeTypeList        NodeType = "LIST"
-	NodeTypeListItem    NodeType = "LIST_ITEM"
-	NodeTypeBlob        NodeType = "BLOB"
-	UnknownNodeType     NodeType = ""
+	NodeTypeNote     NodeType = "NOTE"
+	NodeTypeList     NodeType = "LIST"
+	NodeTypeListItem NodeType = "LIST_ITEM"
+	NodeTypeBlob     NodeType = "BLOB"
+	UnknownNodeType  NodeType = ""
 )
 
 // Timestamps mirrors Keep's timestamps subobject. RFC3339-ish strings on
@@ -34,10 +34,10 @@ type Timestamps struct {
 // field on the wire. Future Keep node types decode into this same struct
 // with NodeType == UnknownNodeType and the extra fields absent.
 type Node struct {
-	Kind        string
-	ID          string
-	ServerID    string
-	ParentID    string
+	Kind     string
+	ID       string
+	ServerID string
+	ParentID string
 	// ParentServerID is required on a LIST_ITEM push when the parent
 	// LIST already exists server-side. Without it Keep returns a 500
 	// "Unknown Error" — the server uses parent_server_id to confirm

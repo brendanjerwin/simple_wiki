@@ -235,40 +235,58 @@ func runTrashOne(ctx context.Context, keep *gateway.KeepClient, listServerID, ma
 		SessionID:       fmt.Sprintf("s--%d--trash-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
-	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull:", err)
+		os.Exit(1)
+	}
 	var target gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != gateway.NodeTypeListItem { continue }
-		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
-		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
-		if match != "" && !strings.Contains(n.Text, match) { continue }
-		target = n; break
+		if n.Type != gateway.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
+		if match != "" && !strings.Contains(n.Text, match) {
+			continue
+		}
+		target = n
+		break
 	}
-	if target.ServerID == "" { fmt.Fprintln(os.Stderr, "no alive item match"); os.Exit(1) }
+	if target.ServerID == "" {
+		fmt.Fprintln(os.Stderr, "no alive item match")
+		os.Exit(1)
+	}
 	now := time.Now().UTC()
 	keep.SetDebugLogger(stderrDebug{})
 	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
 		Nodes: []gateway.Node{{
-			Kind: "notes#node",
-			ID: target.ID,
-			ServerID: target.ServerID,
-			ParentID: listServerID,
+			Kind:           "notes#node",
+			ID:             target.ID,
+			ServerID:       target.ServerID,
+			ParentID:       listServerID,
 			ParentServerID: listServerID,
-			Type: gateway.NodeTypeListItem,
-			Text: target.Text,         // include
-			Checked: target.Checked,   // include
-			SortValue: target.SortValue, // include
-			BaseVersion: target.BaseVersion,
+			Type:           gateway.NodeTypeListItem,
+			Text:           target.Text,      // include
+			Checked:        target.Checked,   // include
+			SortValue:      target.SortValue, // include
+			BaseVersion:    target.BaseVersion,
 			Timestamps: gateway.Timestamps{
 				Updated: now,
-				Deleted: now,  // try Deleted instead of Trashed
+				Deleted: now, // try Deleted instead of Trashed
 			},
 		}},
-		TargetVersion: pull.ToVersion,
-		SessionID: fmt.Sprintf("s--%d--trash-push", now.UnixMilli()),
+		TargetVersion:   pull.ToVersion,
+		SessionID:       fmt.Sprintf("s--%d--trash-push", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
-	if err != nil { fmt.Fprintln(os.Stderr, "trash push:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "trash push:", err)
+		os.Exit(1)
+	}
 	fmt.Printf("✓ trash succeeded; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
 }
 
@@ -280,16 +298,30 @@ func runUpdateAndTrash(ctx context.Context, keep *gateway.KeepClient, listServer
 		SessionID:       fmt.Sprintf("s--%d--mix-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
-	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull:", err)
+		os.Exit(1)
+	}
 	var alive []gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != gateway.NodeTypeListItem { continue }
-		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
-		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
+		if n.Type != gateway.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
 		alive = append(alive, n)
-		if len(alive) >= 2 { break }
+		if len(alive) >= 2 {
+			break
+		}
 	}
-	if len(alive) < 2 { fmt.Fprintln(os.Stderr, "need >= 2 alive items"); os.Exit(1) }
+	if len(alive) < 2 {
+		fmt.Fprintln(os.Stderr, "need >= 2 alive items")
+		os.Exit(1)
+	}
 	now := time.Now().UTC()
 	keep.SetDebugLogger(stderrDebug{})
 	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
@@ -300,21 +332,24 @@ func runUpdateAndTrash(ctx context.Context, keep *gateway.KeepClient, listServer
 				Type: gateway.NodeTypeListItem, Text: alive[0].Text + " edit",
 				Checked: alive[0].Checked, SortValue: alive[0].SortValue,
 				BaseVersion: alive[0].BaseVersion,
-				Timestamps: gateway.Timestamps{Updated: now},
+				Timestamps:  gateway.Timestamps{Updated: now},
 			},
 			{ // delete (using Deleted, not Trashed)
 				Kind: "notes#node", ID: alive[1].ID, ServerID: alive[1].ServerID,
 				ParentID: listServerID, ParentServerID: listServerID,
-				Type: gateway.NodeTypeListItem,
+				Type:        gateway.NodeTypeListItem,
 				BaseVersion: alive[1].BaseVersion,
-				Timestamps: gateway.Timestamps{Updated: now, Deleted: now},
+				Timestamps:  gateway.Timestamps{Updated: now, Deleted: now},
 			},
 		},
-		TargetVersion: pull.ToVersion,
-		SessionID: fmt.Sprintf("s--%d--mix-push", now.UnixMilli()),
+		TargetVersion:   pull.ToVersion,
+		SessionID:       fmt.Sprintf("s--%d--mix-push", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
-	if err != nil { fmt.Fprintln(os.Stderr, "mixed push:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "mixed push:", err)
+		os.Exit(1)
+	}
 	fmt.Printf("✓ mixed push succeeded; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
 }
 
@@ -324,15 +359,27 @@ func runDeleteMany(ctx context.Context, keep *gateway.KeepClient, listServerID s
 		SessionID:       fmt.Sprintf("s--%d--del-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
-	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull:", err)
+		os.Exit(1)
+	}
 	var alive []gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != gateway.NodeTypeListItem { continue }
-		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
-		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
+		if n.Type != gateway.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
 		alive = append(alive, n)
 	}
-	if len(alive) == 0 { fmt.Fprintln(os.Stderr, "no alive items"); os.Exit(1) }
+	if len(alive) == 0 {
+		fmt.Fprintln(os.Stderr, "no alive items")
+		os.Exit(1)
+	}
 	fmt.Printf("deleting %d items\n", len(alive))
 	now := time.Now().UTC()
 	pushNodes := make([]gateway.Node, 0, len(alive))
@@ -340,18 +387,21 @@ func runDeleteMany(ctx context.Context, keep *gateway.KeepClient, listServerID s
 		pushNodes = append(pushNodes, gateway.Node{
 			Kind: "notes#node", ID: t.ID, ServerID: t.ServerID,
 			ParentID: listServerID, ParentServerID: listServerID,
-			Type: gateway.NodeTypeListItem,
+			Type:        gateway.NodeTypeListItem,
 			BaseVersion: t.BaseVersion,
-			Timestamps: gateway.Timestamps{Updated: now, Deleted: now},
+			Timestamps:  gateway.Timestamps{Updated: now, Deleted: now},
 		})
 	}
 	keep.SetDebugLogger(stderrDebug{})
 	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
 		Nodes: pushNodes, TargetVersion: pull.ToVersion,
-		SessionID: fmt.Sprintf("s--%d--del-push", now.UnixMilli()),
+		SessionID:       fmt.Sprintf("s--%d--del-push", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
-	if err != nil { fmt.Fprintln(os.Stderr, "delete-many:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "delete-many:", err)
+		os.Exit(1)
+	}
 	fmt.Printf("✓ ok; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
 }
 
@@ -1272,11 +1322,11 @@ func runVerifyListPushShapeProdReplay(ctx context.Context, email, masterToken, d
 	}
 
 	type result struct {
-		name      string
-		status    int
-		hasError  bool
-		body      string
-		bodySent  []byte
+		name     string
+		status   int
+		hasError bool
+		body     string
+		bodySent []byte
 	}
 	results := make([]result, 0, 3)
 
@@ -1599,9 +1649,9 @@ type diagTestResult struct {
 // account.
 func runDiagnoseGroceryListPush(ctx context.Context, email, masterToken, deviceID string) {
 	const (
-		groceryServerID    = "1jUAdi75xdeDenDIftIEY19O1FVmE78Pwigj7jSXNU2PIcrYZzYTDqYciB_rNle7OVrNU"
-		groceryClientID    = "19dd617db86.bec795fb133adf7b"
-		householdLabelID   = "19dcbc78892.97722f273a1555c5"
+		groceryServerID  = "1jUAdi75xdeDenDIftIEY19O1FVmE78Pwigj7jSXNU2PIcrYZzYTDqYciB_rNle7OVrNU"
+		groceryClientID  = "19dd617db86.bec795fb133adf7b"
+		householdLabelID = "19dcbc78892.97722f273a1555c5"
 	)
 
 	fmt.Fprintf(os.Stderr, "=== diagnose-grocery-list-push grocery=%s ===\n", groceryServerID)

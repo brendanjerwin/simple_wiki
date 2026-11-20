@@ -258,9 +258,9 @@ var _ = Describe("Engine.Bind", func() {
 
 	When("the checklist is already bound by another owner", func() {
 		var (
-			bindErr        error
-			checklistKey   connectors.ChecklistKey
-			existingOwner  connectors.LeaseOwner
+			bindErr       error
+			checklistKey  connectors.ChecklistKey
+			existingOwner connectors.LeaseOwner
 		)
 
 		BeforeEach(func() {

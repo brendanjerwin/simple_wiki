@@ -224,7 +224,7 @@ var _ = Describe("MungeIdentifier", func() {
 				munged, err = MungeIdentifier(original)
 				Expect(err).NotTo(HaveOccurred())
 				encoded = base32tools.EncodeToBase32(munged)
-				
+
 				// Log the full pipeline for debugging
 				GinkgoWriter.Printf("Original: %s\n", original)
 				GinkgoWriter.Printf("Munged: %s\n", munged)
@@ -253,7 +253,7 @@ var _ = Describe("MungeIdentifier", func() {
 					"NRQWEX3XMFWGYX3CNFXHG===",
 					"NRQWEX3TNVQWY3C7OBQXE5DT",
 				}
-				
+
 				decodedFiles = make(map[string]string)
 				for _, filename := range existingFiles {
 					// Remove the .json/.md extension if present
@@ -261,7 +261,7 @@ var _ = Describe("MungeIdentifier", func() {
 					decoded, err := base32tools.DecodeFromBase32(base32Part)
 					Expect(err).NotTo(HaveOccurred())
 					decodedFiles[base32Part] = decoded
-					
+
 					GinkgoWriter.Printf("Base32: %s -> Decoded: '%s'\n", base32Part, decoded)
 				}
 			})

@@ -16,7 +16,6 @@
 // serialization). The TasksAdapter holds no mutable state beyond the
 // injected collaborators; it is safe for concurrent use across
 // scheduler ticks, debouncer fires, and gRPC handler calls.
-//
 package googletasks
 
 import (

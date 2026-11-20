@@ -4,9 +4,9 @@ type FrontmatterType int
 
 const (
 	FrontmatterUnknown FrontmatterType = iota
-	FrontmatterYAML    // ---
-	FrontmatterTOML    // +++
-	FrontmatterJSON    // { }
+	FrontmatterYAML                    // ---
+	FrontmatterTOML                    // +++
+	FrontmatterJSON                    // { }
 )
 
 type FrontmatterMigration interface {

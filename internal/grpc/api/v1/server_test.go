@@ -7614,12 +7614,12 @@ var _ = Describe("Server", func() {
 var _ = Describe("page-app prose guard with edit-path RPCs (issue #1443)", func() {
 	const (
 		// Identical to the program used throughout page_app_test.go.
-		smallPageAppFence      = "```wiki-page-app\n" + pageAppCounterProgram + "```"
-		changedPageAppFence    = "```wiki-page-app\nroot = Card(\"changed\")\n```"
-		proseLine              = "This is a meaningful content paragraph with enough text to simulate real prose.\n"
-		largeProseRepetitions  = 115 // ~9.2 KB of prose — well above the 1 KB floor
-		smallProseRepetitions  = 92  // ~7.4 KB — ~20% drop, above the 10% guard threshold
-		removedRepetitions     = 23  // removed by WritePageSection to reach ~80% of original
+		smallPageAppFence     = "```wiki-page-app\n" + pageAppCounterProgram + "```"
+		changedPageAppFence   = "```wiki-page-app\nroot = Card(\"changed\")\n```"
+		proseLine             = "This is a meaningful content paragraph with enough text to simulate real prose.\n"
+		largeProseRepetitions = 115 // ~9.2 KB of prose — well above the 1 KB floor
+		smallProseRepetitions = 92  // ~7.4 KB — ~20% drop, above the 10% guard threshold
+		removedRepetitions    = 23  // removed by WritePageSection to reach ~80% of original
 	)
 
 	var (

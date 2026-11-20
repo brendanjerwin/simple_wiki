@@ -23,9 +23,9 @@ type fakeScheduledTurnDispatcher struct {
 	unsubscribeFunc func()
 	unsubscribed    bool
 
-	completeErr      error
-	completeCalls    int
-	lastCompleteReq  *apiv1.CompleteScheduledTurnRequest
+	completeErr     error
+	completeCalls   int
+	lastCompleteReq *apiv1.CompleteScheduledTurnRequest
 }
 
 func (f *fakeScheduledTurnDispatcher) Subscribe() (<-chan *apiv1.ScheduledTurnRequest, func()) {

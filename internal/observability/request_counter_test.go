@@ -9,20 +9,22 @@ import (
 
 // mockCounter tracks calls for testing CompositeRequestCounter.
 type mockCounter struct {
-	httpRequests       int
-	httpErrors         int
-	grpcRequests       int
-	grpcErrors         int
-	tailscaleLookups   int
-	headerExtractions  int
+	httpRequests      int
+	httpErrors        int
+	grpcRequests      int
+	grpcErrors        int
+	tailscaleLookups  int
+	headerExtractions int
 }
 
-func (m *mockCounter) RecordHTTPRequest()                                     { m.httpRequests++ }
-func (m *mockCounter) RecordHTTPError()                                       { m.httpErrors++ }
-func (m *mockCounter) RecordGRPCRequest()                                     { m.grpcRequests++ }
-func (m *mockCounter) RecordGRPCError()                                       { m.grpcErrors++ }
-func (m *mockCounter) RecordTailscaleLookup(_ observability.IdentityLookupResult) { m.tailscaleLookups++ }
-func (m *mockCounter) RecordHeaderExtraction()                                { m.headerExtractions++ }
+func (m *mockCounter) RecordHTTPRequest() { m.httpRequests++ }
+func (m *mockCounter) RecordHTTPError()   { m.httpErrors++ }
+func (m *mockCounter) RecordGRPCRequest() { m.grpcRequests++ }
+func (m *mockCounter) RecordGRPCError()   { m.grpcErrors++ }
+func (m *mockCounter) RecordTailscaleLookup(_ observability.IdentityLookupResult) {
+	m.tailscaleLookups++
+}
+func (m *mockCounter) RecordHeaderExtraction() { m.headerExtractions++ }
 
 var _ = Describe("CompositeRequestCounter", func() {
 	Describe("NewCompositeRequestCounter", func() {

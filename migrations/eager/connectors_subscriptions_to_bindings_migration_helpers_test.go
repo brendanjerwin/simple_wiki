@@ -4,9 +4,9 @@ package eager
 import (
 	"errors"
 
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/jcelliott/lumber"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 )

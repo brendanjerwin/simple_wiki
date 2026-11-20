@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
 var _ = Describe("JSONArchiveMigrationScanJob", func() {
 	var (
 		tempDir     string
@@ -168,21 +167,21 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 	Describe("Execute", func() {
 		When("archiving a JSON file", func() {
 			var (
-				jsonFilename   string
-				jsonPath       string
-				originalTime   time.Time
-				originalExists bool
-				deletedDirPath string
-				deletedEntries []os.DirEntry
-				archivedPath   string
+				jsonFilename    string
+				jsonPath        string
+				originalTime    time.Time
+				originalExists  bool
+				deletedDirPath  string
+				deletedEntries  []os.DirEntry
+				archivedPath    string
 				archivedContent []byte
-				executeErr     error
+				executeErr      error
 			)
 
 			BeforeEach(func() {
 				jsonFilename = base32tools.EncodeToBase32("testpage") + ".json"
 				jsonPath = filepath.Join(tempDir, jsonFilename)
-				
+
 				// Create a JSON file
 				err := os.WriteFile(jsonPath, []byte(`{"identifier": "testpage", "text": {"current": "content"}}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
@@ -245,7 +244,7 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			BeforeEach(func() {
 				jsonFilename := base32tools.EncodeToBase32("testpage") + ".json"
 				jsonPath := filepath.Join(tempDir, jsonFilename)
-				
+
 				// Create a JSON file
 				err := os.WriteFile(jsonPath, []byte(`{"test": "data"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
@@ -292,7 +291,7 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			BeforeEach(func() {
 				jsonFilename := base32tools.EncodeToBase32("duplicate") + ".json"
 				originalJSONPath = filepath.Join(tempDir, jsonFilename)
-				
+
 				// Create original JSON file
 				err := os.WriteFile(originalJSONPath, []byte(`{"test": "original"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
@@ -328,10 +327,10 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			It("should create a new file with incremented name", func() {
 				// Should have both the original and the new file with incremented name
 				Expect(archivedFiles).To(HaveLen(2))
-				
+
 				baseFilename := base32tools.EncodeToBase32("duplicate") + ".json"
 				incrementedFilename := base32tools.EncodeToBase32("duplicate") + "_1.json"
-				
+
 				Expect(archivedFiles).To(ContainElement(baseFilename))
 				Expect(archivedFiles).To(ContainElement(incrementedFilename))
 			})
@@ -352,7 +351,7 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			BeforeEach(func() {
 				jsonFilename := base32tools.EncodeToBase32("multidup") + ".json"
 				originalJSONPath = filepath.Join(tempDir, jsonFilename)
-				
+
 				// Create original JSON file
 				err := os.WriteFile(originalJSONPath, []byte(`{"test": "original"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
@@ -364,7 +363,7 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				baseName := base32tools.EncodeToBase32("multidup")
-				
+
 				// Create base file
 				existingPath := filepath.Join(deletedDir, baseName+".json")
 				err = os.WriteFile(existingPath, []byte(`{"test": "existing"}`), 0644)
@@ -396,12 +395,12 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			It("should create file with next available incremented name", func() {
 				// Should have base, _1, and _2 files
 				Expect(archivedFiles).To(HaveLen(3))
-				
+
 				baseName := base32tools.EncodeToBase32("multidup")
 				baseFilename := baseName + ".json"
 				incremented1Filename := baseName + "_1.json"
 				incremented2Filename := baseName + "_2.json"
-				
+
 				Expect(archivedFiles).To(ContainElement(baseFilename))
 				Expect(archivedFiles).To(ContainElement(incremented1Filename))
 				Expect(archivedFiles).To(ContainElement(incremented2Filename))

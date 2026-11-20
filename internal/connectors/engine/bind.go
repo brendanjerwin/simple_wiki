@@ -89,8 +89,8 @@ func (e *Engine) Bind(
 		// has no native wiki-uid marker, so without this the first
 		// reconcile after Bind would see every Keep item as
 		// "unknown" and either duplicate the wiki state (legacy) or
-        // fall through to the engine's applyInbound dedup-by-text
-        // (which works but is downstream of the gap).
+		// fall through to the engine's applyInbound dedup-by-text
+		// (which works but is downstream of the gap).
 		wikiItems := readWikiItemsForBindSeed(ctx, e.checklist, page, listName)
 
 		seedCtx, seedCancel := e.withRPCDeadline(ctx)

@@ -1957,4 +1957,3 @@ var _ = Describe("audit logging on DELETE", func() {
 		})
 	})
 })
-

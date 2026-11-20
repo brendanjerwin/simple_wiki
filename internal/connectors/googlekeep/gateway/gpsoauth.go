@@ -152,7 +152,6 @@ func (a *Authenticator) ExchangeOAuthTokenForMasterToken(ctx context.Context, em
 	return "", classifyAuthError(resp)
 }
 
-
 // commonAuthFields populates the request fields shared between Stage 1 and
 // Stage 2. Callers add stage-specific fields on top.
 func (a *Authenticator) commonAuthFields(email string) url.Values {

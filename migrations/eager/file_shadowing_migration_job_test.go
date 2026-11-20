@@ -46,11 +46,11 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				// Create PascalCase page directly on filesystem to simulate legacy state
 				// These files represent pages created before the munging system was implemented
 				CreatePascalCasePage(testDataDir, "LabInventory", "# Rich PascalCase Lab Inventory")
-				
+
 				// Create existing munged page with poor content
 				err = deps.UpdatePageContent("lab_inventory", "# Poor Munged Lab")
 				Expect(err).NotTo(HaveOccurred())
-				
+
 				// Create the migration job for the PascalCase identifier
 				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
 
@@ -86,9 +86,9 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 			BeforeEach(func() {
 				// Create PascalCase page directly on filesystem to simulate legacy state
 				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide Content")
-				
+
 				// No munged version exists
-				
+
 				// Create the migration job
 				job = NewFileShadowingMigrationJob(scanner, deps, deps, "UserGuide")
 
@@ -123,12 +123,12 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 			BeforeEach(func() {
 				// Create PascalCase page with poor content directly on filesystem
 				CreatePascalCasePage(testDataDir, "LabInventory", "# Poor Lab")
-				
+
 				// Create munged page with much richer content
 				richContent := "# Rich Munged Lab Inventory\n\nThis munged version has extensive content:\n\n## Equipment List\n- Advanced Microscope\n- High-speed Centrifuge\n- Spectrophotometer\n\n## Procedures\nDetailed procedures here..."
 				err = deps.UpdatePageContent("lab_inventory", richContent)
 				Expect(err).NotTo(HaveOccurred())
-				
+
 				// Create the migration job
 				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
 
@@ -399,4 +399,3 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		})
 	})
 })
-

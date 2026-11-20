@@ -114,7 +114,7 @@ var _ = Describe("wrapHandlerForOpenAISchema", func() {
 				req = mcp.CallToolRequest{}
 				req.Params.Name = "api_v1_PageManagementService_ReadPage"
 				req.Params.Arguments = map[string]any{
-					"page":  "foo",
+					"page":       "foo",
 					"identifier": nil,
 				}
 

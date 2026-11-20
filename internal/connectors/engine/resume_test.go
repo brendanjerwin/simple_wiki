@@ -187,11 +187,11 @@ var _ = Describe("Engine.transitionToPaused (via test seam)", func() {
 	)
 
 	var (
-		fa           *enginetesting.FakeAdapter
-		fbs          *enginetesting.FakeBindingStore
-		lease        *connectors.LeaseTable
-		eng          *engine.Engine
-		preState     connectors.AdapterState
+		fa       *enginetesting.FakeAdapter
+		fbs      *enginetesting.FakeBindingStore
+		lease    *connectors.LeaseTable
+		eng      *engine.Engine
+		preState connectors.AdapterState
 	)
 
 	BeforeEach(func() {

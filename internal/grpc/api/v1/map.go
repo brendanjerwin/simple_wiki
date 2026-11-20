@@ -20,7 +20,7 @@ import (
 var errMapMutatorNotConfigured = status.Error(codes.FailedPrecondition, "map mutator not configured on server")
 
 const (
-	defaultMapPageSize            = 100
+	defaultMapPageSize                = 100
 	defaultTrackSimplificationCeiling = 1000 // max points returned by GetTrackGeometry
 )
 

@@ -138,9 +138,9 @@ var _ = Describe("CronScheduler", func() {
 	Describe("Remove", func() {
 		When("removing a scheduled job", func() {
 			var (
-				executionCount  atomic.Int32
-				countAtRemoval  int32
-				entryID         int
+				executionCount atomic.Int32
+				countAtRemoval int32
+				entryID        int
 			)
 
 			BeforeEach(func() {

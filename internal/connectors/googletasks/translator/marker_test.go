@@ -125,10 +125,10 @@ var _ = Describe("StripWikiUIDMarker", func() {
 
 	When("a marker appears mid-notes followed by user content", func() {
 		var (
-			notes      string
-			cleaned    string
+			notes        string
+			cleaned      string
 			extractedUID string
-			found      bool
+			found        bool
 		)
 
 		BeforeEach(func() {

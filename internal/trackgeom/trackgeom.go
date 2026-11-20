@@ -49,9 +49,9 @@ const (
 	longitudeWrapThreshold            = 180.0 // degrees; beyond this a longitude delta wraps
 	longitudeWrapOffset               = 360.0 // degrees; added/subtracted to normalize wrapped longitudes
 	degreesToRadians                  = math.Pi / 180.0
-	minSegmentLengthForSimplification = 3     // Douglas–Peucker needs at least three points
-	simplificationSearchIterations    = 40    // geometric binary-search iterations for point ceiling
-	decimalGroupingSize               = 3     // digits per comma-separated thousands group
+	minSegmentLengthForSimplification = 3  // Douglas–Peucker needs at least three points
+	simplificationSearchIterations    = 40 // geometric binary-search iterations for point ceiling
+	decimalGroupingSize               = 3  // digits per comma-separated thousands group
 )
 
 // Parse routes the parsing to the appropriate format parser based on the given TrackFormat,
@@ -309,7 +309,7 @@ func trackFromGeometry(geom orb.Geometry) (*Track, error) {
 	return track, nil
 }
 
-// perpendicularDistance calculates the Cartesian distance (in degrees) from p 
+// perpendicularDistance calculates the Cartesian distance (in degrees) from p
 // to the line segment start-end, accounting for longitude convergence.
 func perpendicularDistance(p, start, end Point) float64 {
 	avgLat := (start.Lat + end.Lat) / 2.0
@@ -317,8 +317,8 @@ func perpendicularDistance(p, start, end Point) float64 {
 	cosLat := math.Cos(rad)
 
 	// Normalize longitude differences relative to start.Lon to handle antimeridian crossing
-	dx := normalizeLongitudeDelta(end.Lon - start.Lon) * cosLat
-	pDx := normalizeLongitudeDelta(p.Lon - start.Lon) * cosLat
+	dx := normalizeLongitudeDelta(end.Lon-start.Lon) * cosLat
+	pDx := normalizeLongitudeDelta(p.Lon-start.Lon) * cosLat
 
 	dy := end.Lat - start.Lat
 

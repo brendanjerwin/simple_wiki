@@ -19,14 +19,14 @@ func NewApplicator() *DefaultApplicator {
 	applicator := &DefaultApplicator{
 		migrations: make([]FrontmatterMigration, 0),
 	}
-	
+
 	// Register default migrations - order matters for execution
-	applicator.RegisterMigration(NewYAMLToTOMLMigration())       // Convert YAML to TOML first
+	applicator.RegisterMigration(NewYAMLToTOMLMigration()) // Convert YAML to TOML first
 	applicator.RegisterMigration(NewTOMLDotNotationMigration())
-	applicator.RegisterMigration(NewIdentifierMungingMigration()) // Munge identifier values
+	applicator.RegisterMigration(NewIdentifierMungingMigration())         // Munge identifier values
 	applicator.RegisterMigration(NewInventoryContainerMungingMigration()) // Munge inventory.container values
-	applicator.RegisterMigration(NewTOMLTableSpacingMigration()) // Must be last for proper formatting
-	
+	applicator.RegisterMigration(NewTOMLTableSpacingMigration())          // Must be last for proper formatting
+
 	return applicator
 }
 

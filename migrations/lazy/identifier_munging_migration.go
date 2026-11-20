@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pelletier/go-toml/v2"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // IdentifierMungingMigration ensures identifier values are munged.
@@ -52,7 +52,7 @@ func (*IdentifierMungingMigration) Apply(content []byte) ([]byte, error) {
 	if len(parts) != tomlDelimiterLength {
 		return content, nil // Invalid format, return unchanged
 	}
-	
+
 	frontmatter := parts[1]
 	body := parts[2]
 

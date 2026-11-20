@@ -9,7 +9,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 )
 
-
 var _ = Describe("DefaultApplicator", func() {
 	var applicator lazy.FrontmatterMigrationApplicator
 
@@ -50,11 +49,11 @@ var _ = Describe("DefaultApplicator", func() {
 				AppliesToResult:      true,
 				ApplyResult:          []byte("---\ntitle: migrated\n---\ncontent"),
 			}
-			
+
 			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
-			
+
 			result, err = applicator.ApplyMigrations(content)
 		})
 
@@ -80,11 +79,11 @@ var _ = Describe("DefaultApplicator", func() {
 				AppliesToResult:      true,
 				ApplyResult:          []byte("+++\ntitle = \"migrated\"\n+++\ncontent"),
 			}
-			
+
 			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
-			
+
 			result, err = applicator.ApplyMigrations(content)
 		})
 
@@ -109,11 +108,11 @@ var _ = Describe("DefaultApplicator", func() {
 				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterTOML},
 				AppliesToResult:      false, // Migration doesn't apply
 			}
-			
+
 			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
-			
+
 			result, err = applicator.ApplyMigrations(content)
 		})
 
@@ -139,11 +138,11 @@ var _ = Describe("DefaultApplicator", func() {
 				AppliesToResult:      true,
 				ApplyError:           errors.New("migration failed"),
 			}
-			
+
 			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
-			
+
 			result, err = applicator.ApplyMigrations(content)
 		})
 
@@ -170,11 +169,11 @@ var _ = Describe("DefaultApplicator", func() {
 				AppliesToResult:      true,
 				ApplyResult:          []byte("should not be applied"),
 			}
-			
+
 			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
-			
+
 			result, err = applicator.ApplyMigrations(content)
 		})
 
