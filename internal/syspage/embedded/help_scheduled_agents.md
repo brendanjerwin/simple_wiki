@@ -71,18 +71,21 @@ Invalid IANA names are rejected at write time with `InvalidArgument`. The wiki p
 Each fire walks the schedule through these states:
 
 ```
-UNSPECIFIED ─┐
-             ├─→ RUNNING ─┬─→ OK ──────────┐
-OK ──────────┤            ├─→ ERROR ────────┤
-ERROR ───────┤            ├─→ TIMEOUT ──────┼─→ RUNNING (next fire)
-TIMEOUT ─────┤            ├─→ MAX_TURNS ────┤
-MAX_TURNS ───┤            └─→ WARN ─────────┘
-WARN ────────┘
+UNSPECIFIED ──┐
+              ├─→ RUNNING ─┬─→ OK ───────────┐
+OK ───────────┤            ├─→ ERROR ─────────┤
+ERROR ────────┤            ├─→ TIMEOUT ───────┼─→ RUNNING (next fire)
+TIMEOUT ──────┤            ├─→ MAX_TURNS ─────┤
+MAX_TURNS ────┤            ├─→ WARN ──────────┤
+WARN ─────────┤            └─→ INTERRUPTED ───┘
+INTERRUPTED ──┘
 ```
 
 `RUNNING → RUNNING` is illegal — if a previous fire is still in flight, the next cron fire is **skipped** rather than dispatched. A stuck `RUNNING` (e.g. the pool process died before recording a terminal status) is reclaimed automatically: once the schedule has been in `RUNNING` longer than the reclaim threshold (twice the hard timeout, so 20 minutes by default), the next cron fire records `TIMEOUT` for the zombie run — closing its background-activity entry — and then dispatches a fresh turn as normal.
 
 `WARN` is a terminal status for work that may have completed but did not produce the required audit record, usually because the scheduled agent finished without a background activity summary or the audit write failed.
+
+`INTERRUPTED` is a terminal status for a turn that was in-flight when the wiki process shut down (e.g. a deploy or restart). It is **not** a genuine failure — the agent ran correctly up to the moment the process exited. `last_duration_seconds` reflects the actual observed run time. `last_error_message` is prefixed with `interrupted:`. On the next cron fire the schedule resumes normally. Hollow-run alerting should **not** treat `INTERRUPTED` as an error.
 
 `TIMEOUT` vs `MAX_TURNS` — two distinct outcomes that both look like "the turn stopped early":
 
@@ -156,7 +159,7 @@ wiki-cli verify-schedule-fired \
   --since 2026-06-11T14:00:00Z
 ```
 
-The command reads `AgentMetadataService/ListSchedules` and fails when the schedule is missing, has never run, last ran before `--since`, is still `RUNNING`, or ended in `ERROR`/`TIMEOUT`. `OK` and `WARN` pass because both prove the cron fired after the deploy; investigate `WARN` separately if the audit summary is required for the migration. `MAX_TURNS` fails the check — the agent stopped without completing its task and needs a recovery run.
+The command reads `AgentMetadataService/ListSchedules` and fails when the schedule is missing, has never run, last ran before `--since`, is still `RUNNING`, or ended in `ERROR`/`TIMEOUT`. `OK` and `WARN` pass because both prove the cron fired after the deploy; investigate `WARN` separately if the audit summary is required for the migration. `MAX_TURNS` fails the check — the agent stopped without completing its task and needs a recovery run. `INTERRUPTED` also fails the check — the turn was cut short by a process restart; re-run or wait for the next scheduled fire.
 
 ## Operational notes
 

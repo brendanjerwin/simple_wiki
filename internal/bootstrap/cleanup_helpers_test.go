@@ -198,8 +198,12 @@ var _ = Describe("drainScheduledTurns", func() {
 			drainedOutcome = <-completion
 		})
 
-		It("should signal ERROR terminal status to the completion channel", func() {
-			Expect(drainedOutcome.TerminalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		It("should signal INTERRUPTED terminal status to the completion channel", func() {
+			Expect(drainedOutcome.TerminalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_INTERRUPTED))
+		})
+
+		It("should include 'interrupted:' prefix in the error message", func() {
+			Expect(drainedOutcome.ErrorMessage).To(HavePrefix("interrupted:"))
 		})
 
 		It("should include the shutdown reason in the error message", func() {

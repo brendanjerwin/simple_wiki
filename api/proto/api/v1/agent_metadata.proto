@@ -90,6 +90,11 @@ enum ScheduleStatus {
   // max_turns budget. Unlike TIMEOUT, the work is definitively stopped and
   // last_duration_seconds reflects the actual observed run time.
   SCHEDULE_STATUS_MAX_TURNS = 6;
+  // The turn was in-flight when the process shut down (e.g. a deploy or
+  // restart). Unlike ERROR, this is not a genuine model failure — it is an
+  // expected interruption. last_duration_seconds reflects the actual observed
+  // run time up to the point of interruption.
+  SCHEDULE_STATUS_INTERRUPTED = 7;
 }
 
 // AgentSchedule describes one cron-driven scheduled agent turn on a page.

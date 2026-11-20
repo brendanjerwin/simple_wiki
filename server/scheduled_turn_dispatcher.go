@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 )
@@ -19,10 +20,13 @@ type ScheduledTurnOutcome struct {
 
 // pendingTurn pairs the completion channel for a dispatched request with the
 // original request. Storing the request allows DrainPending to emit descriptive
-// log messages and ERROR outcomes without a separate lookup.
+// log messages and INTERRUPTED outcomes without a separate lookup. startedAt
+// records when the turn was dispatched so DrainPending can compute a real
+// elapsed duration instead of leaving last_duration_seconds as 0.
 type pendingTurn struct {
 	completion chan *ScheduledTurnOutcome
 	request    *apiv1.ScheduledTurnRequest
+	startedAt  time.Time
 }
 
 // ErrNoScheduledTurnSubscribers is returned by Dispatch when no pool
@@ -30,6 +34,18 @@ type pendingTurn struct {
 // pool may be restarting — so callers can retry rather than immediately
 // recording a terminal ERROR.
 var ErrNoScheduledTurnSubscribers = errors.New("no scheduled-turn subscribers connected (pool not running?)")
+
+// Clocker provides the current time. Production code uses SystemClock;
+// tests inject a deterministic clock for predictable elapsed durations.
+type Clocker interface {
+	Now() time.Time
+}
+
+// SystemClock returns time.Now wrapped in a Clocker.
+type SystemClock struct{}
+
+// Now returns the current wall-clock time.
+func (SystemClock) Now() time.Time { return time.Now() }
 
 // ScheduledTurnDispatcher is the server-side bridge between AgentTurnJob and
 // the pool's headless scheduled-turn handler. It maintains a fan-out queue of
@@ -40,13 +56,22 @@ type ScheduledTurnDispatcher struct {
 	subscribers map[int]chan *apiv1.ScheduledTurnRequest
 	pending     map[string]pendingTurn
 	nextSubID   int
+	clock       Clocker
 }
 
-// NewScheduledTurnDispatcher constructs an empty dispatcher.
+// NewScheduledTurnDispatcher constructs an empty dispatcher using the wall clock.
 func NewScheduledTurnDispatcher() *ScheduledTurnDispatcher {
+	return NewScheduledTurnDispatcherWithClock(SystemClock{})
+}
+
+// NewScheduledTurnDispatcherWithClock constructs a dispatcher using the
+// provided clock, allowing tests to inject a deterministic clock for
+// verifying elapsed duration calculations.
+func NewScheduledTurnDispatcherWithClock(clock Clocker) *ScheduledTurnDispatcher {
 	return &ScheduledTurnDispatcher{
 		subscribers: map[int]chan *apiv1.ScheduledTurnRequest{},
 		pending:     map[string]pendingTurn{},
+		clock:       clock,
 	}
 }
 
@@ -101,7 +126,7 @@ func (d *ScheduledTurnDispatcher) Dispatch(req *apiv1.ScheduledTurnRequest) (<-c
 	}
 
 	completion := make(chan *ScheduledTurnOutcome, 1)
-	d.pending[req.GetRequestId()] = pendingTurn{completion: completion, request: req}
+	d.pending[req.GetRequestId()] = pendingTurn{completion: completion, request: req, startedAt: d.clock.Now()}
 
 	for _, sub := range d.subscribers {
 		select {
@@ -144,10 +169,11 @@ func (d *ScheduledTurnDispatcher) Complete(req *apiv1.CompleteScheduledTurnReque
 	return nil
 }
 
-// DrainPending terminates all in-flight scheduled turns with an ERROR outcome.
-// Each pending AgentTurnJob's completion channel receives an error outcome
-// carrying reason as the error message, allowing the job to write a terminal
-// status to the schedule's frontmatter before the process exits.
+// DrainPending terminates all in-flight scheduled turns with an INTERRUPTED
+// outcome. Each pending AgentTurnJob's completion channel receives an outcome
+// carrying reason as the error message and the real elapsed duration, allowing
+// the job to write a terminal status to the schedule's frontmatter before the
+// process exits.
 //
 // Returns the number of turns drained. Safe to call concurrently and multiple
 // times; subsequent calls are no-ops when the pending map is already empty.
@@ -157,6 +183,8 @@ func (d *ScheduledTurnDispatcher) Complete(req *apiv1.CompleteScheduledTurnReque
 // when the pool later calls CompleteScheduledTurn on the fresh process and
 // finds no matching pending record.
 func (d *ScheduledTurnDispatcher) DrainPending(reason string) int {
+	now := d.clock.Now()
+
 	d.mu.Lock()
 	toSignal := make([]pendingTurn, 0, len(d.pending))
 	for id, pt := range d.pending {
@@ -166,14 +194,19 @@ func (d *ScheduledTurnDispatcher) DrainPending(reason string) int {
 	d.mu.Unlock()
 
 	for _, pt := range toSignal {
-		slog.Error("scheduled turn dispatcher: draining pending turn on shutdown",
+		elapsed := now.Sub(pt.startedAt)
+		durationSeconds := int32(elapsed.Seconds())
+
+		slog.Warn("scheduled turn dispatcher: draining pending turn on shutdown",
 			"request_id", pt.request.GetRequestId(),
 			"page", pt.request.GetPage(),
 			"reason", reason,
+			"duration_seconds", durationSeconds,
 		)
 		pt.completion <- &ScheduledTurnOutcome{
-			TerminalStatus: apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR,
-			ErrorMessage:   fmt.Sprintf("process shutting down: %s", reason),
+			TerminalStatus:  apiv1.ScheduleStatus_SCHEDULE_STATUS_INTERRUPTED,
+			ErrorMessage:    fmt.Sprintf("interrupted: process shutting down: %s", reason),
+			DurationSeconds: durationSeconds,
 		}
 		close(pt.completion)
 	}
