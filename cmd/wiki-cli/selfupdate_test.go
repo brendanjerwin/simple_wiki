@@ -17,6 +17,15 @@ var _ = Describe("cliBinaryName", func() {
 	})
 })
 
+var _ = Describe("updateTempPath", func() {
+	It("returns a distinct path per call beside the executable", func() {
+		first := updateTempPath("/srv/bin/wiki-cli", "wiki-cli-linux-amd64")
+		second := updateTempPath("/srv/bin/wiki-cli", "wiki-cli-linux-amd64")
+		Expect(first).To(HavePrefix("/srv/bin/.wiki-cli-linux-amd64.update-"))
+		Expect(second).NotTo(Equal(first))
+	})
+})
+
 var _ = Describe("downloadMatchingBinary", func() {
 	var (
 		tmpDir  string
@@ -52,6 +61,21 @@ var _ = Describe("downloadMatchingBinary", func() {
 			server.Close()
 		})
 
+		It("uses a distinct temp path per download so concurrent updaters cannot share an inode", func() {
+			// A fixed temp name let two updaters write the same inode; when one
+			// renamed it over the running executable, the other's exec failed
+			// with ETXTBSY (simple_wiki #1485).
+			first, err := downloadMatchingBinary(server.URL, exePath)
+			Expect(err).NotTo(HaveOccurred())
+			second, err := downloadMatchingBinary(server.URL, exePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(second).NotTo(Equal(first))
+			_, statErr := os.Stat(first)
+			Expect(statErr).NotTo(HaveOccurred())
+			_, statErr = os.Stat(second)
+			Expect(statErr).NotTo(HaveOccurred())
+		})
+
 		It("writes the body to a sibling temp file", func() {
 			newPath, err := downloadMatchingBinary(server.URL, exePath)
 			Expect(err).NotTo(HaveOccurred())
@@ -59,6 +83,36 @@ var _ = Describe("downloadMatchingBinary", func() {
 			body, readErr := os.ReadFile(newPath)
 			Expect(readErr).NotTo(HaveOccurred())
 			Expect(string(body)).To(Equal("new-binary-bytes"))
+		})
+
+		It("marks the downloaded file executable so the swap cannot install a dead binary", func() {
+			newPath, err := downloadMatchingBinary(server.URL, exePath)
+			Expect(err).NotTo(HaveOccurred())
+			info, statErr := os.Stat(newPath)
+			Expect(statErr).NotTo(HaveOccurred())
+			Expect(info.Mode().Perm()).To(Equal(executableMode))
+		})
+	})
+
+	When("a temp file cannot be created beside the executable", func() {
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("new-binary"))
+			}))
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("returns an error mentioning the temp file", func() {
+			// exePath's directory does not exist, so the O_EXCL create fails and
+			// no partially-written temp file can be left behind.
+			_, err := downloadMatchingBinary(server.URL, tmpDir+"/missing/wiki-cli-test")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("could not create temp file"))
 		})
 	})
 

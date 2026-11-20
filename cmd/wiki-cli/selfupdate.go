@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,20 @@ import (
 )
 
 const selfUpdateTimeout = 120 * time.Second
+
+// executableMode is the mode given to a downloaded binary at creation, so the
+// rename installs an executable replacement rather than CreateTemp's 0600.
+const executableMode os.FileMode = 0o755
+
+// updateTempPath returns a per-call temp path beside exePath. A fixed sibling
+// name let two concurrent updaters share one inode, so the first rename made
+// the second's exec fail with ETXTBSY (simple_wiki #1485). The random suffix is
+// the same uniqueness guarantee os.CreateTemp gives, without forcing a later
+// chmod: the mode is supplied at open time instead.
+func updateTempPath(exePath, binaryName string) string {
+	suffix := rand.Text()
+	return filepath.Join(filepath.Dir(exePath), fmt.Sprintf(".%s.update-%s", binaryName, suffix))
+}
 
 // cliBinaryName returns the platform-specific binary name served by the wiki.
 func cliBinaryName() string {
@@ -37,8 +52,8 @@ func cliBinaryName() string {
 }
 
 // downloadMatchingBinary fetches the /cli/ binary matching the running wiki
-// server's platform and writes it to a sibling temp file of exePath. The
-// returned path is executable and atomic-rename ready. It uses a plain GET
+// server's platform and writes it to a per-call sibling temp file of exePath.
+// The returned path is executable and atomic-rename ready. It uses a plain GET
 // (no If-Modified-Since) because the caller has already determined a mismatch
 // exists; the server's Last-Modified is the server's start time, not the
 // binary's build time, so conditional semantics are meaningless here.
@@ -64,12 +79,13 @@ func downloadMatchingBinary(wikiURL, exePath string) (string, error) {
 		return "", fmt.Errorf("self-update: %s returned HTTP %d", downloadURL, resp.StatusCode)
 	}
 
-	tmpPath := filepath.Join(filepath.Dir(exePath), "."+binaryName+".update")
-	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	tmpPath := updateTempPath(exePath, binaryName)
+	// O_EXCL makes the random suffix a hard guarantee: if two updaters ever drew
+	// the same name, the second fails loudly instead of sharing an inode.
+	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, executableMode)
 	if err != nil {
-		return "", fmt.Errorf("self-update: could not create %s: %w", tmpPath, err)
+		return "", fmt.Errorf("self-update: could not create temp file beside %s: %w", exePath, err)
 	}
-
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
