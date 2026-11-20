@@ -19,6 +19,10 @@ import (
 
 const selfUpdateTimeout = 120 * time.Second
 
+// executableMode is the mode given to a downloaded binary before it is
+// renamed over the running executable, so the replacement stays executable.
+const executableMode os.FileMode = 0o755
+
 // cliBinaryName returns the platform-specific binary name served by the wiki.
 func cliBinaryName() string {
 	osName := strings.ToLower(runtime.GOOS)
@@ -69,7 +73,7 @@ func downloadMatchingBinary(wikiURL, exePath string) (string, error) {
 		return "", fmt.Errorf("self-update: could not create temp file beside %s: %w", exePath, err)
 	}
 	tmpPath := tmpFile.Name()
-	if err := tmpFile.Chmod(0o755); err != nil {
+	if err := tmpFile.Chmod(executableMode); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("self-update: could not make %s executable: %w", tmpPath, err)
