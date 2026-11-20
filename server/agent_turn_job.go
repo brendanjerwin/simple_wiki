@@ -32,6 +32,22 @@ type agentTurnDispatcher interface {
 	Dispatch(req *apiv1.ScheduledTurnRequest) (<-chan *ScheduledTurnOutcome, error)
 }
 
+// defaultSubscriberRetryWindow is the max wall-clock time dispatchWithSubscriberRetry
+// will keep retrying when every Dispatch attempt returns ErrNoScheduledTurnSubscribers.
+// 90 s covers the typical pool drain + restart + re-register window (~12 s observed)
+// with generous headroom, while still failing promptly on a genuine outage.
+const defaultSubscriberRetryWindow = 90 * time.Second
+
+// subscriberRetryBackoffs is the per-attempt sleep schedule (1 s, 2 s, 4 s).
+// After these are exhausted, every subsequent wait is subscriberRetryMaxBackoff.
+var subscriberRetryBackoffs = []time.Duration{
+	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+}
+
+const subscriberRetryMaxBackoff = 5 * time.Second
+
 // AgentTurnJob drives one fire of one schedule on one page. It is a Job
 // (compatible with JobQueueCoordinator) so cron firings flow through the
 // existing concurrency machinery.
@@ -43,26 +59,38 @@ type agentTurnDispatcher interface {
 //     completion channel (with a hard timeout as a safety net).
 //  4. Transition to OK / ERROR / TIMEOUT based on the pool's outcome.
 //
-// If Dispatch itself fails (no pool subscribers), the job records ERROR
-// directly without ever going through RUNNING — see the state machine note in
-// the design doc.
+// If Dispatch itself fails (no pool subscribers), the job retries within a
+// bounded window before recording ERROR — see dispatchWithSubscriberRetry.
 type AgentTurnJob struct {
-	store       *AgentScheduleStore
-	dispatcher  agentTurnDispatcher
-	page        string
-	scheduleID  string
-	hardTimeout time.Duration
+	store                 *AgentScheduleStore
+	dispatcher            agentTurnDispatcher
+	page                  string
+	scheduleID            string
+	hardTimeout           time.Duration
+	subscriberRetryWindow time.Duration
+	subscriberRetrySleep  func(time.Duration)
 }
 
 // NewAgentTurnJob constructs a job for one cron fire of one schedule.
 func NewAgentTurnJob(store *AgentScheduleStore, dispatcher agentTurnDispatcher, page, scheduleID string, hardTimeout time.Duration) *AgentTurnJob {
 	return &AgentTurnJob{
-		store:       store,
-		dispatcher:  dispatcher,
-		page:        page,
-		scheduleID:  scheduleID,
-		hardTimeout: hardTimeout,
+		store:                 store,
+		dispatcher:            dispatcher,
+		page:                  page,
+		scheduleID:            scheduleID,
+		hardTimeout:           hardTimeout,
+		subscriberRetryWindow: defaultSubscriberRetryWindow,
+		subscriberRetrySleep:  time.Sleep,
 	}
+}
+
+// WithSubscriberRetryWindow overrides the no-subscriber retry window and sleep
+// function. Primarily used by tests to accelerate timing-dependent retry
+// behaviour without touching real-clock sleeps.
+func (j *AgentTurnJob) WithSubscriberRetryWindow(window time.Duration, sleep func(time.Duration)) *AgentTurnJob {
+	j.subscriberRetryWindow = window
+	j.subscriberRetrySleep = sleep
+	return j
 }
 
 // GetName implements jobs.Job.
@@ -114,7 +142,7 @@ func (j *AgentTurnJob) Execute() error {
 		const defaultMaxTurns = 20
 		maxTurns = defaultMaxTurns
 	}
-	completion, dispatchErr := j.dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+	completion, dispatchErr := j.dispatchWithSubscriberRetry(&apiv1.ScheduledTurnRequest{
 		RequestId: requestID,
 		Page:      j.page,
 		Prompt:    snapshot.GetPrompt(),
@@ -255,6 +283,61 @@ func (j *AgentTurnJob) recordDispatchFailure(requestID string, dispatchErr error
 	}
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, msg, 0); err != nil {
 		slog.Error("agent turn: ERROR transition after dispatch failure failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
+	}
+}
+
+// dispatchWithSubscriberRetry calls Dispatch and, on ErrNoScheduledTurnSubscribers,
+// retries with exponential backoff (1 s, 2 s, 4 s, then 5 s) until either a
+// dispatch succeeds or the subscriberRetryWindow elapses. Any other dispatch
+// error is returned immediately without retrying.
+//
+// The same requestID is used across every attempt, so a subscriber that arrives
+// mid-retry cannot create two in-flight turns for the same fire.
+func (j *AgentTurnJob) dispatchWithSubscriberRetry(req *apiv1.ScheduledTurnRequest) (<-chan *ScheduledTurnOutcome, error) {
+	deadline := time.Now().Add(j.subscriberRetryWindow)
+	attempts := 0
+
+	for {
+		completion, err := j.dispatcher.Dispatch(req)
+		if err == nil {
+			return completion, nil
+		}
+		if !errors.Is(err, ErrNoScheduledTurnSubscribers) {
+			// Terminal error (bad request, already in flight, etc.) — do not retry.
+			return nil, err
+		}
+
+		attempts++
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			slog.Warn("agent turn: subscriber retry window exhausted, giving up",
+				logKeyPage, j.page,
+				logKeyScheduleID, j.scheduleID,
+				logKeyRequestID, req.GetRequestId(),
+				"attempts", attempts,
+				"window", j.subscriberRetryWindow,
+			)
+			return nil, ErrNoScheduledTurnSubscribers
+		}
+
+		var backoff time.Duration
+		if attempts <= len(subscriberRetryBackoffs) {
+			backoff = subscriberRetryBackoffs[attempts-1]
+		} else {
+			backoff = subscriberRetryMaxBackoff
+		}
+		if backoff > remaining {
+			backoff = remaining
+		}
+
+		slog.Info("agent turn: no subscribers, retrying dispatch",
+			logKeyPage, j.page,
+			logKeyScheduleID, j.scheduleID,
+			logKeyRequestID, req.GetRequestId(),
+			"attempt", attempts,
+			"retry_in", backoff.Round(time.Millisecond),
+		)
+		j.subscriberRetrySleep(backoff)
 	}
 }
 

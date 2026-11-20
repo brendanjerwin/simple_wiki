@@ -25,6 +25,12 @@ type pendingTurn struct {
 	request    *apiv1.ScheduledTurnRequest
 }
 
+// ErrNoScheduledTurnSubscribers is returned by Dispatch when no pool
+// subscribers are currently connected. This is a transient condition — the
+// pool may be restarting — so callers can retry rather than immediately
+// recording a terminal ERROR.
+var ErrNoScheduledTurnSubscribers = errors.New("no scheduled-turn subscribers connected (pool not running?)")
+
 // ScheduledTurnDispatcher is the server-side bridge between AgentTurnJob and
 // the pool's headless scheduled-turn handler. It maintains a fan-out queue of
 // dispatched requests so the pool subscriber can read them, and a per-request
@@ -88,7 +94,7 @@ func (d *ScheduledTurnDispatcher) Dispatch(req *apiv1.ScheduledTurnRequest) (<-c
 	defer d.mu.Unlock()
 
 	if len(d.subscribers) == 0 {
-		return nil, errors.New("no scheduled-turn subscribers connected (pool not running?)")
+		return nil, ErrNoScheduledTurnSubscribers
 	}
 	if _, exists := d.pending[req.GetRequestId()]; exists {
 		return nil, fmt.Errorf("scheduled turn %q already in flight", req.GetRequestId())
