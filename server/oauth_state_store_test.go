@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -13,13 +12,13 @@ import (
 var _ = Describe("OAuthStateStore", func() {
 	var (
 		ctx   context.Context
-		clock *fakeClock
+		clock *FakeClock
 		store *inMemoryOAuthStateStore
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		clock = &fakeClock{now: time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)}
+		clock = NewFakeClock(time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC))
 		store = newInMemoryOAuthStateStoreWithClock(clock.Now)
 	})
 
@@ -188,7 +187,7 @@ var _ = Describe("OAuthStateStore", func() {
 			var issueErr error
 			state, issueErr = store.Issue(ctx, "profile-1", "verifier-1")
 			Expect(issueErr).NotTo(HaveOccurred())
-			clock.advance(11 * time.Minute) // > 10-minute TTL
+			clock.Advance(11 * time.Minute) // > 10-minute TTL
 			_, err = store.Consume(ctx, state)
 		})
 
@@ -204,7 +203,7 @@ var _ = Describe("OAuthStateStore", func() {
 			var issueErr error
 			state, issueErr = store.Issue(ctx, "profile-1", "verifier-1")
 			Expect(issueErr).NotTo(HaveOccurred())
-			clock.advance(11 * time.Minute)
+			clock.Advance(11 * time.Minute)
 			store.gcOnce()
 		})
 
@@ -214,22 +213,3 @@ var _ = Describe("OAuthStateStore", func() {
 		})
 	})
 })
-
-// fakeClock is a controllable time source used by store tests so
-// expiry tests run in microseconds rather than minutes.
-type fakeClock struct {
-	mu  sync.Mutex
-	now time.Time
-}
-
-func (c *fakeClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *fakeClock) advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.now = c.now.Add(d)
-}

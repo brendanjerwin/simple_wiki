@@ -68,7 +68,7 @@ func makeTokenServer(handler http.HandlerFunc) *httptest.Server {
 var _ = Describe("OAuthGoogleHandler", func() {
 	var (
 		ctx          context.Context
-		clock        *fakeClock
+		clock        *FakeClock
 		stateStore   *inMemoryOAuthStateStore
 		persister    *fakeRefreshTokenPersister
 		identity     *fakeIdentityResolver
@@ -85,7 +85,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		_ = ctx
-		clock = &fakeClock{now: time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)}
+		clock = NewFakeClock(time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC))
 		stateStore = newInMemoryOAuthStateStoreWithClock(clock.Now)
 		persister = &fakeRefreshTokenPersister{}
 		identity = &fakeIdentityResolver{profileID: "user@example.com"}
@@ -270,7 +270,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 		BeforeEach(func() {
 			startServer()
 			issuedState = issueState()
-			clock.advance(11 * time.Minute) // > TTL
+			clock.Advance(11 * time.Minute) // > TTL
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},

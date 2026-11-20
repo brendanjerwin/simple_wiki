@@ -2,7 +2,6 @@
 package server_test
 
 import (
-	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,26 +10,6 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
 )
-
-// fakeClock is a deterministic Clocker for use in tests.
-type fakeClock struct {
-	mu  sync.Mutex
-	now time.Time
-}
-
-func newFakeClock(t time.Time) *fakeClock { return &fakeClock{now: t} }
-
-func (c *fakeClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *fakeClock) advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.now = c.now.Add(d)
-}
 
 var _ = Describe("ScheduledTurnDispatcher", func() {
 	var dispatcher *server.ScheduledTurnDispatcher
@@ -303,10 +282,10 @@ var _ = Describe("ScheduledTurnDispatcher", func() {
 
 		Describe("when a turn has been pending for several seconds before drain", func() {
 			var completion <-chan *server.ScheduledTurnOutcome
-			var clock *fakeClock
+			var clock *server.FakeClock
 
 			BeforeEach(func() {
-				clock = newFakeClock(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+				clock = server.NewFakeClock(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 				timedDispatcher := server.NewScheduledTurnDispatcherWithClock(clock)
 				_, unsubscribe := timedDispatcher.Subscribe()
 				DeferCleanup(unsubscribe)
@@ -317,7 +296,7 @@ var _ = Describe("ScheduledTurnDispatcher", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				clock.advance(5 * time.Minute)
+				clock.Advance(5 * time.Minute)
 				timedDispatcher.DrainPending("deploy")
 			})
 
