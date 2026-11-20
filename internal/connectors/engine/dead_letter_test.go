@@ -222,9 +222,9 @@ var _ = Describe("Engine dead-letter retry bookkeeping", func() {
 
 		When("the post-increment count meets deadLetterThreshold", func() {
 			var (
-				updated   connectors.Binding
-				breached  bool
-				logLines  []capturedLine
+				updated  connectors.Binding
+				breached bool
+				logLines []capturedLine
 			)
 
 			BeforeEach(func() {

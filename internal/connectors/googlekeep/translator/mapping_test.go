@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/translator"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/translator"
 )
 
 var _ = Describe("WikiToKeep", func() {
@@ -144,10 +144,10 @@ var _ = Describe("KeepToWiki", func() {
 var _ = Describe("Fingerprint helpers", func() {
 	When("a wiki item is round-tripped through WikiToKeep", func() {
 		var (
-			item    *apiv1.ChecklistItem
-			node    gateway.Node
-			wikiFP  translator.Fingerprint
-			keepFP  translator.Fingerprint
+			item   *apiv1.ChecklistItem
+			node   gateway.Node
+			wikiFP translator.Fingerprint
+			keepFP translator.Fingerprint
 		)
 
 		BeforeEach(func() {

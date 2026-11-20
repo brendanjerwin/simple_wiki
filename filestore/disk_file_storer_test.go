@@ -181,7 +181,7 @@ var _ = Describe("DiskFileStorer", func() {
 	Describe("Delete", func() {
 		When("file exists", func() {
 			var (
-				stored  filestore.FileInfo
+				stored    filestore.FileInfo
 				deleteErr error
 			)
 

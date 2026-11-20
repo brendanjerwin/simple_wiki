@@ -16,10 +16,10 @@ import (
 
 // MockCoordinatorIndexOperator is a test implementation of index.IndexOperator for coordinator tests.
 type MockCoordinatorIndexOperator struct {
-	AddPageToIndexFunc    func(identifier wikipage.PageIdentifier) error
+	AddPageToIndexFunc      func(identifier wikipage.PageIdentifier) error
 	RemovePageFromIndexFunc func(identifier wikipage.PageIdentifier) error
-	addCalled             []wikipage.PageIdentifier
-	removeCalled          []wikipage.PageIdentifier
+	addCalled               []wikipage.PageIdentifier
+	removeCalled            []wikipage.PageIdentifier
 }
 
 func (m *MockCoordinatorIndexOperator) AddPageToIndex(identifier wikipage.PageIdentifier) error {
@@ -40,10 +40,10 @@ func (m *MockCoordinatorIndexOperator) RemovePageFromIndex(identifier wikipage.P
 
 var _ = Describe("IndexCoordinator", func() {
 	var (
-		coordinator          *jobs.JobQueueCoordinator
-		frontmatterMock      *MockCoordinatorIndexOperator
-		bleveMock           *MockCoordinatorIndexOperator
-		indexCoordinator    *index.IndexCoordinator
+		coordinator      *jobs.JobQueueCoordinator
+		frontmatterMock  *MockCoordinatorIndexOperator
+		bleveMock        *MockCoordinatorIndexOperator
+		indexCoordinator *index.IndexCoordinator
 	)
 
 	BeforeEach(func() {

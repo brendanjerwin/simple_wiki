@@ -46,11 +46,11 @@ import (
 // package's pre-Phase-7 legacy-key constants are about to be deleted
 // once the dual-read goes away.
 const (
-	connectorsKeyWiki         = "wiki"
-	connectorsKeyConnectors   = "connectors"
-	connectorsKeyBindings     = "bindings"      // new shape
+	connectorsKeyWiki          = "wiki"
+	connectorsKeyConnectors    = "connectors"
+	connectorsKeyBindings      = "bindings"      // new shape
 	connectorsKeySubscriptions = "subscriptions" // legacy shape
-	connectorsKeyAdapterState = "adapter_state"
+	connectorsKeyAdapterState  = "adapter_state"
 
 	// Engine-owned per-binding fields (new shape). These are the keys
 	// that stay top-level on each translated entry; every other key on
@@ -573,11 +573,11 @@ func translateLegacyEntry(kindName string, m map[string]any) map[string]any {
 
 // Per-kind adapter_state keys that the migration translates or drops.
 const (
-	keepLegacyKeyItemIDMap = "item_id_map"   // legacy Keep: indexed by uid
-	keepKeyItemMapping     = "item_mapping"  // new Keep: indexed by ServerID
-	keepKeyServerID        = "server_id"
-	keepKeyBaseVersion     = "base_version"
-	keepKeyClientID        = "client_id"
+	keepLegacyKeyItemIDMap    = "item_id_map"  // legacy Keep: indexed by uid
+	keepKeyItemMapping        = "item_mapping" // new Keep: indexed by ServerID
+	keepKeyServerID           = "server_id"
+	keepKeyBaseVersion        = "base_version"
+	keepKeyClientID           = "client_id"
 	tasksLegacyKeySyncedItems = "synced_items" // dropped: causal divergence replaces fingerprint
 )
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/jcelliott/lumber"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -14,6 +13,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

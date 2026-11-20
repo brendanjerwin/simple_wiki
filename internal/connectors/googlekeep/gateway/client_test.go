@@ -508,9 +508,9 @@ var _ = Describe("KeepClient.CreateListWithItems", func() {
 
 	When("creating a list with initial items", func() {
 		var (
-			result   gateway.CreateListResult
-			err      error
-			reqBody  map[string]any
+			result     gateway.CreateListResult
+			err        error
+			reqBody    map[string]any
 			fakeServer *httptest.Server
 		)
 
@@ -1184,4 +1184,3 @@ var _ = Describe("KeepClient.Changes 403 classification", func() {
 		})
 	})
 })
-

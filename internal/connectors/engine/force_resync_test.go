@@ -78,9 +78,9 @@ var _ = Describe("Engine.ForceFullResync", func() {
 
 	When("a paused binding exists for (profile, page, listName)", func() {
 		var (
-			oldState connectors.AdapterState
-			newState connectors.AdapterState
-			resyncErr error
+			oldState     connectors.AdapterState
+			newState     connectors.AdapterState
+			resyncErr    error
 			savedBinding connectors.Binding
 		)
 

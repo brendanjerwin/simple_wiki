@@ -716,8 +716,8 @@ var _ = Describe("defaultBackend.DeleteItem", func() {
 
 	When("ifMatch does not match the current item ETag", func() {
 		var (
-			err              error
-			deleteFnCalled   bool
+			err            error
+			deleteFnCalled bool
 		)
 
 		BeforeEach(func() {

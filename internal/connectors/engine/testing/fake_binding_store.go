@@ -27,20 +27,20 @@ type FakeBindingStore struct {
 	// matching method returns the error (and the recorded-call slice
 	// still records the attempt). Cleared after one consumption to
 	// match FakeAdapter's queue semantics.
-	loadBindingsErrors                []error
-	findBindingResponses              []findBindingResponse
-	saveBindingErrors                 []error
-	deleteBindingErrors               []error
-	withProfileLockErrors             []error
-	listAllProfilesWithBindingsResps  []listProfilesResponse
+	loadBindingsErrors               []error
+	findBindingResponses             []findBindingResponse
+	saveBindingErrors                []error
+	deleteBindingErrors              []error
+	withProfileLockErrors            []error
+	listAllProfilesWithBindingsResps []listProfilesResponse
 
 	// Recorded calls (parallel slices, ordered by call sequence).
-	RecordedLoadBindings                  []recordedLoadBindings
-	RecordedFindBinding                   []recordedFindBinding
-	RecordedSaveBinding                   []recordedSaveBinding
-	RecordedDeleteBinding                 []recordedDeleteBinding
-	RecordedWithProfileLock               []wikipage.PageIdentifier
-	RecordedListAllProfilesWithBindings   []connectors.ConnectorKind
+	RecordedLoadBindings                []recordedLoadBindings
+	RecordedFindBinding                 []recordedFindBinding
+	RecordedSaveBinding                 []recordedSaveBinding
+	RecordedDeleteBinding               []recordedDeleteBinding
+	RecordedWithProfileLock             []wikipage.PageIdentifier
+	RecordedListAllProfilesWithBindings []connectors.ConnectorKind
 
 	// CallOrder records the names of methods called, in order. Tests
 	// asserting lock-acquire-before-mutation use this to verify, e.g.,

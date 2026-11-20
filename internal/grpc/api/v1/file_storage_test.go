@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/filestore"
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"

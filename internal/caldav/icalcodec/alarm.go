@@ -13,9 +13,9 @@ import (
 // Sentinel errors so callers can distinguish "no alarm" from
 // "malformed alarm" without parsing error messages.
 var (
-	errEmptyAlarmPayload      = errors.New("icalcodec: empty alarm payload")
-	errAlarmMissingTrigger    = errors.New("icalcodec: alarm payload missing trigger")
-	errVALARMMissingTrigger   = errors.New("icalcodec: VALARM missing TRIGGER")
+	errEmptyAlarmPayload    = errors.New("icalcodec: empty alarm payload")
+	errAlarmMissingTrigger  = errors.New("icalcodec: alarm payload missing trigger")
+	errVALARMMissingTrigger = errors.New("icalcodec: VALARM missing TRIGGER")
 )
 
 // AlarmPayload is the JSON shape stored in

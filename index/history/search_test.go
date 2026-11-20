@@ -54,7 +54,7 @@ var _ = Describe("Search", func() {
 
 		It("filters by page_filter", func() {
 			results, err := idx.SearchHistory(history.HistorySearchFilter{
-				Query:          "fox",
+				Query:      "fox",
 				PageFilter: "page-a",
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -87,7 +87,7 @@ var _ = Describe("Search", func() {
 
 		It("returns HistorySearchResult fields", func() {
 			results, err := idx.SearchHistory(history.HistorySearchFilter{
-				Query:          "fox",
+				Query:      "fox",
 				PageFilter: "page-a",
 			})
 			Expect(err).NotTo(HaveOccurred())

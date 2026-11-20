@@ -640,7 +640,7 @@ var _ = Describe("Track Parsing and Simplification", func() {
 			// Let's place a query point p right in the middle at 180.0 Lon (which maps to -180.0).
 			// If wrapping is not handled, end Lon - start Lon would be -179 - 179 = -358.
 			// With wrapping, end Lon - start Lon is 2.0 degrees, and p lies on the segment (distance ~ 0).
-			
+
 			// Let's verify by simplifying a track that crosses the antimeridian
 			// We have three points:
 			// P1: (0.0, 179.0)
@@ -656,7 +656,7 @@ var _ = Describe("Track Parsing and Simplification", func() {
 					},
 				},
 			}
-			
+
 			// Simplify with epsilon larger than 0.001 but smaller than the un-wrapped distance.
 			// If wrapped properly, P2 is only 0.001 degrees lat away from the segment P1-P3.
 			// If we simplify with ceiling 2 and epsilon 0.002, it should simplify to P1 and P3.

@@ -129,8 +129,8 @@ var _ = Describe("tasksProfileTokenStore", func() {
 	Describe("LoadRefreshToken", func() {
 		When("no credentials are persisted on the profile", func() {
 			var (
-				token    string
-				loadErr  error
+				token   string
+				loadErr error
 			)
 
 			BeforeEach(func() {

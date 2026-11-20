@@ -415,8 +415,8 @@ func (b *keepMutatorBridge) Unsuppress(profileID wikipage.PageIdentifier, page, 
 // without filtering, every inbound apply would re-trigger the same
 // connector's outbound debounce loop.
 const (
-	keepSyncIdentityLogin           = "system:keep-sync"
-	keepConnectorSyncIdentityLogin  = "system:connector-sync"
+	keepSyncIdentityLogin          = "system:keep-sync"
+	keepConnectorSyncIdentityLogin = "system:connector-sync"
 )
 
 // OnChecklistMutated implements checklistmutator.Subscriber.

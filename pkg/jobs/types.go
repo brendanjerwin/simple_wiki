@@ -16,10 +16,10 @@ type QueueStats struct {
 
 // JobProgress represents the overall progress of all job queues.
 type JobProgress struct {
-	IsRunning    bool
-	QueueStats   []*QueueStats
-	TotalActive  int32
-	TotalQueues  int32
+	IsRunning   bool
+	QueueStats  []*QueueStats
+	TotalActive int32
+	TotalQueues int32
 }
 
 // IProvideJobProgress defines the interface for components that can provide job queue progress.

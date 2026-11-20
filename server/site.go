@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/filestore"
-	"github.com/brendanjerwin/simple_wiki/pkg/chatattachment"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/migrations/canonicalize"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatattachment"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server/pagestore"

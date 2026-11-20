@@ -107,11 +107,11 @@ var _ = Describe("Engine.Unbind", func() {
 	)
 
 	var (
-		fa     *enginetesting.FakeAdapter
-		fbs    *enginetesting.FakeBindingStore
-		lease  *connectors.LeaseTable
-		eng    *engine.Engine
-		ctx    context.Context
+		fa    *enginetesting.FakeAdapter
+		fbs   *enginetesting.FakeBindingStore
+		lease *connectors.LeaseTable
+		eng   *engine.Engine
+		ctx   context.Context
 	)
 
 	BeforeEach(func() {

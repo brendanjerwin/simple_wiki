@@ -348,7 +348,7 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 								"subscriptions": []any{
 									map[string]any{
 										"page":           "shopping",
-										"list_name":     "groceries",
+										"list_name":      "groceries",
 										"remote_list_id": "keep-note-1",
 										"keep_cursor":    "cursor-token",
 										"item_id_map": map[string]any{
@@ -456,7 +456,7 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 								"subscriptions": []any{
 									map[string]any{
 										"page":           "shopping",
-										"list_name":     "groceries",
+										"list_name":      "groceries",
 										"remote_list_id": "keep-note-1",
 										"item_id_map": map[string]any{
 											"uid-X": "server-X",
@@ -506,7 +506,7 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 								"subscriptions": []any{
 									map[string]any{
 										"page":           "shopping",
-										"list_name":     "groceries",
+										"list_name":      "groceries",
 										"remote_list_id": "tasklist-1",
 										"item_id_map":    map[string]any{"uid-1": "task-1"},
 										"synced_items": map[string]any{

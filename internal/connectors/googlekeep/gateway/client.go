@@ -473,11 +473,11 @@ func classifyKeepForbidden(body []byte) error {
 // at the boundary.
 
 type wireChangesRequest struct {
-	Nodes           []wireNode     `json:"nodes"`
-	ClientTimestamp string         `json:"clientTimestamp"`
-	RequestHeader   wireReqHeader  `json:"requestHeader"`
-	TargetVersion   string         `json:"targetVersion,omitempty"`
-	UserInfo        *wireUserInfo  `json:"userInfo,omitempty"`
+	Nodes           []wireNode    `json:"nodes"`
+	ClientTimestamp string        `json:"clientTimestamp"`
+	RequestHeader   wireReqHeader `json:"requestHeader"`
+	TargetVersion   string        `json:"targetVersion,omitempty"`
+	UserInfo        *wireUserInfo `json:"userInfo,omitempty"`
 }
 
 // wireUserInfo carries label CRUD on the request side; on the response
@@ -513,14 +513,14 @@ type wireCapEntry struct {
 }
 
 type wireChangesResponse struct {
-	Kind            string             `json:"kind"`
-	ToVersion       *string            `json:"toVersion"`
-	Nodes           []wireNode         `json:"nodes"`
-	UserInfo        *wireUserInfo      `json:"userInfo,omitempty"`
-	WriteResults    []wireWriteResult  `json:"writeResults,omitempty"`
-	ForceFullResync bool               `json:"forceFullResync"`
-	Truncated       bool               `json:"truncated"`
-	Incremental     bool               `json:"incremental"`
+	Kind            string            `json:"kind"`
+	ToVersion       *string           `json:"toVersion"`
+	Nodes           []wireNode        `json:"nodes"`
+	UserInfo        *wireUserInfo     `json:"userInfo,omitempty"`
+	WriteResults    []wireWriteResult `json:"writeResults,omitempty"`
+	ForceFullResync bool              `json:"forceFullResync"`
+	Truncated       bool              `json:"truncated"`
+	Incremental     bool              `json:"incremental"`
 }
 
 // wireWriteResult is the per-pushed-node status entry. Best-guess
@@ -535,14 +535,14 @@ type wireWriteResult struct {
 }
 
 type wireNode struct {
-	Kind           string         `json:"kind,omitempty"`
-	ID             string         `json:"id"`
-	ServerID       string         `json:"serverId,omitempty"`
-	ParentID       string         `json:"parentId,omitempty"`
-	ParentServerID string         `json:"parentServerId,omitempty"`
-	Type           string         `json:"type"`
-	Title          string         `json:"title,omitempty"`
-	Text           string         `json:"text,omitempty"`
+	Kind           string `json:"kind,omitempty"`
+	ID             string `json:"id"`
+	ServerID       string `json:"serverId,omitempty"`
+	ParentID       string `json:"parentId,omitempty"`
+	ParentServerID string `json:"parentServerId,omitempty"`
+	Type           string `json:"type"`
+	Title          string `json:"title,omitempty"`
+	Text           string `json:"text,omitempty"`
 	// Checked is always emitted: omitempty would drop "checked":false
 	// for unchecked items, and Keep interprets a missing checked
 	// field as "set to false" rather than "leave alone." That caused

@@ -99,7 +99,6 @@ func (s *DiskFileStorer) Open(hash string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-
 // validateHashPath validates that the hash does not contain path traversal characters or null bytes.
 func validateHashPath(hash string) error {
 	if strings.Contains(hash, "/") || strings.Contains(hash, "..") ||

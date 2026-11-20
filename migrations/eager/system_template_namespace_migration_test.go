@@ -120,4 +120,3 @@ var _ = Describe("SystemTemplateNamespaceMigrationJob", func() {
 		})
 	})
 })
-

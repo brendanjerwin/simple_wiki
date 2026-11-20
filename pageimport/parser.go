@@ -43,14 +43,14 @@ type ArrayOperation struct {
 
 // ParsedRecord represents a single row from the CSV after parsing.
 type ParsedRecord struct {
-	RowNumber        int                // 1-indexed row number (excluding header)
-	Identifier       string             // The page identifier
-	Template         string             // Template to apply (optional)
-	Frontmatter      map[string]any     // Scalar fields to set
-	ArrayOps         []ArrayOperation   // Array field operations
-	FieldsToDelete   []string           // Fields marked with [[DELETE]] (scalars and entire arrays)
-	ValidationErrors []string           // Per-record validation errors
-	Warnings         []string           // Per-record warnings (e.g., type coercion)
+	RowNumber        int              // 1-indexed row number (excluding header)
+	Identifier       string           // The page identifier
+	Template         string           // Template to apply (optional)
+	Frontmatter      map[string]any   // Scalar fields to set
+	ArrayOps         []ArrayOperation // Array field operations
+	FieldsToDelete   []string         // Fields marked with [[DELETE]] (scalars and entire arrays)
+	ValidationErrors []string         // Per-record validation errors
+	Warnings         []string         // Per-record warnings (e.g., type coercion)
 }
 
 // ParseResult contains the result of parsing a CSV file.

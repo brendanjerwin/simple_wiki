@@ -35,4 +35,3 @@ type FileStorer interface {
 	// Caller must close the returned ReadCloser when done.
 	Open(hash string) (io.ReadCloser, error)
 }
-

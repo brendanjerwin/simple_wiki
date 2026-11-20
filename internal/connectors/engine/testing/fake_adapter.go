@@ -45,45 +45,45 @@ type FakeAdapter struct {
 	// Per-method programmable responses. When the slice has entries,
 	// each call shifts the front; when empty, the per-method default
 	// (zero-value + nil error) is returned.
-	pullRemoteResponses           []pullRemoteResponse
-	insertRemoteResponses         []refResponse
-	patchRemoteResponses          []refResponse
-	deleteRemoteResponses         []errResponse
-	remoteToWikiResponses         []wikiItemResponse
-	wikiToRemoteResponses         []remoteItemResponse
-	advanceCursorResponses        []connectors.Binding
-	syncCollectionStateResponses  []syncCollectionStateResponse
-	seedBindingStateResponses     []adapterStateResponse
-	validateRemoteBindingResponses []errResponse
-	rebuildAdapterStateResponses  []adapterStateResponse
+	pullRemoteResponses             []pullRemoteResponse
+	insertRemoteResponses           []refResponse
+	patchRemoteResponses            []refResponse
+	deleteRemoteResponses           []errResponse
+	remoteToWikiResponses           []wikiItemResponse
+	wikiToRemoteResponses           []remoteItemResponse
+	advanceCursorResponses          []connectors.Binding
+	syncCollectionStateResponses    []syncCollectionStateResponse
+	seedBindingStateResponses       []adapterStateResponse
+	validateRemoteBindingResponses  []errResponse
+	rebuildAdapterStateResponses    []adapterStateResponse
 	listRemoteCollectionsResponses  []listCollectionsResponse
 	createRemoteCollectionResponses []createRemoteCollectionResponse
 	titleSyncResponses              []titleResponse
-	encodeAdapterStateResponses   []encodeResponse
-	decodeAdapterStateResponses   []adapterStateResponse
-	readRemoteByRefResponses      []remoteItemResponse
-	classifyErrorResponses        []connectors.ErrorClass
+	encodeAdapterStateResponses     []encodeResponse
+	decodeAdapterStateResponses     []adapterStateResponse
+	readRemoteByRefResponses        []remoteItemResponse
+	classifyErrorResponses          []connectors.ErrorClass
 
 	// Recorded calls (parallel slices, ordered by call sequence).
-	RecordedPullRemote            []recordedPullRemote
-	RecordedInsertRemote          []recordedInsertRemote
-	RecordedPatchRemote           []recordedPatchRemote
-	RecordedDeleteRemote          []recordedDeleteRemote
-	RecordedRemoteToWiki          []connectors.RemoteItem
-	RecordedWikiToRemote          []connectors.WikiItem
-	RecordedAdvanceCursor         []recordedAdvanceCursor
-	RecordedSeedBindingState      []recordedSeedBindingState
-	RecordedValidateRemoteBinding []recordedValidateRemoteBinding
-	RecordedRebuildAdapterState   []connectors.Binding
+	RecordedPullRemote             []recordedPullRemote
+	RecordedInsertRemote           []recordedInsertRemote
+	RecordedPatchRemote            []recordedPatchRemote
+	RecordedDeleteRemote           []recordedDeleteRemote
+	RecordedRemoteToWiki           []connectors.RemoteItem
+	RecordedWikiToRemote           []connectors.WikiItem
+	RecordedAdvanceCursor          []recordedAdvanceCursor
+	RecordedSeedBindingState       []recordedSeedBindingState
+	RecordedValidateRemoteBinding  []recordedValidateRemoteBinding
+	RecordedRebuildAdapterState    []connectors.Binding
 	RecordedListRemoteCollections  []wikipage.PageIdentifier
 	RecordedCreateRemoteCollection []recordedCreateRemoteCollection
 	RecordedFetchRemoteListTitle   []recordedTitleSync
-	RecordedEncodeAdapterState    []connectors.AdapterState
-	RecordedDecodeAdapterState    []map[string]any
-	RecordedReadRemoteByRef       []recordedReadRemoteByRef
-	RecordedClassifyError         []error
-	RecordedRefreshItemBaseline   []recordedRefreshItemBaseline
-	RecordedSyncCollectionState   []recordedSyncCollectionState
+	RecordedEncodeAdapterState     []connectors.AdapterState
+	RecordedDecodeAdapterState     []map[string]any
+	RecordedReadRemoteByRef        []recordedReadRemoteByRef
+	RecordedClassifyError          []error
+	RecordedRefreshItemBaseline    []recordedRefreshItemBaseline
+	RecordedSyncCollectionState    []recordedSyncCollectionState
 }
 
 type pullRemoteResponse struct {

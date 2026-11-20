@@ -17,11 +17,11 @@ type alertMeta struct {
 
 // alertMetaByType maps each AlertType to its display label and icon.
 var alertMetaByType = map[AlertType]alertMeta{
-	AlertNote:      {label: "Note", icon: "\u2139\ufe0f"},      // ℹ️
-	AlertTip:       {label: "Tip", icon: "\U0001f4a1"},         // 💡
-	AlertImportant: {label: "Important", icon: "\U0001f4cc"},   // 📌
-	AlertWarning:   {label: "Warning", icon: "\u26a0\ufe0f"},   // ⚠️
-	AlertCaution:   {label: "Caution", icon: "\U0001f6d1"},     // 🛑
+	AlertNote:      {label: "Note", icon: "\u2139\ufe0f"},    // ℹ️
+	AlertTip:       {label: "Tip", icon: "\U0001f4a1"},       // 💡
+	AlertImportant: {label: "Important", icon: "\U0001f4cc"}, // 📌
+	AlertWarning:   {label: "Warning", icon: "\u26a0\ufe0f"}, // ⚠️
+	AlertCaution:   {label: "Caution", icon: "\U0001f6d1"},   // 🛑
 }
 
 // alertNodeRenderer renders AlertNode elements as styled GitHub-style callout boxes.

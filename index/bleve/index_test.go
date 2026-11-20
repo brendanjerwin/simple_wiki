@@ -60,9 +60,9 @@ func (m *MockPageReader) ReadMarkdown(identifier wikipage.PageIdentifier) (wikip
 
 var _ = Describe("Index", func() {
 	var (
-		index               *bleve.Index
-		mockReader          *MockPageReader
-		frontmatterIndex    *frontmatter.Index
+		index            *bleve.Index
+		mockReader       *MockPageReader
+		frontmatterIndex *frontmatter.Index
 	)
 
 	BeforeEach(func() {

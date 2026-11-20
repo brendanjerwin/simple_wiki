@@ -1208,7 +1208,7 @@ var _ = Describe("a2aServer progress mirroring", func() {
 		BeforeEach(func() {
 			const chunkRunes = 50
 			numChunks = (a2aProgressMaxRunes / chunkRunes) + 5 // clearly exceeds the limit
-			sink := make(chan string, numChunks)                // buffered to capture every value
+			sink := make(chan string, numChunks)               // buffered to capture every value
 			client = &a2aTaskClient{task: &a2aTask{}, progressSink: sink}
 			chunkText := strings.Repeat("x", chunkRunes)
 
@@ -1412,7 +1412,7 @@ var _ = Describe("a2aServer snapshot progress branch", func() {
 			t := &a2aTask{
 				ID: "a2a-snap", ContextID: "ctx-s", UserText: "q",
 				Caller: a2aCaller{ClientName: a2aCallerTailnet},
-				State: a2aStateWorking, ProgressText: "live output",
+				State:  a2aStateWorking, ProgressText: "live output",
 			}
 			snap = srv.snapshot(t)
 		})

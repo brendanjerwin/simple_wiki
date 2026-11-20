@@ -80,7 +80,7 @@ func splitTOMLContent(content []byte) []string {
 	rest := str[tomlDelimiterLength:]
 	closingIndex := strings.Index(rest, "\n+++\n")
 	var frontmatter, bodyContent string
-	
+
 	if closingIndex == -1 {
 		// Check if it ends with \n+++ (no content after frontmatter)
 		closingIndex = strings.Index(rest, "\n+++")
@@ -89,10 +89,10 @@ func splitTOMLContent(content []byte) []string {
 		}
 		// Handle case where frontmatter ends without trailing content
 		frontmatter = rest[:closingIndex+1] // Include the newline before +++
-		bodyContent = "" // No body content
+		bodyContent = ""                    // No body content
 	} else {
 		// Normal case with content after frontmatter
-		frontmatter = rest[:closingIndex+1] // Include the newline before +++
+		frontmatter = rest[:closingIndex+1]               // Include the newline before +++
 		bodyContent = rest[closingIndex+tomlStartOffset:] // Skip "\n+++\n"
 	}
 
@@ -129,12 +129,11 @@ func findDotNotationPrefixes(frontmatter string) []string {
 	return prefixes
 }
 
-
 // tomlParseResult holds the parsed TOML structure
 type tomlParseResult struct {
-	dotAssignments  map[string][]string // prefix -> []assignments
-	tableContent    map[string][]string // table -> []content lines
-	ungroupedLines  []string
+	dotAssignments map[string][]string // prefix -> []assignments
+	tableContent   map[string][]string // table -> []content lines
+	ungroupedLines []string
 }
 
 func transformTOMLDotNotation(frontmatter string) string {
@@ -149,12 +148,12 @@ func parseTOMLLines(lines []string) *tomlParseResult {
 		tableContent:   make(map[string][]string),
 		ungroupedLines: []string{},
 	}
-	
+
 	currentTable := ""
-	
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		
+
 		// Skip empty lines and comments
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -175,7 +174,7 @@ func parseTOMLLines(lines []string) *tomlParseResult {
 			result.ungroupedLines = append(result.ungroupedLines, trimmed)
 		}
 	}
-	
+
 	return result
 }
 
@@ -197,10 +196,10 @@ func processDotNotationAssignment(trimmed string, dotAssignments map[string][]st
 	if len(matches) <= 2 {
 		return false
 	}
-	
+
 	fullKey := matches[1]
 	value := matches[2]
-	
+
 	// Extract prefix and key
 	parts := strings.Split(fullKey, dotSeparator)
 	if len(parts) > 1 {
@@ -214,7 +213,7 @@ func processDotNotationAssignment(trimmed string, dotAssignments map[string][]st
 
 func buildTransformedTOML(parsed *tomlParseResult) string {
 	var result []string
-	
+
 	// Add ungrouped lines first (if any)
 	if len(parsed.ungroupedLines) > 0 {
 		result = append(result, parsed.ungroupedLines...)
@@ -222,7 +221,7 @@ func buildTransformedTOML(parsed *tomlParseResult) string {
 
 	// Get all unique table names
 	allTables := collectAllTableNames(parsed.tableContent, parsed.dotAssignments)
-	
+
 	// Sort tables for consistent output
 	var sortedTables []string
 	for table := range allTables {
@@ -233,12 +232,12 @@ func buildTransformedTOML(parsed *tomlParseResult) string {
 	// Build each table section
 	for _, table := range sortedTables {
 		result = append(result, "["+table+"]")
-		
+
 		// Add dot notation assignments first
 		if assignments, exists := parsed.dotAssignments[table]; exists {
 			result = append(result, assignments...)
 		}
-		
+
 		// Add existing table content
 		if content, exists := parsed.tableContent[table]; exists {
 			result = append(result, content...)

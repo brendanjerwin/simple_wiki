@@ -49,8 +49,8 @@ var _ = Describe("HasSubtasks", func() {
 var _ = Describe("FlattenSubtasks", func() {
 	When("tasks have parents set", func() {
 		var (
-			input    []translator.Task
-			result   []translator.Task
+			input  []translator.Task
+			result []translator.Task
 		)
 
 		BeforeEach(func() {

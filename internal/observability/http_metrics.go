@@ -12,9 +12,9 @@ import (
 // HTTPMetrics provides metrics for HTTP request handling.
 type HTTPMetrics struct {
 	requestDurationSeconds metric.Float64Histogram
-	requestTotal    metric.Int64Counter
-	errorTotal      metric.Int64Counter
-	activeRequests  metric.Int64UpDownCounter
+	requestTotal           metric.Int64Counter
+	errorTotal             metric.Int64Counter
+	activeRequests         metric.Int64UpDownCounter
 }
 
 // NewHTTPMetrics creates a new HTTPMetrics instance.
@@ -60,9 +60,9 @@ func NewHTTPMetrics() (*HTTPMetrics, error) {
 
 	return &HTTPMetrics{
 		requestDurationSeconds: requestDurationSeconds,
-		requestTotal:    requestTotal,
-		errorTotal:      errorTotal,
-		activeRequests:  activeRequests,
+		requestTotal:           requestTotal,
+		errorTotal:             errorTotal,
+		activeRequests:         activeRequests,
 	}, nil
 }
 
