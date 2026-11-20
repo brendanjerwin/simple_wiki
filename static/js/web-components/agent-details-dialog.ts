@@ -165,7 +165,8 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       }
 
       .status-badge.status-running,
-      .status-badge.status-warn {
+      .status-badge.status-warn,
+      .status-badge.status-interrupted {
         background: var(--color-warning-bg);
         color: var(--color-warning-text);
         border-color: var(--color-warning);
@@ -469,6 +470,7 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       case ScheduleStatus.TIMEOUT: return 'Timeout';
       case ScheduleStatus.MAX_TURNS: return 'Max Turns';
       case ScheduleStatus.WARN: return 'Warn';
+      case ScheduleStatus.INTERRUPTED: return 'Interrupted';
       case ScheduleStatus.UNSPECIFIED:
       default:
         return 'Unknown';
@@ -483,6 +485,7 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       case ScheduleStatus.MAX_TURNS: return 'status-max-turns';
       case ScheduleStatus.WARN: return 'status-warn';
       case ScheduleStatus.RUNNING: return 'status-running';
+      case ScheduleStatus.INTERRUPTED: return 'status-interrupted';
       case ScheduleStatus.UNSPECIFIED:
       default:
         return 'status-unknown';

@@ -260,17 +260,56 @@ var _ = Describe("ScheduledTurnDispatcher", func() {
 				Expect(drained).To(Equal(1))
 			})
 
-			It("should deliver an ERROR outcome to the completion channel", func() {
+			It("should deliver an INTERRUPTED outcome to the completion channel", func() {
 				var outcome *server.ScheduledTurnOutcome
 				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
 				Expect(outcome).NotTo(BeNil())
-				Expect(outcome.TerminalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+				Expect(outcome.TerminalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_INTERRUPTED))
+			})
+
+			It("should include 'interrupted:' prefix in the error message", func() {
+				var outcome *server.ScheduledTurnOutcome
+				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
+				Expect(outcome.ErrorMessage).To(HavePrefix("interrupted:"))
 			})
 
 			It("should include the drain reason in the error message", func() {
 				var outcome *server.ScheduledTurnOutcome
 				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
 				Expect(outcome.ErrorMessage).To(ContainSubstring("process shutting down"))
+			})
+		})
+
+		Describe("when a turn has been pending for several seconds before drain", func() {
+			var completion <-chan *server.ScheduledTurnOutcome
+			var clock *server.FakeClock
+
+			BeforeEach(func() {
+				clock = server.NewFakeClock(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+				timedDispatcher := server.NewScheduledTurnDispatcherWithClock(clock)
+				_, unsubscribe := timedDispatcher.Subscribe()
+				DeferCleanup(unsubscribe)
+
+				var err error
+				completion, err = timedDispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "r-drain-timed", Page: "p1", Prompt: "do",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				clock.Advance(5 * time.Minute)
+				timedDispatcher.DrainPending("deploy")
+			})
+
+			It("should report a non-zero DurationSeconds", func() {
+				var outcome *server.ScheduledTurnOutcome
+				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
+				Expect(outcome.DurationSeconds).To(BeNumerically(">", 0))
+			})
+
+			It("should report the correct elapsed duration", func() {
+				var outcome *server.ScheduledTurnOutcome
+				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
+				Expect(outcome.DurationSeconds).To(Equal(int32(300)))
 			})
 		})
 
