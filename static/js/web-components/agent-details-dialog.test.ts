@@ -295,6 +295,51 @@ describe('AgentDetailsDialog', () => {
     });
   });
 
+  describe('when an INTERRUPTED schedule is rendered', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'deploy', cron: '0 0 9 * * *', lastStatus: ScheduleStatus.INTERRUPTED }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('p');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should render the status badge with text Interrupted', () => {
+      const badge = el.shadowRoot?.querySelector('[data-schedule-id="deploy"] .status-badge');
+      expect(badge?.textContent?.trim()).to.equal('Interrupted');
+    });
+
+    it('should apply the status-interrupted class to the badge', () => {
+      const badge = el.shadowRoot?.querySelector('[data-schedule-id="deploy"] .status-badge');
+      expect(badge?.classList.contains('status-interrupted')).to.equal(true);
+    });
+
+    it('should not apply the status-error class to the badge', () => {
+      const badge = el.shadowRoot?.querySelector('[data-schedule-id="deploy"] .status-badge');
+      expect(badge?.classList.contains('status-error')).to.equal(false);
+    });
+
+    it('should not render an Unknown fallback label', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text).to.not.include('Unknown');
+    });
+  });
+
   describe('when a schedule has an explicit timezone', () => {
     let fakeClient: FakeAgentClient;
 
