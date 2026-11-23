@@ -31,7 +31,7 @@ type scheduledTurnContextKey string
 // Phase 7 manual verification.
 
 var _ = Describe("scheduledTurnClient SessionUpdate max_turns enforcement", func() {
-	When("AgentMessageChunk notifications reach maxTurns", func() {
+	When("ToolCall notifications reach maxTurns (no-messageId fallback path)", func() {
 		var (
 			client       *scheduledTurnClient
 			cancelCalls  atomic.Int32
@@ -45,17 +45,23 @@ var _ = Describe("scheduledTurnClient SessionUpdate max_turns enforcement", func
 			}
 			client = newScheduledTurnClient("test-page", 3, nil, recordCancel)
 
-			chunkNotification := acp.SessionNotification{
+			toolCallNotification := acp.SessionNotification{
 				SessionId: "session-1",
-				Update:    acp.UpdateAgentMessageText("hi"),
+				Update:    acp.StartToolCall("tc-1", "Read file"),
 			}
 
-			Expect(client.SessionUpdate(context.Background(), chunkNotification)).To(Succeed())
-			Expect(client.SessionUpdate(context.Background(), chunkNotification)).To(Succeed())
-			Expect(client.SessionUpdate(context.Background(), chunkNotification)).To(Succeed())
+			Expect(client.SessionUpdate(context.Background(), toolCallNotification)).To(Succeed())
+			Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+				SessionId: "session-1",
+				Update:    acp.StartToolCall("tc-2", "Write file"),
+			})).To(Succeed())
+			Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+				SessionId: "session-1",
+				Update:    acp.StartToolCall("tc-3", "List files"),
+			})).To(Succeed())
 		})
 
-		It("should call cancel exactly once after the third chunk", func() {
+		It("should call cancel exactly once after the third ToolCall", func() {
 			Expect(cancelCalls.Load()).To(Equal(int32(1)))
 		})
 
@@ -63,13 +69,12 @@ var _ = Describe("scheduledTurnClient SessionUpdate max_turns enforcement", func
 			Expect(client.HitLimit()).To(BeTrue())
 		})
 
-		When("a fourth AgentMessageChunk notification arrives after the limit was hit", func() {
+		When("a fourth ToolCall notification arrives after the limit was hit", func() {
 			BeforeEach(func() {
-				chunkNotification := acp.SessionNotification{
+				Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
 					SessionId: "session-1",
-					Update:    acp.UpdateAgentMessageText("again"),
-				}
-				Expect(client.SessionUpdate(context.Background(), chunkNotification)).To(Succeed())
+					Update:    acp.StartToolCall("tc-4", "Extra tool"),
+				})).To(Succeed())
 			})
 
 			It("should not call cancel again (first-trigger latching)", func() {
@@ -207,7 +212,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate message-boundary turn counti
 })
 
 var _ = Describe("scheduledTurnClient SessionUpdate with non-message updates", func() {
-	When("a ToolCall update is received before maxTurns is reached", func() {
+	When("a ToolCall update is received and maxTurns has not been reached", func() {
 		var (
 			client       *scheduledTurnClient
 			cancelCalls  atomic.Int32
@@ -233,12 +238,179 @@ var _ = Describe("scheduledTurnClient SessionUpdate with non-message updates", f
 			Expect(updateErr).NotTo(HaveOccurred())
 		})
 
-		It("should not count toward the turn limit", func() {
+		It("should not trip the limit with one ToolCall below maxTurns=3", func() {
 			Expect(client.HitLimit()).To(BeFalse())
 		})
 
 		It("should not invoke cancel", func() {
 			Expect(cancelCalls.Load()).To(Equal(int32(0)))
+		})
+
+		It("should count the ToolCall as one turn", func() {
+			Expect(client.turnCount.Load()).To(Equal(int32(1)))
+		})
+	})
+})
+
+var _ = Describe("scheduledTurnClient SessionUpdate fallback turn counting (no messageId)", func() {
+	When("many AgentMessageChunks arrive with no messageId followed by one ToolCall", func() {
+		// This is the decisive scenario from #1490: the ACP client does not populate
+		// messageId. Under the fix, text chunks do NOT count as turns; ToolCall
+		// notifications do.
+		var (
+			client      *scheduledTurnClient
+			cancelCalls atomic.Int32
+		)
+
+		BeforeEach(func() {
+			cancelCalls.Store(0)
+			client = newScheduledTurnClient("test-page", 500, nil, func() {
+				cancelCalls.Add(1)
+			})
+
+			// Send 100 text chunks with no messageId.
+			for range 100 {
+				Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+					SessionId: "session-1",
+					Update:    acp.UpdateAgentMessageText("delta"),
+				})).To(Succeed())
+			}
+
+			// One ToolCall notification represents the real "turn" boundary.
+			Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+				SessionId: "session-1",
+				Update:    acp.StartToolCall("tc-1", "Read"),
+			})).To(Succeed())
+		})
+
+		It("should count exactly one turn (the ToolCall, not the text chunks)", func() {
+			Expect(client.turnCount.Load()).To(Equal(int32(1)))
+		})
+
+		It("should record all 100 chunks in chunkCount", func() {
+			chunks, _ := client.Counts()
+			Expect(chunks).To(Equal(int32(100)))
+		})
+
+		It("should record zero messageCount (no messageId was seen)", func() {
+			_, msgs := client.Counts()
+			Expect(msgs).To(Equal(int32(0)))
+		})
+
+		It("should not trip the 500-turn budget", func() {
+			Expect(client.HitLimit()).To(BeFalse())
+		})
+
+		It("should not invoke cancel", func() {
+			Expect(cancelCalls.Load()).To(Equal(int32(0)))
+		})
+	})
+
+	When("ToolCalls arrive while messageId chunks are also present", func() {
+		// Guard condition: once a messageId has been seen, ToolCall notifications
+		// must NOT increment turnCount (to avoid over-counting in the messageId path).
+		var (
+			client *scheduledTurnClient
+		)
+
+		BeforeEach(func() {
+			client = newScheduledTurnClient("test-page", 500, nil, func() {})
+
+			// Send one chunk with a messageId to enter messageId mode.
+			msgID := "msg-uuid-1"
+			Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+				SessionId: "session-1",
+				Update: acp.SessionUpdate{
+					AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+						Content:   acp.TextBlock("chunk"),
+						MessageId: &msgID,
+					},
+				},
+			})).To(Succeed())
+
+			// A ToolCall should NOT count now that messageId mode is active.
+			Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+				SessionId: "session-1",
+				Update:    acp.StartToolCall("tc-1", "Read"),
+			})).To(Succeed())
+		})
+
+		It("should count exactly one turn (the messageId chunk, not the ToolCall)", func() {
+			Expect(client.turnCount.Load()).To(Equal(int32(1)))
+		})
+
+		It("should record one messageCount", func() {
+			_, msgs := client.Counts()
+			Expect(msgs).To(Equal(int32(1)))
+		})
+	})
+
+	When("chunks with no messageId arrive without any ToolCall", func() {
+		// Without messageId and without ToolCall, nothing should count as a turn.
+		var (
+			client *scheduledTurnClient
+		)
+
+		BeforeEach(func() {
+			client = newScheduledTurnClient("test-page", 10, nil, func() {})
+
+			for range 10 {
+				Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+					SessionId: "session-1",
+					Update:    acp.UpdateAgentMessageText("text"),
+				})).To(Succeed())
+			}
+		})
+
+		It("should count zero turns", func() {
+			Expect(client.turnCount.Load()).To(Equal(int32(0)))
+		})
+
+		It("should record all chunks in chunkCount", func() {
+			chunks, _ := client.Counts()
+			Expect(chunks).To(Equal(int32(10)))
+		})
+
+		It("should not trip the budget even though chunkCount equals maxTurns", func() {
+			Expect(client.HitLimit()).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("scheduledTurnClient Counts", func() {
+	When("messageId chunks are streamed", func() {
+		var (
+			client *scheduledTurnClient
+		)
+
+		BeforeEach(func() {
+			client = newScheduledTurnClient("test-page", 500, nil, func() {})
+
+			// 2 messages × 10 chunks each = 20 chunks, 2 turns.
+			for msgNum := range 2 {
+				msgID := fmt.Sprintf("msg-%d", msgNum)
+				for range 10 {
+					Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+						SessionId: "session-1",
+						Update: acp.SessionUpdate{
+							AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+								Content:   acp.TextBlock("chunk"),
+								MessageId: &msgID,
+							},
+						},
+					})).To(Succeed())
+				}
+			}
+		})
+
+		It("should return chunkCount equal to total AgentMessageChunks received", func() {
+			chunks, _ := client.Counts()
+			Expect(chunks).To(Equal(int32(20)))
+		})
+
+		It("should return messageCount equal to distinct messageIds seen", func() {
+			_, msgs := client.Counts()
+			Expect(msgs).To(Equal(int32(2)))
 		})
 	})
 })
@@ -862,8 +1034,8 @@ var _ = Describe("poolDaemon scheduled turn shutdown drain", func() {
 
 			daemon := &poolDaemon{
 				wikiURL: server.URL,
-				scheduledTurnRunner: func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
-					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+				scheduledTurnRunner: func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string, int32, int32) {
+					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 0, 0
 				},
 			}
 
@@ -906,15 +1078,15 @@ var _ = Describe("poolDaemon scheduled turn shutdown drain", func() {
 			terminalText = ""
 
 			daemon = &poolDaemon{
-				scheduledTurnRunner: func(ctx context.Context, _ *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
+				scheduledTurnRunner: func(ctx context.Context, _ *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string, int32, int32) {
 					close(started)
 					<-release
 					if ctx.Err() != nil {
 						terminalText = ctx.Err().Error()
-						return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "context was cancelled"
+						return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "context was cancelled", 0, 0
 					}
 					terminalText = "completed"
-					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 0, 0
 				},
 			}
 
@@ -1045,7 +1217,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 					return nil, nil, errors.New("agent binary not found")
 				},
 			}
-			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+			status, msg, _, _ = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
 				RequestId: "req-spawn-fail",
 				Page:      "test-page",
 				Prompt:    "do something",
@@ -1088,7 +1260,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 					}
 				},
 			}
-			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+			status, msg, _, _ = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
 				RequestId: "req-drain-ok",
 				Page:      "test-page",
 				Prompt:    "background work",
@@ -1138,7 +1310,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
 				},
 			}
-			status, msg = daemon.executeScheduledTurn(ctx, &apiv1.ScheduledTurnRequest{
+			status, msg, _, _ = daemon.executeScheduledTurn(ctx, &apiv1.ScheduledTurnRequest{
 				RequestId: "req-drain-error",
 				Page:      "test-page",
 				Prompt:    "background work",
@@ -1168,7 +1340,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 			daemon := &poolDaemon{
 				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
 			}
-			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+			status, msg, _, _ = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
 				RequestId: "req-prompt-err",
 				Page:      "test-page",
 				Prompt:    "do something",
@@ -1205,7 +1377,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 			daemon := &poolDaemon{
 				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
 			}
-			status, msg = daemon.executeScheduledTurn(ctx, &apiv1.ScheduledTurnRequest{
+			status, msg, _, _ = daemon.executeScheduledTurn(ctx, &apiv1.ScheduledTurnRequest{
 				RequestId: "req-prompt-shutdown",
 				Page:      "test-page",
 				Prompt:    "do something",
@@ -1223,8 +1395,10 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 
 	Describe("when the client hits max turns during the prompt", func() {
 		var (
-			status apiv1.ScheduleStatus
-			msg    string
+			status     apiv1.ScheduleStatus
+			msg        string
+			chunkCount int32
+			msgCount   int32
 		)
 
 		BeforeEach(func() {
@@ -1233,10 +1407,11 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 			daemon := &poolDaemon{
 				scheduledTurnSpawnFn: func(_ context.Context, page, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
 					client := newScheduledTurnClient(page, 1, allowedTools, cancelTurn)
-					// Trigger HitLimit by sending one AgentMessageChunk (maxTurns=1).
+					// Trigger HitLimit via the fallback path: one ToolCall (no messageId
+					// seen) with maxTurns=1 is sufficient to trip the limit.
 					_ = client.SessionUpdate(context.Background(), acp.SessionNotification{
 						SessionId: "s",
-						Update:    acp.UpdateAgentMessageText("hi"),
+						Update:    acp.StartToolCall("tc-limit", "Read"),
 					})
 					sec := &scheduledEphemeralConnection{
 						connection: fakeConn,
@@ -1246,7 +1421,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 					return sec, func() {}, nil
 				},
 			}
-			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+			status, msg, chunkCount, msgCount = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
 				RequestId: "req-max-turns",
 				Page:      "test-page",
 				MaxTurns:  1,
@@ -1260,6 +1435,14 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 
 		It("should mention max_turns in the message", func() {
 			Expect(msg).To(ContainSubstring("max_turns"))
+		})
+
+		It("should return zero chunk_count (no AgentMessageChunks were sent)", func() {
+			Expect(chunkCount).To(Equal(int32(0)))
+		})
+
+		It("should return zero message_count (no messageId was seen)", func() {
+			Expect(msgCount).To(Equal(int32(0)))
 		})
 	})
 
@@ -1278,7 +1461,7 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 			daemon := &poolDaemon{
 				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
 			}
-			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+			status, msg, _, _ = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
 				RequestId: "req-error-stop",
 				Page:      "test-page",
 				Prompt:    "do something",
