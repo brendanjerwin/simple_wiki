@@ -198,7 +198,7 @@ type poolDaemon struct {
 	mu        sync.Mutex
 
 	scheduledTurns      sync.WaitGroup
-	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string)
+	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string, int32, int32)
 
 	// a2aEphemeralSpawner is the injectable seam for spawning one-shot ACP
 	// agents (tests stub it; nil = real spawn via spawnEphemeralAgent).

@@ -46,6 +46,10 @@ type scheduledTurnClient struct {
 	mu            sync.Mutex
 	hitLimit      bool
 	lastMessageID *string // guards message-boundary detection for turn counting
+	seenMsgID     bool    // true once any messageId has been observed
+
+	chunkCount   atomic.Int32 // every AgentMessageChunk notification seen
+	messageCount atomic.Int32 // distinct messageIds seen (#1470 path)
 }
 
 // newScheduledTurnClient constructs a client. cancelPrompt is the function
@@ -65,31 +69,52 @@ func newScheduledTurnClient(page string, maxTurns int32, allowedTools []string, 
 // Each assistant message may be streamed as many AgentMessageChunk notifications.
 // When the messageId field is present, all chunks sharing the same messageId
 // belong to one message and are counted as a single turn. When messageId is
-// absent (the field is marked unstable in the ACP spec), every chunk is counted
-// to avoid silent under-counting.
+// absent (the field is marked unstable in the ACP spec), each SessionUpdateToolCall
+// notification is counted as a turn — a far better proxy for real work than
+// counting streaming text deltas.
+//
+// Both raw chunk counts and distinct messageId counts are tracked simultaneously
+// so operators can verify which counting path is active from the finished log line.
 func (c *scheduledTurnClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
-	chunk := n.Update.AgentMessageChunk
-	if chunk == nil {
+	// Track every agent message chunk.
+	if chunk := n.Update.AgentMessageChunk; chunk != nil {
+		c.chunkCount.Add(1)
+
+		if chunk.MessageId != nil {
+			c.mu.Lock()
+			isNewMessage := c.lastMessageID == nil || *c.lastMessageID != *chunk.MessageId
+			if isNewMessage {
+				id := *chunk.MessageId
+				c.lastMessageID = &id
+				c.seenMsgID = true
+			}
+			c.mu.Unlock()
+			if isNewMessage {
+				c.messageCount.Add(1)
+				c.countTurn()
+			}
+		}
+		// messageId absent: do not count text chunks — ToolCall updates are
+		// the fallback turn proxy when messageId is unavailable.
 		return nil
 	}
 
-	// Count real turns (one per distinct assistant message), not streaming
-	// chunks. When messageId is populated, skip chunks that belong to the
-	// same message we already started counting. When messageId is absent,
-	// fall back to counting every chunk.
-	if chunk.MessageId != nil {
+	// When messageId has never appeared, count each new tool-call notification
+	// as a turn. This is a better proxy for real work than streaming text deltas.
+	if n.Update.ToolCall != nil {
 		c.mu.Lock()
-		isNewMessage := c.lastMessageID == nil || *c.lastMessageID != *chunk.MessageId
-		if isNewMessage {
-			id := *chunk.MessageId
-			c.lastMessageID = &id
-		}
+		inMessageIDMode := c.seenMsgID
 		c.mu.Unlock()
-		if !isNewMessage {
-			return nil
+		if !inMessageIDMode {
+			c.countTurn()
 		}
 	}
 
+	return nil
+}
+
+// countTurn increments the turn counter and cancels the prompt if max_turns is reached.
+func (c *scheduledTurnClient) countTurn() {
 	count := c.turnCount.Add(1)
 	if c.maxTurns > 0 && count >= c.maxTurns {
 		c.mu.Lock()
@@ -98,11 +123,22 @@ func (c *scheduledTurnClient) SessionUpdate(_ context.Context, n acp.SessionNoti
 		c.mu.Unlock()
 		if !alreadyTriggered {
 			slog.Warn("scheduled turn: max_turns reached, cancelling prompt",
-				logKeyPage, c.page, "max_turns", c.maxTurns)
+				logKeyPage, c.page,
+				"max_turns", c.maxTurns,
+				"chunk_count", c.chunkCount.Load(),
+				"message_count", c.messageCount.Load())
 			c.cancelPrompt()
 		}
 	}
-	return nil
+}
+
+// Counts returns the diagnostic counters for the finished log line.
+// chunkCount is the total AgentMessageChunk notifications received;
+// messageCount is the number of distinct messageId values seen (the #1470 path).
+// When messageCount > 0 the counter used messageId boundaries; when messageCount
+// is 0 and chunkCount > 0 the counter fell back to ToolCall counting.
+func (c *scheduledTurnClient) Counts() (chunkCount, messageCount int32) {
+	return c.chunkCount.Load(), c.messageCount.Load()
 }
 
 // HitLimit returns true if max_turns was reached during this turn.
@@ -314,7 +350,7 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		executeScheduledTurn = d.scheduledTurnRunner
 	}
 
-	terminalStatus, errMsg := executeScheduledTurn(ctx, req)
+	terminalStatus, errMsg, chunkCount, messageCount := executeScheduledTurn(ctx, req)
 
 	duration := time.Since(start)
 	completeReq := &apiv1.CompleteScheduledTurnRequest{
@@ -335,7 +371,9 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		logKeyPage, req.GetPage(),
 		"request_id", req.GetRequestId(),
 		"terminal", terminalStatus.String(),
-		"duration_seconds", completeReq.DurationSeconds)
+		"duration_seconds", completeReq.DurationSeconds,
+		"chunk_count", chunkCount,
+		"message_count", messageCount)
 }
 
 func scheduledTurnCompletionContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -344,8 +382,9 @@ func scheduledTurnCompletionContext(ctx context.Context) (context.Context, conte
 
 // executeScheduledTurn does the real work: spawn a fresh ephemeral ACP
 // instance (NOT registered in d.instances), send the preamble + prompt, watch
-// for max_turns, tear down. Returns the terminal status to report.
-func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
+// for max_turns, tear down. Returns the terminal status, error message, and
+// diagnostic counters (chunkCount, messageCount) for the finished log line.
+func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.ScheduledTurnRequest) (status apiv1.ScheduleStatus, errMsg string, chunkCount int32, messageCount int32) {
 	start := time.Now()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	defer cancelTurn()
@@ -356,7 +395,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	}
 	conn, cleanup, spawnErr := spawn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), req.GetAllowedTools(), cancelTurn)
 	if spawnErr != nil {
-		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("spawn failed: %v", spawnErr)
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("spawn failed: %v", spawnErr), 0, 0
 	}
 	defer cleanup()
 
@@ -366,19 +405,20 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
 	})
 
+	chunks, msgs := conn.client.Counts()
 	if conn.client.HitLimit() {
-		return apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS, fmt.Sprintf("max_turns (%d) reached after %s", req.GetMaxTurns(), time.Since(start).Round(time.Second))
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS, fmt.Sprintf("max_turns (%d) reached after %s", req.GetMaxTurns(), time.Since(start).Round(time.Second)), chunks, msgs
 	}
 	if promptErr != nil {
 		// If we cancelled because the parent context was done (process
 		// shutdown, etc.), report that as ERROR with a clear message.
 		if ctx.Err() != nil {
-			return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "shutting down before turn completed"
+			return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "shutting down before turn completed", chunks, msgs
 		}
-		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("prompt failed: %v", promptErr)
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("prompt failed: %v", promptErr), chunks, msgs
 	}
 	if isAgentErrorStop(promptResp.StopReason) {
-		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("agent turn ended with stop reason %q", promptResp.StopReason)
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("agent turn ended with stop reason %q", promptResp.StopReason), chunks, msgs
 	}
 
 	// Foreground turn completed. Close stdin to signal the agent we are done
@@ -392,7 +432,8 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	if d.backgroundTaskDrainer != nil {
 		drain = d.backgroundTaskDrainer
 	}
-	return drain(ctx, conn.connection.Done())
+	status, errMsg = drain(ctx, conn.connection.Done())
+	return status, errMsg, chunks, msgs
 }
 
 // scheduledEphemeralConnection bundles the bits the caller needs to drive one
