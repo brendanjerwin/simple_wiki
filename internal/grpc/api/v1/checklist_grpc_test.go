@@ -730,6 +730,62 @@ var _ = Describe("ChecklistService handlers — UpdateItem field persistence", f
 			})
 		})
 
+		// Acceptance test for #1489: a text-only update must not blank description.
+		When("description is omitted from a text-only update request", func() {
+			var (
+				itemUID   string
+				listItems *apiv1.ListItemsResponse
+				listErr   error
+			)
+
+			BeforeEach(func() {
+				auditTrail := "audit trail"
+				addResp, addErr := server.AddItem(ctx, &apiv1.AddItemRequest{
+					Page:        "audit-page",
+					ListName:    "audit-list",
+					Text:        "original text",
+					Description: &auditTrail,
+				})
+				Expect(addErr).NotTo(HaveOccurred())
+				itemUID = addResp.GetItem().GetUid()
+
+				// Update only text — description field entirely absent from request.
+				updatedText := "updated text"
+				_, updateErr := server.UpdateItem(ctx, &apiv1.UpdateItemRequest{
+					Page:     "audit-page",
+					ListName: "audit-list",
+					Uid:      itemUID,
+					Text:     &updatedText,
+					// Description intentionally omitted.
+				})
+				Expect(updateErr).NotTo(HaveOccurred())
+
+				listItems, listErr = server.ListItems(ctx, &apiv1.ListItemsRequest{
+					Page:     "audit-page",
+					ListName: "audit-list",
+				})
+			})
+
+			It("should return no error from ListItems", func() {
+				Expect(listErr).NotTo(HaveOccurred())
+			})
+
+			It("should update the text", func() {
+				Expect(listItems.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(listItems.GetChecklist().GetItems()[0].GetText()).To(Equal("updated text"))
+			})
+
+			It("should preserve the description (not blank it)", func() {
+				Expect(listItems.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(listItems.GetChecklist().GetItems()[0].GetDescription()).To(Equal("audit trail"))
+			})
+
+			It("should update the correct item", func() {
+				Expect(listItems.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(listItems.GetChecklist().GetItems()[0].GetUid()).To(Equal(itemUID))
+			})
+		})
+
 		When("uid is empty", func() {
 			var (
 				listItemsBefore *apiv1.ListItemsResponse
