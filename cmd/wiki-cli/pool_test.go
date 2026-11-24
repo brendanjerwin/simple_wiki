@@ -2942,12 +2942,10 @@ var _ = Describe("handleToolCallUpdate (mock-based)", func() {
 				currentMsg: "msg-77",
 			}
 
-			status := acp.ToolCallStatusCompleted
-			title := "Write file"
 			tcu := &acp.SessionToolCallUpdate{
 				ToolCallId: "tc-2",
-				Status:     &status,
-				Title:      &title,
+				Status:     acp.PatchSet(acp.ToolCallStatusCompleted),
+				Title:      acp.PatchSet("Write file"),
 			}
 			client.handleToolCallUpdate(tcu)
 		})
@@ -3007,6 +3005,39 @@ var _ = Describe("handleToolCallUpdate (mock-based)", func() {
 			Expect(mock.toolNotifyCalled).To(BeTrue())
 			Expect(mock.toolNotifyReq.Title).To(BeEmpty())
 			Expect(mock.toolNotifyReq.Status).To(BeEmpty())
+		})
+	})
+
+	When("an update omits status (unset Patch — acp.Patch zero value)", func() {
+		// This test documents the acp.Patch[T] semantics introduced in v0.20.0.
+		// An absent field on the wire decodes as an unset Patch. The unset Patch
+		// has IsUnset() == true; Value() returns ("", false). handleToolCallUpdate
+		// must forward an empty string so the wiki server treats it as "no change"
+		// rather than accidentally clearing the tool call's status.
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-patch",
+			}
+
+			// Status field left at zero value (unset Patch).
+			tcu := &acp.SessionToolCallUpdate{
+				ToolCallId: "tc-patch",
+				Title:      acp.PatchSet("Rename file"),
+			}
+			client.handleToolCallUpdate(tcu)
+		})
+
+		It("should send an empty status string (absent == leave unchanged)", func() {
+			Expect(mock.toolNotifyReq.Status).To(BeEmpty())
+		})
+
+		It("should still forward the set title", func() {
+			Expect(mock.toolNotifyReq.Title).To(Equal("Rename file"))
 		})
 	})
 })
@@ -3155,11 +3186,10 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 				},
 			}
 
-			title := "Edit file.txt"
 			req := acp.RequestPermissionRequest{
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-1",
-					Title:      &title,
+					Title:      acp.PatchSet("Edit file.txt"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
@@ -3229,11 +3259,10 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 				},
 			}
 
-			title := "Delete data"
 			req := acp.RequestPermissionRequest{
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-2",
-					Title:      &title,
+					Title:      acp.PatchSet("Delete data"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
@@ -3271,11 +3300,10 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 				chatClient: mock,
 			}
 
-			title := "Write file"
 			req := acp.RequestPermissionRequest{
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-3",
-					Title:      &title,
+					Title:      acp.PatchSet("Write file"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
@@ -3311,11 +3339,10 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 				chatClient: &blockingPermissionReplier{},
 			}
 
-			title := "Run shell command"
 			req := acp.RequestPermissionRequest{
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-timeout",
-					Title:      &title,
+					Title:      acp.PatchSet("Run shell command"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
@@ -4092,11 +4119,10 @@ var _ = Describe("RequestPermission setState error paths", func() {
 				entry:      entry,
 			}
 
-			title := "Test Tool"
 			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-1",
-					Title:      &title,
+					Title:      acp.PatchSet("Test Tool"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
@@ -4433,7 +4459,7 @@ var _ = Describe("toolCallDetail", func() {
 		var result string
 
 		BeforeEach(func() {
-			line := 42
+			line := int64(42)
 			result = toolCallDetail([]acp.ToolCallLocation{
 				{Path: "cmd/wiki-cli/pool.go", Line: &line},
 			}, nil, nil, nil)
@@ -4799,7 +4825,7 @@ var _ = Describe("handleToolCall with Kind and Detail (mock-based)", func() {
 				currentMsg: "msg-111",
 			}
 
-			line := 55
+			line := int64(55)
 			tc := &acp.SessionUpdateToolCall{
 				ToolCallId: "tc-kind-1",
 				Title:      "Read file",
@@ -4863,18 +4889,15 @@ var _ = Describe("handleToolCallUpdate with Kind and Detail (mock-based)", func(
 				currentMsg: "msg-333",
 			}
 
-			kind := acp.ToolKindEdit
-			status := acp.ToolCallStatusCompleted
-			title := "Edit pool.go"
-			line := 100
+			line := int64(100)
 			tcu := &acp.SessionToolCallUpdate{
 				ToolCallId: "tc-update-1",
-				Kind:       &kind,
-				Status:     &status,
-				Title:      &title,
-				Locations: []acp.ToolCallLocation{
+				Kind:       acp.PatchSet(acp.ToolKindEdit),
+				Status:     acp.PatchSet(acp.ToolCallStatusCompleted),
+				Title:      acp.PatchSet("Edit pool.go"),
+				Locations: acp.PatchSet([]acp.ToolCallLocation{
 					{Path: "cmd/wiki-cli/pool.go", Line: &line},
-				},
+				}),
 			}
 			client.handleToolCallUpdate(tcu)
 		})

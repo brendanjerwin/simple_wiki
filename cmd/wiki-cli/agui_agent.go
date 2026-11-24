@@ -543,11 +543,10 @@ func (a *agUIAgent) handleSSEToolEvent(state *sseStreamState, eventType string, 
 			return
 		}
 		delete(state.openToolCalls, toolCallID)
-		status := acp.ToolCallStatusCompleted
 		a.chatClient.handleToolCallUpdate(&acp.SessionToolCallUpdate{
 			ToolCallId: acp.ToolCallId(toolCallID),
-			Title:      &name,
-			Status:     &status,
+			Title:      acp.PatchSet(name),
+			Status:     acp.PatchSet(acp.ToolCallStatusCompleted),
 		})
 
 	case agUITypeToolCallChunk:
@@ -635,11 +634,10 @@ func (a *agUIAgent) handleInterrupts(ctx context.Context, interrupts []agUIInter
 
 		// Reuse the existing ACP permission relay machinery (state transitions,
 		// timeout, broadcast) by constructing a synthetic ACP permission request.
-		titleCopy := title
 		permReq := acp.RequestPermissionRequest{
 			ToolCall: acp.ToolCallUpdate{
 				ToolCallId: acp.ToolCallId(interrupt.ID),
-				Title:      &titleCopy,
+				Title:      acp.PatchSet(title),
 			},
 			Options: []acp.PermissionOption{
 				{OptionId: "approve", Name: "Approve", Kind: acp.PermissionOptionKindAllowOnce},

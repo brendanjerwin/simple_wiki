@@ -101,7 +101,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate message-boundary turn counti
 				cancelCalls.Add(1)
 			})
 
-			msgID := "msg-uuid-1"
+			msgID := acp.MessageId("msg-uuid-1")
 			chunkWithID := acp.SessionNotification{
 				SessionId: "session-1",
 				Update: acp.SessionUpdate{
@@ -145,7 +145,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate message-boundary turn counti
 
 			// Send 3 messages, each with 10 chunks — total 30 chunks, 3 turns.
 			for msgNum := range 3 {
-				msgID := fmt.Sprintf("msg-uuid-%d", msgNum)
+				msgID := acp.MessageId(fmt.Sprintf("msg-uuid-%d", msgNum))
 				chunk := acp.SessionNotification{
 					SessionId: "session-1",
 					Update: acp.SessionUpdate{
@@ -184,7 +184,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate message-boundary turn counti
 
 			// Send 500 distinct messages, each with multiple chunks.
 			for msgNum := range 500 {
-				msgID := fmt.Sprintf("msg-uuid-%d", msgNum)
+				msgID := acp.MessageId(fmt.Sprintf("msg-uuid-%d", msgNum))
 				chunk := acp.SessionNotification{
 					SessionId: "session-1",
 					Update: acp.SessionUpdate{
@@ -317,7 +317,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate fallback turn counting (no m
 			client = newScheduledTurnClient("test-page", 500, nil, func() {})
 
 			// Send one chunk with a messageId to enter messageId mode.
-			msgID := "msg-uuid-1"
+			msgID := acp.MessageId("msg-uuid-1")
 			Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
 				SessionId: "session-1",
 				Update: acp.SessionUpdate{
@@ -388,7 +388,7 @@ var _ = Describe("scheduledTurnClient Counts", func() {
 
 			// 2 messages × 10 chunks each = 20 chunks, 2 turns.
 			for msgNum := range 2 {
-				msgID := fmt.Sprintf("msg-%d", msgNum)
+				msgID := acp.MessageId(fmt.Sprintf("msg-%d", msgNum))
 				for range 10 {
 					Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
 						SessionId: "session-1",
@@ -461,13 +461,12 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 		)
 
 		BeforeEach(func() {
-			title := "Bash(mkdir:/tmp/menu)"
 			client = newScheduledTurnClient("test-page", 3, []string{"Bash(mkdir:*)"}, func() {})
 			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 				SessionId: "session-1",
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-allow",
-					Title:      &title,
+					Title:      acp.PatchSet("Bash(mkdir:/tmp/menu)"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
@@ -497,13 +496,12 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 		)
 
 		BeforeEach(func() {
-			title := "Bash(rm:/tmp/menu)"
 			client = newScheduledTurnClient("test-page", 3, []string{"Bash(mkdir:*)"}, func() {})
 			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 				SessionId: "session-1",
 				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-deny",
-					Title:      &title,
+					Title:      acp.PatchSet("Bash(rm:/tmp/menu)"),
 				},
 				Options: []acp.PermissionOption{
 					{OptionId: "opt-allow", Name: "Allow"},
