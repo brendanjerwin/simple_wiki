@@ -8,7 +8,7 @@ Core SDK code lives at the repo root (`agent.go`, `client.go`, `connection.go`, 
 
 - `go test ./...` exercises unit tests across packages.
 - `go run ./example/agent` and `go run ./example/client` provide quick manual validation of agent/client behavior.
-- `make test` runs `go test` and ensures all examples still build.
+- `make test` runs `go vet` and `go test` for the SDK and `cmd/generate`, builds the examples, and runs the verification skills' offline unit tests: `acpwire` (verify-acp-go-sdk), `acpharness` (verify-real-harnesses), and `methodcheck` and the roundtrip helpers of verify-schema-bump. CI runs `make check` and `make test`. The gates themselves run by hand from their skills, because they need the network, a model, npm or Java: G1, G2's data checks and G7 (verify-schema-bump), G3 (verify-acp-go-sdk), G4 and G5 (verify-real-harnesses), G6 (verify-notification-barrier, verify-session-cancel).
 - `make fmt` runs `treefmt` so Go and Markdown stay formatted consistently.
 - `make check` runs `treefmt --fail-on-change` plus the README guard used in CI.
 - `mise install` provisions the toolchain (Go, gopls, golangci-lint, treefmt, etc.); run it once after cloning.
@@ -27,4 +27,4 @@ Write commit subjects in the imperative mood (`Add request codec`, `Fix session 
 
 ## Code Generation & Schema Updates
 
-Schema bumps originate from `schema/version`. After editing it, run `make version` to re-fetch upstream JSON, regenerate bindings, and reformat the repo. Commit the updated schemas, generated Go, and the `version` stamp together so reviewers can track protocol changes.
+Schema bumps originate from `schema/version`. After editing it, run `make generate` to re-fetch upstream JSON and regenerate bindings. Commit the updated schemas, generated Go, and `schema/version` together so reviewers can track protocol changes. The top-level `version` file is the SDK's own semver: bump it only in a release PR (see `RELEASING.md`).
