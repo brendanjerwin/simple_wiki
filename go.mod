@@ -20,7 +20,7 @@ require (
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.5.1
 	github.com/karalabe/usb v0.0.2
-	github.com/mark3labs/mcp-go v1.5.0
+	github.com/mark3labs/mcp-go v1.6.0
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/oklog/ulid/v2 v2.1.2
@@ -30,7 +30,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stoewer/go-strcase v1.3.1
+	github.com/stoewer/go-strcase v1.4.0
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747
 	github.com/tkrajina/gpxgo v1.5.1
 	github.com/yuin/goldmark v1.8.7
