@@ -14,6 +14,7 @@ require (
 	github.com/gin-contrib/multitemplate v1.1.6
 	github.com/gin-contrib/sessions v1.1.4
 	github.com/gin-gonic/gin v1.12.0
+	github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
@@ -29,7 +30,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stoewer/go-strcase v1.3.1
+	github.com/stoewer/go-strcase v1.4.0
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747
 	github.com/tkrajina/gpxgo v1.5.1
 	github.com/yuin/goldmark v1.8.7
@@ -80,7 +81,6 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
-	github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
