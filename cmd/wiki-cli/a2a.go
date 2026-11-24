@@ -1520,3 +1520,15 @@ func (*a2aTaskClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTermin
 func (*a2aTaskClient) KillTerminal(_ context.Context, _ acp.KillTerminalRequest) (acp.KillTerminalResponse, error) {
 	return acp.KillTerminalResponse{}, errors.New(errTerminalAccessUnavailable)
 }
+
+// CreateElicitation implements acp.Client. A2A tasks are non-interactive —
+// cancel immediately so the agent can continue deterministically.
+func (*a2aTaskClient) CreateElicitation(_ context.Context, _ acp.CreateElicitationRequest) (acp.CreateElicitationResponse, error) {
+	return acp.CreateElicitationResponse{Cancel: &acp.CreateElicitationCancel{Action: "cancel"}}, nil
+}
+
+// CompleteElicitation implements acp.Client. URL-based elicitation completion
+// notifications are ignored; a2a tasks don't use the browser-based elicitation flow.
+func (*a2aTaskClient) CompleteElicitation(_ context.Context, _ acp.CompleteElicitationNotification) error {
+	return nil
+}

@@ -1287,16 +1287,16 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 	}
 
 	status := ""
-	if tcu.Status != nil {
-		status = string(*tcu.Status)
+	if s, ok := tcu.Status.Value(); ok {
+		status = string(s)
 	}
 	title := ""
-	if tcu.Title != nil {
-		title = *tcu.Title
+	if t, ok := tcu.Title.Value(); ok {
+		title = t
 	}
 	kind := ""
-	if tcu.Kind != nil {
-		kind = string(*tcu.Kind)
+	if k, ok := tcu.Kind.Value(); ok {
+		kind = string(k)
 	}
 	if acpDebugEnabled() {
 		if raw, mErr := json.Marshal(tcu); mErr == nil {
@@ -1304,7 +1304,11 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 		}
 	}
 
-	detail := c.bestToolDetail(string(tcu.ToolCallId), tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
+	locations, _ := tcu.Locations.Value()
+	rawInput, _ := tcu.RawInput.Value()
+	content, _ := tcu.Content.Value()
+	rawOutput, _ := tcu.RawOutput.Value()
+	detail := c.bestToolDetail(string(tcu.ToolCallId), locations, rawInput, content, rawOutput)
 	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 		Page:       c.page,
 		MessageId:  msgID,
@@ -1520,8 +1524,8 @@ func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPer
 	}
 
 	title := string(p.ToolCall.ToolCallId)
-	if p.ToolCall.Title != nil {
-		title = *p.ToolCall.Title
+	if t, ok := p.ToolCall.Title.Value(); ok {
+		title = t
 	}
 
 	if len(p.Options) == 0 {
@@ -1643,6 +1647,15 @@ func (*wikiChatClient) ReleaseTerminal(_ context.Context, _ acp.ReleaseTerminalR
 
 func (*wikiChatClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTerminalExitRequest) (acp.WaitForTerminalExitResponse, error) {
 	return acp.WaitForTerminalExitResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+// Elicitation operations — not supported; cancel immediately
+func (*wikiChatClient) CreateElicitation(_ context.Context, _ acp.CreateElicitationRequest) (acp.CreateElicitationResponse, error) {
+	return acp.CreateElicitationResponse{Cancel: &acp.CreateElicitationCancel{Action: "cancel"}}, nil
+}
+
+func (*wikiChatClient) CompleteElicitation(_ context.Context, _ acp.CompleteElicitationNotification) error {
+	return nil
 }
 
 // spawnInstance starts an ACP agent process for a page, performs the handshake,

@@ -45,8 +45,8 @@ type scheduledTurnClient struct {
 
 	mu            sync.Mutex
 	hitLimit      bool
-	lastMessageID *string // guards message-boundary detection for turn counting
-	seenMsgID     bool    // true once any messageId has been observed
+	lastMessageID *acp.MessageId // guards message-boundary detection for turn counting
+	seenMsgID     bool           // true once any messageId has been observed
 
 	chunkCount   atomic.Int32 // every AgentMessageChunk notification seen
 	messageCount atomic.Int32 // distinct messageIds seen (#1470 path)
@@ -84,7 +84,7 @@ func (c *scheduledTurnClient) SessionUpdate(_ context.Context, n acp.SessionNoti
 			c.mu.Lock()
 			isNewMessage := c.lastMessageID == nil || *c.lastMessageID != *chunk.MessageId
 			if isNewMessage {
-				id := *chunk.MessageId
+				id := *chunk.MessageId // acp.MessageId
 				c.lastMessageID = &id
 				c.seenMsgID = true
 			}
@@ -165,10 +165,10 @@ func (c *scheduledTurnClient) permissionAllowed(req acp.RequestPermissionRequest
 	// Prefer the human-readable title when available because that's the value
 	// Claude emits in RequestPermission for tool invocations like
 	// "Bash(mkdir:/tmp/menu)", which is what allowlist patterns target.
-	if req.ToolCall.Title == nil || *req.ToolCall.Title == "" {
+	target, ok := req.ToolCall.Title.Value()
+	if !ok || target == "" {
 		return false
 	}
-	target := *req.ToolCall.Title
 
 	for _, pattern := range c.allowedTools {
 		if wildcardMatch(pattern, target) {
@@ -249,6 +249,18 @@ func (*scheduledTurnClient) WaitForTerminalExit(_ context.Context, _ acp.WaitFor
 // KillTerminal implements acp.Client. Terminal access is disabled.
 func (*scheduledTurnClient) KillTerminal(_ context.Context, _ acp.KillTerminalRequest) (acp.KillTerminalResponse, error) {
 	return acp.KillTerminalResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+// CreateElicitation implements acp.Client. Elicitation is not supported in
+// scheduled turns; cancel immediately.
+func (*scheduledTurnClient) CreateElicitation(_ context.Context, _ acp.CreateElicitationRequest) (acp.CreateElicitationResponse, error) {
+	return acp.CreateElicitationResponse{Cancel: &acp.CreateElicitationCancel{Action: "cancel"}}, nil
+}
+
+// CompleteElicitation implements acp.Client. URL-based elicitation completion
+// notifications are ignored in scheduled turns.
+func (*scheduledTurnClient) CompleteElicitation(_ context.Context, _ acp.CompleteElicitationNotification) error {
+	return nil
 }
 
 // runScheduledTurnLoop subscribes to the wiki's ScheduledTurnService stream
