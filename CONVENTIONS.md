@@ -3,6 +3,7 @@
 <!--toc:start-->
 
 - [General](#general)
+- [Triage Discipline](#triage-discipline-anti-patterns)
 - [Development Environment](#development-environment)
 - [Frontend JavaScript](#frontend-javascript)
 - [Storybook](#storybook)
@@ -84,6 +85,70 @@
     return true;
   }
   ```
+
+## Triage Discipline (Anti-Patterns)
+
+This section exists because AI agents (including the GitHub `claude` bot, Copilot,
+and human-driven assistants) keep producing the same myopic, lazy triage pattern: narrow
+the field of view to "this PR" and dismiss everything else as someone else's problem.
+**Stop it.** The following framings are forbidden. If you find yourself writing or
+accepting any of them, that is a signal to halt and re-read this section.
+
+### Forbidden framings
+
+- ❌ **"Pre-existing failures, unrelated to this PR."** You don't get to launder a red
+  `main` by inheriting it. If `main` is red when you arrive, the first thing you do
+  is fix or revert it. You don't ship on top of it. "Pre-existing" describes a fact
+  about *when* the breakage started, not a license to ignore it.
+- ❌ **"These tests reproduce on `main` without this PR's changes, so they're
+  unrelated."** Congratulations — you've correctly identified that `main` is broken.
+  That makes it your problem now. The Boy Scout Rule (see "General") applies; it is
+  not optional. If you're already touching the repo, you own the state of `main`
+  while you're here.
+- ❌ **"Out of scope"** / **"can address in a follow-up"** / **"tracked elsewhere"**
+  used to dismiss a reviewer comment, a failing check, or a code-quality issue. This
+  is the same pattern in different clothing. If it's wrong now, it's wrong to merge
+  now. "Out of scope" is not a reason; it's a refusal to engage.
+- ❌ **"The PR is ready to merge"** while CI is red. Never. Red CI = not ready,
+  full stop. The only correct phrasings are "ready to merge once CI is green" or
+  "blocked on the E2E failure; here's what's needed to fix it."
+- ❌ **"Copilot/the bot confirmed these failures reproduce on main"** as if an
+  agent agreeing a problem exists resolves the issue. Confirmation of breakage is
+  not authorization to ignore breakage.
+- ❌ **"Unrelated CI infrastructure failure"** as a reason to merge. Infra failures
+  block merges. If `copilot-setup-steps.yml` is failing, that's a real problem —
+  flag it, fix it, or escalate, but do not wave it through.
+
+### What to do instead
+
+1. **Red `main` is the single highest-priority task in the entire repository.**
+   Drop your current PR. Find the breaking commit (`gh run list --branch main
+   --workflow="<name>"` to identify when red started; correlate against `git log`).
+   Revert it or push a fix-forward. Confirm green. Then resume your original work.
+2. **If you can't fix it right now, say so loudly and accurately.** "Main is red
+   on E2E since `<sha>`; this PR is blocked behind that fix" is the correct comment.
+   "PR is ready, those are pre-existing" is not.
+3. **Carry the failure into your todos.** If you discover red `main` while doing
+   other work, file it as the new top-priority todo and surface it in your status
+   summary. Do not note it and move on.
+4. **Reviewer comments deserve substantive responses.** Either the comment is
+   correct (then fix it) or you have a concrete, specific reason it's wrong (then
+   explain). Vague deflections like "out of scope" or "follow-up issue" are not
+   responses.
+5. **Cite the actual failing checks by name and link.** If you mention CI status
+   in a PR comment, list each workflow with ✅/❌ and link to the run. Vague claims
+   like "CI is mostly passing" are how red main slips through.
+
+### The pattern these rules attack
+
+**Myopic triage** — the failure mode where you narrow your field of view until the
+only acceptable outcome is "merge this PR." That is a failure of ownership. The PR
+is one event in a long-running system; if the system is broken, the PR is not the
+only thing that matters. Take the wider view, every time.
+
+When in doubt, the heuristic is: **would a careful human maintainer accept this
+framing?** If you wouldn't say "those tests are pre-existing failures, ship it"
+to a senior engineer in a code review, don't write it in a PR comment either.
 
 ## Development Environment
 
