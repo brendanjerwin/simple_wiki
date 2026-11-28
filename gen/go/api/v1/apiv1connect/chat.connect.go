@@ -85,6 +85,9 @@ const (
 	// ChatServiceNotifyAgentAttachedProcedure is the fully-qualified name of the ChatService's
 	// NotifyAgentAttached RPC.
 	ChatServiceNotifyAgentAttachedProcedure = "/api.v1.ChatService/NotifyAgentAttached"
+	// ChatServiceGetChatAttachmentProcedure is the fully-qualified name of the ChatService's
+	// GetChatAttachment RPC.
+	ChatServiceGetChatAttachmentProcedure = "/api.v1.ChatService/GetChatAttachment"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -108,6 +111,7 @@ var (
 	chatServiceRequestPermissionFromUserMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("RequestPermissionFromUser")
 	chatServiceGetChatMessagesMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("GetChatMessages")
 	chatServiceNotifyAgentAttachedMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("NotifyAgentAttached")
+	chatServiceGetChatAttachmentMethodDescriptor          = chatServiceServiceDescriptor.Methods().ByName("GetChatAttachment")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -170,6 +174,11 @@ type ChatServiceClient interface {
 	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
 	// surface desired-vs-effective divergence during a switch.
 	NotifyAgentAttached(context.Context, *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error)
+	// GetChatAttachment is called by the pool daemon to retrieve attachment bytes
+	// by ID so they can be forwarded to the agent as image content blocks.
+	// The pool daemon has no session credential, so this is the only way it
+	// can access attachment data without widening session auth.
+	GetChatAttachment(context.Context, *connect.Request[v1.GetChatAttachmentRequest]) (*connect.Response[v1.GetChatAttachmentResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -290,6 +299,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceNotifyAgentAttachedMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		getChatAttachment: connect.NewClient[v1.GetChatAttachmentRequest, v1.GetChatAttachmentResponse](
+			httpClient,
+			baseURL+ChatServiceGetChatAttachmentProcedure,
+			connect.WithSchema(chatServiceGetChatAttachmentMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -313,6 +328,7 @@ type chatServiceClient struct {
 	requestPermissionFromUser  *connect.Client[v1.RequestPermissionFromUserRequest, v1.RequestPermissionFromUserResponse]
 	getChatMessages            *connect.Client[v1.GetChatMessagesRequest, v1.GetChatMessagesResponse]
 	notifyAgentAttached        *connect.Client[v1.NotifyAgentAttachedRequest, v1.NotifyAgentAttachedResponse]
+	getChatAttachment          *connect.Client[v1.GetChatAttachmentRequest, v1.GetChatAttachmentResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -405,6 +421,11 @@ func (c *chatServiceClient) NotifyAgentAttached(ctx context.Context, req *connec
 	return c.notifyAgentAttached.CallUnary(ctx, req)
 }
 
+// GetChatAttachment calls api.v1.ChatService.GetChatAttachment.
+func (c *chatServiceClient) GetChatAttachment(ctx context.Context, req *connect.Request[v1.GetChatAttachmentRequest]) (*connect.Response[v1.GetChatAttachmentResponse], error) {
+	return c.getChatAttachment.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -465,6 +486,11 @@ type ChatServiceHandler interface {
 	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
 	// surface desired-vs-effective divergence during a switch.
 	NotifyAgentAttached(context.Context, *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error)
+	// GetChatAttachment is called by the pool daemon to retrieve attachment bytes
+	// by ID so they can be forwarded to the agent as image content blocks.
+	// The pool daemon has no session credential, so this is the only way it
+	// can access attachment data without widening session auth.
+	GetChatAttachment(context.Context, *connect.Request[v1.GetChatAttachmentRequest]) (*connect.Response[v1.GetChatAttachmentResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -581,6 +607,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceNotifyAgentAttachedMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceGetChatAttachmentHandler := connect.NewUnaryHandler(
+		ChatServiceGetChatAttachmentProcedure,
+		svc.GetChatAttachment,
+		connect.WithSchema(chatServiceGetChatAttachmentMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -619,6 +651,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceGetChatMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceNotifyAgentAttachedProcedure:
 			chatServiceNotifyAgentAttachedHandler.ServeHTTP(w, r)
+		case ChatServiceGetChatAttachmentProcedure:
+			chatServiceGetChatAttachmentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -698,4 +732,8 @@ func (UnimplementedChatServiceHandler) GetChatMessages(context.Context, *connect
 
 func (UnimplementedChatServiceHandler) NotifyAgentAttached(context.Context, *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.NotifyAgentAttached is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) GetChatAttachment(context.Context, *connect.Request[v1.GetChatAttachmentRequest]) (*connect.Response[v1.GetChatAttachmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.GetChatAttachment is not implemented"))
 }

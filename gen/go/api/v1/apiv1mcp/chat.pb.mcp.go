@@ -25,6 +25,8 @@ var (
 	ChatService_GetChatMessagesTool                 = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_GetChatMessages", Description: "GetChatMessages returns recent messages from a page's chat buffer, oldest\nfirst. Called by the pool daemon at instance-spawn for transcript\nhand-off: when the page's bound agent differs from the reaped agent, the\nrecent transcript is prepended as context text on the new agent's first\nforwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-\nmessage semantics are unchanged.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x69, 0x6e, 0x74, 0x65, 0x67, 0x65, 0x72, 0x22, 0x7d, 0x2c, 0x22, 0x70, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
 	ChatService_GetChatStatusTool                   = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_GetChatStatus", Description: "GetChatStatus returns whether an agent is currently connected for a page.\nUsed by the chat panel to disable the UI when no agent is available.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x70, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
 	ChatService_NotifyAgentAttachedTool             = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_NotifyAgentAttached", Description: "NotifyAgentAttached is called by the pool daemon after it successfully\nattaches an agent to a page (and with an empty agent_id on detach).\nFeeds the EFFECTIVE agent reported by GetChatStatus so the UI can\nsurface desired-vs-effective divergence during a switch.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x61, 0x67, 0x65, 0x6e, 0x74, 0x5f, 0x64, 0x69, 0x73, 0x70, 0x6c, 0x61, 0x79, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x61, 0x67, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x70, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	ChatService_GetChatAttachmentTool               = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_GetChatAttachment", Description: "GetChatAttachment is called by the pool daemon to retrieve attachment bytes\nby ID so they can be forwarded to the agent as image content blocks.\nThe pool daemon has no session credential, so this is the only way it\ncan access attachment data without widening session auth.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	ChatService_GetChatAttachmentToolOpenAI         = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_GetChatAttachment", Description: "GetChatAttachment is called by the pool daemon to retrieve attachment bytes\nby ID so they can be forwarded to the agent as image content blocks.\nThe pool daemon has no session credential, so this is the only way it\ncan access attachment data without widening session auth.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x69, 0x64, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
 	ChatService_ReactToMessageTool                  = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_ReactToMessage", Description: "ReactToMessage is called by the pool daemon when the agent uses the react tool.\nAdds an emoji reaction to a message.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x65, 0x6d, 0x6f, 0x6a, 0x69, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
 	ChatService_RequestPermissionFromUserTool       = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_RequestPermissionFromUser", Description: "RequestPermissionFromUser is called by the pool daemon to forward a permission request\nto the user via chat and block until the user responds.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x6c, 0x61, 0x62, 0x65, 0x6c, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x61, 0x72, 0x72, 0x61, 0x79, 0x22, 0x7d, 0x2c, 0x22, 0x70, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x74, 0x69, 0x74, 0x6c, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
 	ChatService_RespondToPermissionTool             = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_ChatService_RespondToPermission", Description: "RespondToPermission is called by the frontend when the user responds to a permission request.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x73, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x65, 0x64, 0x5f, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
@@ -57,6 +59,7 @@ type ChatServiceServer interface {
 	GetChatMessages(ctx context.Context, req *v1.GetChatMessagesRequest) (*v1.GetChatMessagesResponse, error)
 	GetChatStatus(ctx context.Context, req *v1.GetChatStatusRequest) (*v1.GetChatStatusResponse, error)
 	NotifyAgentAttached(ctx context.Context, req *v1.NotifyAgentAttachedRequest) (*v1.NotifyAgentAttachedResponse, error)
+	GetChatAttachment(ctx context.Context, req *v1.GetChatAttachmentRequest) (*v1.GetChatAttachmentResponse, error)
 	ReactToMessage(ctx context.Context, req *v1.ReactToMessageRequest) (*v1.ReactToMessageResponse, error)
 	RequestPermissionFromUser(ctx context.Context, req *v1.RequestPermissionFromUserRequest) (*v1.RequestPermissionFromUserResponse, error)
 	RespondToPermission(ctx context.Context, req *v1.RespondToPermissionRequest) (*v1.RespondToPermissionResponse, error)
@@ -296,6 +299,45 @@ func RegisterChatServiceHandler(s *mcpserver.MCPServer, srv ChatServiceServer, o
 		}
 
 		resp, err := srv.NotifyAgentAttached(ctx, &req)
+		if err != nil {
+			return runtime.HandleError(err)
+		}
+
+		marshaled, err = (protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: true}).Marshal(resp)
+		if err != nil {
+			return nil, err
+		}
+
+		return mcp.NewToolResultText(string(marshaled)), nil
+	})
+	GetChatAttachmentTool := ChatService_GetChatAttachmentTool
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetChatAttachmentTool = runtime.AddExtraPropertiesToTool(GetChatAttachmentTool, config.ExtraProperties)
+	}
+
+	s.AddTool(GetChatAttachmentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req v1.GetChatAttachmentRequest
+
+		message := request.GetArguments()
+
+		// Extract extra properties if configured
+		for _, prop := range config.ExtraProperties {
+			if propVal, ok := message[prop.Name]; ok {
+				ctx = context.WithValue(ctx, prop.ContextKey, propVal)
+			}
+		}
+
+		marshaled, err := json.Marshal(message)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(marshaled, &req); err != nil {
+			return nil, err
+		}
+
+		resp, err := srv.GetChatAttachment(ctx, &req)
 		if err != nil {
 			return runtime.HandleError(err)
 		}
@@ -873,6 +915,47 @@ func RegisterChatServiceHandlerOpenAI(s *mcpserver.MCPServer, srv ChatServiceSer
 
 		return mcp.NewToolResultText(string(marshaled)), nil
 	})
+	GetChatAttachmentToolOpenAI := ChatService_GetChatAttachmentToolOpenAI
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetChatAttachmentToolOpenAI = runtime.AddExtraPropertiesToTool(GetChatAttachmentToolOpenAI, config.ExtraProperties)
+	}
+
+	s.AddTool(GetChatAttachmentToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req v1.GetChatAttachmentRequest
+
+		message := request.GetArguments()
+
+		// Extract extra properties if configured
+		for _, prop := range config.ExtraProperties {
+			if propVal, ok := message[prop.Name]; ok {
+				ctx = context.WithValue(ctx, prop.ContextKey, propVal)
+			}
+		}
+
+		runtime.FixOpenAI(req.ProtoReflect().Descriptor(), message)
+
+		marshaled, err := json.Marshal(message)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(marshaled, &req); err != nil {
+			return nil, err
+		}
+
+		resp, err := srv.GetChatAttachment(ctx, &req)
+		if err != nil {
+			return runtime.HandleError(err)
+		}
+
+		marshaled, err = (protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: true}).Marshal(resp)
+		if err != nil {
+			return nil, err
+		}
+
+		return mcp.NewToolResultText(string(marshaled)), nil
+	})
 	ReactToMessageToolOpenAI := ChatService_ReactToMessageToolOpenAI
 	// Add extra properties to schema if configured
 	if len(config.ExtraProperties) > 0 {
@@ -1223,6 +1306,7 @@ type ChatServiceClient interface {
 	GetChatMessages(ctx context.Context, req *v1.GetChatMessagesRequest, opts ...grpc.CallOption) (*v1.GetChatMessagesResponse, error)
 	GetChatStatus(ctx context.Context, req *v1.GetChatStatusRequest, opts ...grpc.CallOption) (*v1.GetChatStatusResponse, error)
 	NotifyAgentAttached(ctx context.Context, req *v1.NotifyAgentAttachedRequest, opts ...grpc.CallOption) (*v1.NotifyAgentAttachedResponse, error)
+	GetChatAttachment(ctx context.Context, req *v1.GetChatAttachmentRequest, opts ...grpc.CallOption) (*v1.GetChatAttachmentResponse, error)
 	ReactToMessage(ctx context.Context, req *v1.ReactToMessageRequest, opts ...grpc.CallOption) (*v1.ReactToMessageResponse, error)
 	RequestPermissionFromUser(ctx context.Context, req *v1.RequestPermissionFromUserRequest, opts ...grpc.CallOption) (*v1.RequestPermissionFromUserResponse, error)
 	RespondToPermission(ctx context.Context, req *v1.RespondToPermissionRequest, opts ...grpc.CallOption) (*v1.RespondToPermissionResponse, error)
@@ -1241,6 +1325,7 @@ type ConnectChatServiceClient interface {
 	GetChatMessages(ctx context.Context, req *connect.Request[v1.GetChatMessagesRequest]) (*connect.Response[v1.GetChatMessagesResponse], error)
 	GetChatStatus(ctx context.Context, req *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
 	NotifyAgentAttached(ctx context.Context, req *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error)
+	GetChatAttachment(ctx context.Context, req *connect.Request[v1.GetChatAttachmentRequest]) (*connect.Response[v1.GetChatAttachmentResponse], error)
 	ReactToMessage(ctx context.Context, req *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
 	RequestPermissionFromUser(ctx context.Context, req *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
 	RespondToPermission(ctx context.Context, req *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
@@ -1475,6 +1560,44 @@ func ForwardToConnectChatServiceClient(s *mcpserver.MCPServer, client ConnectCha
 		}
 
 		resp, err := client.NotifyAgentAttached(ctx, connect.NewRequest(&req))
+		if err != nil {
+			return runtime.HandleError(err)
+		}
+
+		marshaled, err = (protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: true}).Marshal(resp.Msg)
+		if err != nil {
+			return nil, err
+		}
+		return mcp.NewToolResultText(string(marshaled)), nil
+	})
+	GetChatAttachmentTool := ChatService_GetChatAttachmentTool
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetChatAttachmentTool = runtime.AddExtraPropertiesToTool(GetChatAttachmentTool, config.ExtraProperties)
+	}
+
+	s.AddTool(GetChatAttachmentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req v1.GetChatAttachmentRequest
+
+		message := request.GetArguments()
+
+		// Extract extra properties if configured
+		for _, prop := range config.ExtraProperties {
+			if propVal, ok := message[prop.Name]; ok {
+				ctx = context.WithValue(ctx, prop.ContextKey, propVal)
+			}
+		}
+
+		marshaled, err := json.Marshal(message)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(marshaled, &req); err != nil {
+			return nil, err
+		}
+
+		resp, err := client.GetChatAttachment(ctx, connect.NewRequest(&req))
 		if err != nil {
 			return runtime.HandleError(err)
 		}
@@ -2015,6 +2138,44 @@ func ForwardToChatServiceClient(s *mcpserver.MCPServer, client ChatServiceClient
 		}
 
 		resp, err := client.NotifyAgentAttached(ctx, &req)
+		if err != nil {
+			return runtime.HandleError(err)
+		}
+
+		marshaled, err = (protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: true}).Marshal(resp)
+		if err != nil {
+			return nil, err
+		}
+		return mcp.NewToolResultText(string(marshaled)), nil
+	})
+	GetChatAttachmentTool := ChatService_GetChatAttachmentTool
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetChatAttachmentTool = runtime.AddExtraPropertiesToTool(GetChatAttachmentTool, config.ExtraProperties)
+	}
+
+	s.AddTool(GetChatAttachmentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req v1.GetChatAttachmentRequest
+
+		message := request.GetArguments()
+
+		// Extract extra properties if configured
+		for _, prop := range config.ExtraProperties {
+			if propVal, ok := message[prop.Name]; ok {
+				ctx = context.WithValue(ctx, prop.ContextKey, propVal)
+			}
+		}
+
+		marshaled, err := json.Marshal(message)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(marshaled, &req); err != nil {
+			return nil, err
+		}
+
+		resp, err := client.GetChatAttachment(ctx, &req)
 		if err != nil {
 			return runtime.HandleError(err)
 		}

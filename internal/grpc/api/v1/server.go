@@ -14,6 +14,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatattachment"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
@@ -68,6 +69,12 @@ type ChatBufferManager interface {
 	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
 	RespondToPermission(requestID, selectedOptionID string)
 	GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent
+}
+
+// ChatAttachmentRetriever can retrieve a chat attachment by ID.
+// It is a subset of chatattachment.AttachmentStore used by GetChatAttachment.
+type ChatAttachmentRetriever interface {
+	Get(id string) (*chatattachment.Attachment, error)
 }
 
 // BuildInfo contains version and build metadata for the server.
@@ -158,6 +165,7 @@ type Server struct {
 	agentInventory          AgentInventory
 	agentPageBindingStore   AgentPageBindingStore
 	chatAgentChangeNotifier ChatAgentChangeNotifier
+	chatAttachmentStore     ChatAttachmentRetriever
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -274,6 +282,13 @@ func (s *Server) WithAgentPageBindingStore(store AgentPageBindingStore) *Server 
 // switches into the page's chat buffer (ChatAgentChanged events).
 func (s *Server) WithChatAgentChangeNotifier(notifier ChatAgentChangeNotifier) *Server {
 	s.chatAgentChangeNotifier = notifier
+	return s
+}
+
+// WithChatAttachmentStore sets the attachment store used by GetChatAttachment.
+// When unset, GetChatAttachment returns Unavailable.
+func (s *Server) WithChatAttachmentStore(store ChatAttachmentRetriever) *Server {
+	s.chatAttachmentStore = store
 	return s
 }
 

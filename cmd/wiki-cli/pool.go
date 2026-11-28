@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -58,6 +59,29 @@ const (
 // to a permission request. After this duration the request is auto-denied so
 // the agent is not stuck in PermissionPending state forever.
 var permissionRequestTimeout = 5 * time.Minute
+
+// chatAttachmentURLPattern matches inline image markdown produced by
+// buildAttachmentMarkdown in the TypeScript frontend:
+// ![alt text](/api/chat-attachments/<uuid>)
+var chatAttachmentURLPattern = regexp.MustCompile(`!\[.*?\]\(/api/chat-attachments/([0-9a-f-]+)\)`)
+
+const (
+	// maxAttachmentsPerMessage is the maximum number of image attachments
+	// forwarded to the agent per user message. Additional attachments are
+	// dropped and logged to avoid overloading the agent context window.
+	maxAttachmentsPerMessage = 5
+
+	// maxAttachmentBytes is the maximum size in bytes of a single attachment
+	// that will be forwarded to the agent. Larger attachments are dropped and
+	// logged.
+	maxAttachmentBytes = 5 * 1024 * 1024 // 5 MiB
+)
+
+// attachmentFetcher retrieves a chat attachment by ID.
+// It is a subset of apiv1connect.ChatServiceClient used by buildPromptBlocks.
+type attachmentFetcher interface {
+	GetChatAttachment(context.Context, *connect.Request[apiv1.GetChatAttachmentRequest]) (*connect.Response[apiv1.GetChatAttachmentResponse], error)
+}
 
 // InstanceState represents the lifecycle state of an agent instance.
 type InstanceState int
@@ -1033,7 +1057,8 @@ type wikiChatClient struct {
 	agentDisplayName  string
 	handoffTranscript string // recent "sender: content" lines from the previous agent, prepended once
 	chatClient        chatReplier
-	entry             *instanceEntry // back-reference for state transitions
+	attachmentClient  attachmentFetcher // used by buildPromptBlocks to fetch image bytes
+	entry             *instanceEntry    // back-reference for state transitions
 
 	// toolDetails remembers the best input-derived detail (tool name + args, or
 	// file location) per tool-call id. pi-acp drops rawInput on the completion
@@ -1044,10 +1069,12 @@ type wikiChatClient struct {
 
 func newWikiChatClient(page, wikiURL string) *wikiChatClient {
 	httpClient := &http.Client{}
+	client := apiv1connect.NewChatServiceClient(httpClient, wikiURL)
 	return &wikiChatClient{
-		page:       page,
-		wikiURL:    wikiURL,
-		chatClient: apiv1connect.NewChatServiceClient(httpClient, wikiURL),
+		page:             page,
+		wikiURL:          wikiURL,
+		chatClient:       client,
+		attachmentClient: client,
 	}
 }
 
@@ -2023,16 +2050,20 @@ func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *w
 
 	go listenForCancelSignal(promptCtx, promptCancel, cancelChan, entry.page)
 
-	promptText := buildPromptText(chatClient, msg.SenderName, msg.Content)
+	promptBlocks := buildPromptBlocks(promptCtx, chatClient, msg.SenderName, msg.Content)
 
 	if err := entry.setState(StatePrompting); err != nil {
 		slog.Warn(logMsgStateTransitionError, logKeyPage, entry.page, logKeyError, err)
 	}
 
-	slog.Info("bridge: sending prompt", logKeyPage, entry.page, "prompt_length", len(promptText))
+	promptText := ""
+	if len(promptBlocks) > 0 && promptBlocks[0].Text != nil {
+		promptText = promptBlocks[0].Text.Text
+	}
+	slog.Info("bridge: sending prompt", logKeyPage, entry.page, "prompt_length", len(promptText), "image_blocks", len(promptBlocks)-1)
 	_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
 		SessionId: entry.sessionID,
-		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
+		Prompt:    promptBlocks,
 	})
 
 	if promptErr != nil {
@@ -2107,6 +2138,62 @@ func buildPromptText(chatClient *wikiChatClient, senderName, messageContent stri
 	}
 
 	return precede + "\n---\n\nUser message: " + formattedMessage
+}
+
+// buildPromptBlocks builds the ACP content blocks for a user message.
+// It always produces a TextBlock from buildPromptText, then appends an
+// ImageBlock for each image attachment referenced in messageContent that
+// can be fetched and is within the size limit. Non-image attachments and
+// attachments that exceed maxAttachmentBytes are silently skipped with a
+// log entry. If attachmentClient is nil, only the text block is returned.
+//
+// A message with no image attachments produces the same single TextBlock
+// as the previous single-block path.
+func buildPromptBlocks(ctx context.Context, chatClient *wikiChatClient, senderName, messageContent string) []acp.ContentBlock {
+	promptText := buildPromptText(chatClient, senderName, messageContent)
+	blocks := []acp.ContentBlock{acp.TextBlock(promptText)}
+
+	if chatClient.attachmentClient == nil {
+		return blocks
+	}
+
+	matches := chatAttachmentURLPattern.FindAllStringSubmatch(messageContent, -1)
+	if len(matches) == 0 {
+		return blocks
+	}
+
+	if len(matches) > maxAttachmentsPerMessage {
+		slog.Warn("too many attachments in message, truncating",
+			"count", len(matches), "max", maxAttachmentsPerMessage, logKeyPage, chatClient.page)
+		matches = matches[:maxAttachmentsPerMessage]
+	}
+
+	for _, match := range matches {
+		id := match[1]
+		resp, err := chatClient.attachmentClient.GetChatAttachment(ctx, connect.NewRequest(&apiv1.GetChatAttachmentRequest{Id: id}))
+		if err != nil {
+			slog.Warn("failed to fetch chat attachment, skipping",
+				"attachment_id", id, logKeyError, err, logKeyPage, chatClient.page)
+			continue
+		}
+
+		data := resp.Msg.Data
+		if len(data) > maxAttachmentBytes {
+			slog.Warn("attachment too large, skipping",
+				"attachment_id", id, "size_bytes", len(data), "max_bytes", maxAttachmentBytes, logKeyPage, chatClient.page)
+			continue
+		}
+
+		mimeType := resp.Msg.MimeType
+		if !strings.HasPrefix(mimeType, "image/") {
+			// Non-image attachments are referenced via markdown link only.
+			continue
+		}
+
+		blocks = append(blocks, acp.ImageBlock(base64.StdEncoding.EncodeToString(data), mimeType))
+	}
+
+	return blocks
 }
 
 // chatPreamble is prepended to the first prompt to establish the interactive chat context.

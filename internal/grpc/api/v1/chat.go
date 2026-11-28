@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatattachment"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"google.golang.org/grpc/codes"
@@ -820,5 +821,34 @@ func (s *Server) RequestPermissionFromUser(ctx context.Context, req *apiv1.Reque
 
 	return &apiv1.RequestPermissionFromUserResponse{
 		SelectedOptionId: selectedID,
+	}, nil
+}
+
+// GetChatAttachment implements the GetChatAttachment RPC.
+// Returns attachment bytes by ID so the pool daemon can forward them to the
+// agent as image content blocks without requiring a session credential.
+func (s *Server) GetChatAttachment(_ context.Context, req *apiv1.GetChatAttachmentRequest) (*apiv1.GetChatAttachmentResponse, error) {
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	if s.chatAttachmentStore == nil {
+		return nil, status.Error(codes.Unavailable, "chat attachment store not configured")
+	}
+
+	attachment, err := s.chatAttachmentStore.Get(req.Id)
+	if err != nil {
+		if errors.Is(err, chatattachment.ErrNotFound) {
+			return nil, status.Errorf(codes.NotFound, "attachment not found: %s", req.Id)
+		}
+		if errors.Is(err, chatattachment.ErrInvalidID) {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid attachment ID: %s", req.Id)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get attachment: %v", err)
+	}
+
+	return &apiv1.GetChatAttachmentResponse{
+		Data:     attachment.Data,
+		MimeType: attachment.MIMEType,
 	}, nil
 }

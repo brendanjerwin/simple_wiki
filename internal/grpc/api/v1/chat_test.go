@@ -9,6 +9,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatattachment"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	wikiserver "github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -19,6 +20,23 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+// fakeAttachmentStore is a controllable ChatAttachmentRetriever for handler testing.
+type fakeAttachmentStore struct {
+	attachment   *chatattachment.Attachment
+	notFoundErr  bool
+	invalidIDErr bool
+}
+
+func (f *fakeAttachmentStore) Get(_ string) (*chatattachment.Attachment, error) {
+	if f.notFoundErr {
+		return nil, chatattachment.ErrNotFound
+	}
+	if f.invalidIDErr {
+		return nil, chatattachment.ErrInvalidID
+	}
+	return f.attachment, nil
+}
 
 // mockChatBufferManager is a test implementation of ChatBufferManager.
 type mockChatBufferManager struct {
@@ -3241,6 +3259,141 @@ var _ = Describe("AgentInventoryService pool-facing RPCs", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+	})
+
+	Describe("GetChatAttachment", func() {
+		var (
+			server *v1.Server
+			ctx    context.Context
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+
+			var err error
+			server, err = v1.NewServer(
+				v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				newMockChatBufferManager(),
+				noOpPageOpener{},
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		When("no attachment store is configured", func() {
+			var (
+				err error
+			)
+
+			BeforeEach(func() {
+				_, err = server.GetChatAttachment(ctx, &apiv1.GetChatAttachmentRequest{Id: "some-id"})
+			})
+
+			It("should return Unavailable", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Unavailable))
+			})
+		})
+
+		When("an attachment store is configured", func() {
+			var (
+				attachmentServer *v1.Server
+				store            *fakeAttachmentStore
+			)
+
+			BeforeEach(func() {
+				store = &fakeAttachmentStore{}
+				var err error
+				attachmentServer, err = v1.NewServer(
+					v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					noOpFrontmatterIndexQueryer{},
+					lumber.NewConsoleLogger(lumber.WARN),
+					newMockChatBufferManager(),
+					noOpPageOpener{},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				attachmentServer = attachmentServer.WithChatAttachmentStore(store)
+			})
+
+			When("id is empty", func() {
+				var err error
+
+				BeforeEach(func() {
+					_, err = attachmentServer.GetChatAttachment(ctx, &apiv1.GetChatAttachmentRequest{Id: ""})
+				})
+
+				It("should return InvalidArgument", func() {
+					st, ok := status.FromError(err)
+					Expect(ok).To(BeTrue())
+					Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				})
+			})
+
+			When("attachment is found", func() {
+				var (
+					resp *apiv1.GetChatAttachmentResponse
+					err  error
+				)
+
+				BeforeEach(func() {
+					store.attachment = &chatattachment.Attachment{
+						ID:       "abc-123",
+						Filename: "screenshot.png",
+						MIMEType: "image/png",
+						Data:     []byte{0x89, 0x50, 0x4e, 0x47},
+					}
+					resp, err = attachmentServer.GetChatAttachment(ctx, &apiv1.GetChatAttachmentRequest{Id: "abc-123"})
+				})
+
+				It("should not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return the attachment data", func() {
+					Expect(resp.Data).To(Equal([]byte{0x89, 0x50, 0x4e, 0x47}))
+				})
+
+				It("should return the mime type", func() {
+					Expect(resp.MimeType).To(Equal("image/png"))
+				})
+			})
+
+			When("attachment is not found", func() {
+				var err error
+
+				BeforeEach(func() {
+					store.notFoundErr = true
+					_, err = attachmentServer.GetChatAttachment(ctx, &apiv1.GetChatAttachmentRequest{Id: "missing-id"})
+				})
+
+				It("should return NotFound", func() {
+					st, ok := status.FromError(err)
+					Expect(ok).To(BeTrue())
+					Expect(st.Code()).To(Equal(codes.NotFound))
+				})
+			})
+
+			When("id is invalid", func() {
+				var err error
+
+				BeforeEach(func() {
+					store.invalidIDErr = true
+					_, err = attachmentServer.GetChatAttachment(ctx, &apiv1.GetChatAttachmentRequest{Id: "bad!id"})
+				})
+
+				It("should return InvalidArgument", func() {
+					st, ok := status.FromError(err)
+					Expect(ok).To(BeTrue())
+					Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				})
 			})
 		})
 	})
