@@ -66,6 +66,10 @@ const hashtagRendererPriority = 500
 // so it is registered after (and therefore overrides) the default link rendering.
 const externalLinkRendererPriority = 100
 
+// relAttrPattern locates an existing rel="..." attribute inside a raw start
+// tag. Compiled once because appendRelTokens runs per anchor per render.
+var relAttrPattern = regexp.MustCompile(`(?:^|\s)rel\s*=\s*"([^"]*)"`)
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -135,8 +139,7 @@ func hasAttribute(token nethtml.Token, name string) bool {
 // appendRelTokens adds missing tokens to an existing rel attribute value in a raw
 // start tag. If the attribute cannot be located the tag is returned unchanged.
 func appendRelTokens(raw []byte, tokens ...string) []byte {
-	relPattern := regexp.MustCompile(`(?:^|\s)rel\s*=\s*"([^"]*)"`)
-	match := relPattern.FindSubmatchIndex(raw)
+	match := relAttrPattern.FindSubmatchIndex(raw)
 	if match == nil {
 		return raw
 	}
