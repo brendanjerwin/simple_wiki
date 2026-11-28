@@ -29,10 +29,11 @@ After attaching, each item appears as a **chip** inside the draft input with a
 **×** to remove it before sending. Images show a small thumbnail; other files
 show a paper-clip icon. You can attach multiple items in one message.
 
-On send, all attachments are uploaded and embedded in the message as markdown
-image links (`![filename](url)`) or file links (`[filename](url)`). The agent
-receives the message content including these URLs and can read the files via
-its normal vision/fetch capabilities.
+On send, attachments are uploaded and embedded in the message as markdown
+image links (`![filename](url)`) or file links (`[filename](url)`). Images are
+also handed to the agent as native image content, so it sees them directly
+rather than following a link — up to 5 images per message, 5 MiB each. Other
+file types arrive only as links, which the agent reads itself.
 
 The **"+"** opens the attach menu from the same composer. The **Send**
 control appears only once your draft has text or pending attachments.
