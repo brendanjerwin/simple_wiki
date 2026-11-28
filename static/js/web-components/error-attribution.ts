@@ -50,8 +50,39 @@ const FOREIGN_SCRIPT_SCHEMES: Readonly<Record<string, true>> = {
  jar: true,
 };
 
-/** `https://host/path:1:2`, `webkit-masked-url://hidden/:54:1`, `//host/x.js` */
-const ABSOLUTE_URL_PATTERN = /(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\/[^\s@()]+/;
+/**
+ * Extract the leading URL-shaped token from a stack-frame reference.
+ *
+ * Handles three shapes:
+ *  - `https://host/path:1:2`          — scheme + authority
+ *  - `webkit-masked-url://hidden/:54:1` — scheme + authority
+ *  - `//host/x.js`                    — protocol-relative (no scheme)
+ *
+ * Uses a linear scan instead of a regex to avoid O(n²) backtracking when a
+ * long line contains a scheme-like prefix but no `//` (S8786).
+ *
+ * Exported for unit testing only.
+ */
+export function leadingUrlToken(reference: string): string | undefined {
+ const sep = reference.indexOf('//');
+ if (sep === -1) return undefined;
+ // Walk back over a scheme, if any: [A-Za-z][A-Za-z0-9+.-]*:
+ let start = sep;
+ if (sep > 0 && reference.charAt(sep - 1) === ':') {
+  let i = sep - 2;
+  while (i >= 0 && /[A-Za-z0-9+.-]/.test(reference.charAt(i))) i--;
+  const schemeStart = i + 1;
+  // Scheme must have at least one char and start with a letter (RFC 3986).
+  if (schemeStart < sep - 1 && /[A-Za-z]/.test(reference.charAt(schemeStart))) {
+   start = schemeStart;
+  }
+ }
+ let end = sep + 2;
+ while (end < reference.length && !/[\s@()]/.test(reference.charAt(end))) end++;
+ // Require at least one character after '//', matching the original regex.
+ if (end === sep + 2) return undefined;
+ return reference.slice(start, end);
+}
 
 /** The scheme of an absolute URL, or `undefined` for protocol-relative URLs. */
 const URL_SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.-]*):/;
@@ -78,7 +109,7 @@ function compareUrlToPageOrigin(url: string, pageOrigin: string): FrameOrigin {
  * script it points at.
  */
 function classifyReference(reference: string, pageOrigin: string): FrameOrigin {
- const absoluteUrl = ABSOLUTE_URL_PATTERN.exec(reference)?.[0];
+ const absoluteUrl = leadingUrlToken(reference);
  if (absoluteUrl !== undefined) {
   const scheme = URL_SCHEME_PATTERN.exec(absoluteUrl)?.[1]?.toLowerCase();
   if (scheme === undefined) {
