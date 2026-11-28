@@ -4,6 +4,7 @@ import {
   attributeErrorEvent,
   attributeRejection,
   logForeignError,
+  leadingUrlToken,
 } from './error-attribution.js';
 import type { ErrorAttribution } from './error-attribution.js';
 
@@ -328,6 +329,83 @@ describe('attributeRejection', () => {
 
     it('should attribute the rejection to foreign code', () => {
       expect(attribution.origin).to.equal('foreign');
+    });
+  });
+});
+
+describe('leadingUrlToken', () => {
+  // Table-driven for the three documented shapes (and their variations).
+  interface TokenCase {
+    label: string;
+    input: string;
+    expected: string | undefined;
+  }
+
+  const tokenCases: TokenCase[] = [
+    {
+      label: 'https URL with path and line/col',
+      input: 'https://host/path:1:2',
+      expected: 'https://host/path:1:2',
+    },
+    {
+      label: 'webkit-masked-url with line/col',
+      input: 'webkit-masked-url://hidden/:54:1',
+      expected: 'webkit-masked-url://hidden/:54:1',
+    },
+    {
+      label: 'protocol-relative URL (no scheme)',
+      input: '//host/x.js',
+      expected: '//host/x.js',
+    },
+    {
+      label: 'URL embedded in a stack frame after @',
+      input: 'e@webkit-masked-url://hidden/:54:12285',
+      expected: 'webkit-masked-url://hidden/:54:12285',
+    },
+    {
+      label: 'cross-origin https URL in a stack frame',
+      input: '    at Object.action (https://cdn.example.com/widget.js:1:1)',
+      expected: 'https://cdn.example.com/widget.js:1:1',
+    },
+    {
+      label: 'relative path with no //',
+      input: '/static/js/dist/web-components.js:16624:35',
+      expected: undefined,
+    },
+    {
+      label: 'empty string',
+      input: '',
+      expected: undefined,
+    },
+  ];
+
+  for (const { label, input, expected } of tokenCases) {
+    describe(`when given a ${label}`, () => {
+      let result: string | undefined;
+
+      beforeEach(() => {
+        result = leadingUrlToken(input);
+      });
+
+      it(`should return ${expected === undefined ? 'undefined' : `"${expected}"`}`, () => {
+        expect(result).to.equal(expected);
+      });
+    });
+  }
+
+  describe('when given a long adversarial string with scheme-like prefixes but no //', () => {
+    let result: string | undefined;
+
+    beforeEach(() => {
+      // 50 k chars: alternating "a:" and "a" — resembles a scheme prefix but
+      // has no "//", which caused O(n²) backtracking with the old regex (S8786).
+      const adversarial = ('a:' + 'a').repeat(16667); // ~50 k chars
+
+      result = leadingUrlToken(adversarial);
+    });
+
+    it('should return undefined', () => {
+      expect(result).to.be.undefined;
     });
   });
 });
