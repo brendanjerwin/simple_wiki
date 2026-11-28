@@ -333,6 +333,85 @@ describe('AugmentErrorService', () => {
           expect(augmented.message).to.equal('An unknown error occurred');
         });
       });
+
+      describe('when error is a DOMException-like object (name + message, not instanceof Error)', () => {
+        let augmented: AugmentedError;
+
+        beforeEach(() => {
+          // Simulate a cross-realm DOMException whose instanceof check fails in this realm.
+          // Real DOMExceptions stringify to {} because their properties are non-enumerable.
+          const domExceptionLike = { name: 'AbortError', message: 'The user aborted a request.', code: 20 };
+          augmented = AugmentErrorService.augmentError(domExceptionLike);
+        });
+
+        it('should include AbortError in the message', () => {
+          expect(augmented.message).to.include('AbortError');
+        });
+
+        it('should not produce {} as the message', () => {
+          expect(augmented.message).not.to.equal('{}');
+        });
+      });
+
+      describe('when error is an Error-like object with name, message, and stack but not instanceof Error', () => {
+        let augmented: AugmentedError;
+        const fakeStack = 'SomeError: oops\n    at someFunction (file.js:10:5)';
+
+        beforeEach(() => {
+          // The shape reported in #1501: looks exactly like an Error but instanceof is false.
+          const errorLike = {
+            name: 'SomeError',
+            message: 'oops',
+            stack: fakeStack,
+          };
+          augmented = AugmentErrorService.augmentError(errorLike);
+        });
+
+        it('should include the original message text', () => {
+          expect(augmented.message).to.include('oops');
+        });
+
+        it('should preserve the stack from the Error-like object', () => {
+          expect(augmented.stack).to.equal(fakeStack);
+        });
+      });
+
+      describe('when error is an object whose toString throws', () => {
+        let augmented: AugmentedError;
+
+        beforeEach(() => {
+          // toJSON throw forces JSON.stringify to fail; Object.prototype.toString is used safely.
+          const dangerousObj = {
+            toJSON() { throw new Error('toJSON deliberately threw'); },
+            toString() { throw new Error('toString deliberately threw'); },
+          };
+          augmented = AugmentErrorService.augmentError(dangerousObj);
+        });
+
+        it('should not throw', () => {
+          expect(augmented).to.be.instanceof(AugmentedError);
+        });
+
+        it('should fall back to Object.prototype.toString', () => {
+          expect(augmented.message).to.equal('[object Object]');
+        });
+      });
+
+      describe('when error is a plain empty object', () => {
+        let augmented: AugmentedError;
+
+        beforeEach(() => {
+          augmented = AugmentErrorService.augmentError({});
+        });
+
+        it('should not produce the literal string {}', () => {
+          expect(augmented.message).not.to.equal('{}');
+        });
+
+        it('should fall back to Object.prototype.toString', () => {
+          expect(augmented.message).to.equal('[object Object]');
+        });
+      });
     });
   });
 
