@@ -389,10 +389,13 @@ export class AugmentErrorService {
         let messageStr = '';
         let stackStr = '';
         try {
-          const errorAsObj = error as Record<string, unknown>;
-          nameStr = typeof errorAsObj['name'] === 'string' ? errorAsObj['name'].trim() : '';
-          messageStr = typeof errorAsObj['message'] === 'string' ? errorAsObj['message'].trim() : '';
-          stackStr = typeof errorAsObj['stack'] === 'string' ? errorAsObj['stack'] : '';
+          const errorAsObj: object = error;
+          const nameValue: unknown = Reflect.get(errorAsObj, 'name');
+          const messageValue: unknown = Reflect.get(errorAsObj, 'message');
+          const stackValue: unknown = Reflect.get(errorAsObj, 'stack');
+          nameStr = typeof nameValue === 'string' ? nameValue.trim() : '';
+          messageStr = typeof messageValue === 'string' ? messageValue.trim() : '';
+          stackStr = typeof stackValue === 'string' ? stackValue : '';
         } catch {
           // Property access threw — skip duck-typing and fall through
         }
