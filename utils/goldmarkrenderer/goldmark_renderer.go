@@ -100,13 +100,13 @@ func forceNewTabOnAllLinks(rawHTML []byte) []byte {
 
 		raw := tokenizer.Raw()
 		if tokenType != nethtml.StartTagToken && tokenType != nethtml.SelfClosingTagToken {
-			out.Write(raw)
+			_, _ = out.Write(raw)
 			continue
 		}
 
 		token := tokenizer.Token()
 		if !strings.EqualFold(token.Data, "a") || !hasAttribute(token, "href") || hasAttribute(token, "target") {
-			out.Write(raw)
+			_, _ = out.Write(raw)
 			continue
 		}
 
@@ -117,7 +117,7 @@ func forceNewTabOnAllLinks(rawHTML []byte) []byte {
 			attrs += ` rel="noopener noreferrer"`
 		}
 
-		out.Write(insertAttributesBeforeTagEnd(raw, attrs))
+		_, _ = out.Write(insertAttributesBeforeTagEnd(raw, attrs))
 	}
 
 	return out.Bytes()
