@@ -2,8 +2,11 @@ package goldmarkrenderer
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -18,6 +21,7 @@ import (
 
 	"go.abhg.dev/goldmark/mermaid"
 	"go.abhg.dev/goldmark/wikilink"
+	nethtml "golang.org/x/net/html"
 )
 
 // wikiImageRendererPriority sets the priority for the custom image renderer.
@@ -62,6 +66,10 @@ const hashtagRendererPriority = 500
 // so it is registered after (and therefore overrides) the default link rendering.
 const externalLinkRendererPriority = 100
 
+// relAttrPattern locates an existing rel="..." attribute inside a raw start
+// tag. Compiled once because appendRelTokens runs per anchor per render.
+var relAttrPattern = regexp.MustCompile(`(?:^|\s)rel\s*=\s*"([^"]*)"`)
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -72,7 +80,106 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	if err := md.Convert(input, &buf); err != nil {
 		return []byte{}, err
 	}
-	return sanitizeWikiHTML(buf.Bytes()), nil
+	return forceNewTabOnAllLinks(sanitizeWikiHTML(buf.Bytes())), nil
+}
+
+// forceNewTabOnAllLinks rewrites every anchor in already-sanitized HTML so it
+// opens in a new tab. bluemonday's AddTargetBlankToFullyQualifiedLinks only
+// covers absolute links; relative page links, wikilinks and anchor links are
+// handled here. Anchors that already carry a target attribute are left exactly
+// as the sanitizer produced them.
+func forceNewTabOnAllLinks(rawHTML []byte) []byte {
+	tokenizer := nethtml.NewTokenizer(bytes.NewReader(rawHTML))
+	var out bytes.Buffer
+
+	for {
+		tokenType := tokenizer.Next()
+		if tokenType == nethtml.ErrorToken {
+			if !errors.Is(tokenizer.Err(), io.EOF) {
+				// Never fail rendering over the rewrite; fall back untouched.
+				return rawHTML
+			}
+			break
+		}
+
+		raw := tokenizer.Raw()
+		if tokenType != nethtml.StartTagToken && tokenType != nethtml.SelfClosingTagToken {
+			_, _ = out.Write(raw)
+			continue
+		}
+
+		token := tokenizer.Token()
+		if !strings.EqualFold(token.Data, "a") || !hasAttribute(token, "href") || hasAttribute(token, "target") {
+			_, _ = out.Write(raw)
+			continue
+		}
+
+		attrs := ` target="_blank"`
+		if hasAttribute(token, "rel") {
+			raw = appendRelTokens(raw, "noopener", "noreferrer")
+		} else {
+			attrs += ` rel="noopener noreferrer"`
+		}
+
+		_, _ = out.Write(insertAttributesBeforeTagEnd(raw, attrs))
+	}
+
+	return out.Bytes()
+}
+
+func hasAttribute(token nethtml.Token, name string) bool {
+	for _, attr := range token.Attr {
+		if strings.EqualFold(attr.Key, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// appendRelTokens adds missing tokens to an existing rel attribute value in a raw
+// start tag. If the attribute cannot be located the tag is returned unchanged.
+func appendRelTokens(raw []byte, tokens ...string) []byte {
+	match := relAttrPattern.FindSubmatchIndex(raw)
+	if match == nil {
+		return raw
+	}
+
+	value := string(raw[match[2]:match[3]])
+	for _, want := range tokens {
+		present := false
+		for _, existing := range strings.Fields(value) {
+			if strings.EqualFold(existing, want) {
+				present = true
+				break
+			}
+		}
+		if !present {
+			value += " " + want
+		}
+	}
+
+	result := make([]byte, 0, len(raw)+len(value))
+	result = append(result, raw[:match[2]]...)
+	result = append(result, value...)
+	result = append(result, raw[match[3]:]...)
+	return result
+}
+
+// insertAttributesBeforeTagEnd appends extra attributes to a raw start tag,
+// keeping the rest of the tag byte-identical.
+func insertAttributesBeforeTagEnd(raw []byte, attrs string) []byte {
+	end := len(raw)
+	if end > 0 && raw[end-1] == '>' {
+		end--
+		if end > 0 && raw[end-1] == '/' {
+			end--
+		}
+	}
+	result := make([]byte, 0, len(raw)+len(attrs))
+	result = append(result, raw[:end]...)
+	result = append(result, attrs...)
+	result = append(result, raw[end:]...)
+	return result
 }
 
 // newGoldmark constructs the configured Goldmark instance with all parser
