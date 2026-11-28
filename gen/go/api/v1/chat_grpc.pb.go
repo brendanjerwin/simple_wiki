@@ -37,6 +37,7 @@ const (
 	ChatService_RequestPermissionFromUser_FullMethodName  = "/api.v1.ChatService/RequestPermissionFromUser"
 	ChatService_GetChatMessages_FullMethodName            = "/api.v1.ChatService/GetChatMessages"
 	ChatService_NotifyAgentAttached_FullMethodName        = "/api.v1.ChatService/NotifyAgentAttached"
+	ChatService_GetChatAttachment_FullMethodName          = "/api.v1.ChatService/GetChatAttachment"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -105,6 +106,11 @@ type ChatServiceClient interface {
 	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
 	// surface desired-vs-effective divergence during a switch.
 	NotifyAgentAttached(ctx context.Context, in *NotifyAgentAttachedRequest, opts ...grpc.CallOption) (*NotifyAgentAttachedResponse, error)
+	// GetChatAttachment is called by the pool daemon to retrieve attachment bytes
+	// by ID so they can be forwarded to the agent as image content blocks.
+	// The pool daemon has no session credential, so this is the only way it
+	// can access attachment data without widening session auth.
+	GetChatAttachment(ctx context.Context, in *GetChatAttachmentRequest, opts ...grpc.CallOption) (*GetChatAttachmentResponse, error)
 }
 
 type chatServiceClient struct {
@@ -387,6 +393,16 @@ func (c *chatServiceClient) NotifyAgentAttached(ctx context.Context, in *NotifyA
 	return out, nil
 }
 
+func (c *chatServiceClient) GetChatAttachment(ctx context.Context, in *GetChatAttachmentRequest, opts ...grpc.CallOption) (*GetChatAttachmentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatAttachmentResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetChatAttachment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -453,6 +469,11 @@ type ChatServiceServer interface {
 	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
 	// surface desired-vs-effective divergence during a switch.
 	NotifyAgentAttached(context.Context, *NotifyAgentAttachedRequest) (*NotifyAgentAttachedResponse, error)
+	// GetChatAttachment is called by the pool daemon to retrieve attachment bytes
+	// by ID so they can be forwarded to the agent as image content blocks.
+	// The pool daemon has no session credential, so this is the only way it
+	// can access attachment data without widening session auth.
+	GetChatAttachment(context.Context, *GetChatAttachmentRequest) (*GetChatAttachmentResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -513,6 +534,9 @@ func (UnimplementedChatServiceServer) GetChatMessages(context.Context, *GetChatM
 }
 func (UnimplementedChatServiceServer) NotifyAgentAttached(context.Context, *NotifyAgentAttachedRequest) (*NotifyAgentAttachedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NotifyAgentAttached not implemented")
+}
+func (UnimplementedChatServiceServer) GetChatAttachment(context.Context, *GetChatAttachmentRequest) (*GetChatAttachmentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatAttachment not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -863,6 +887,24 @@ func _ChatService_NotifyAgentAttached_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_GetChatAttachment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatAttachmentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetChatAttachment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetChatAttachment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetChatAttachment(ctx, req.(*GetChatAttachmentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -925,6 +967,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NotifyAgentAttached",
 			Handler:    _ChatService_NotifyAgentAttached_Handler,
+		},
+		{
+			MethodName: "GetChatAttachment",
+			Handler:    _ChatService_GetChatAttachment_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

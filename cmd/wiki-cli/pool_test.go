@@ -52,6 +52,23 @@ func (h *stubChatServiceHandler) EditChatMessage(_ context.Context, _ *connect.R
 	return connect.NewResponse(&apiv1.EditChatMessageResponse{}), nil
 }
 
+// fakeAttachmentFetcher is a controllable attachmentFetcher for unit testing.
+type fakeAttachmentFetcher struct {
+	data     []byte
+	mimeType string
+	err      error
+}
+
+func (f *fakeAttachmentFetcher) GetChatAttachment(_ context.Context, _ *connect.Request[apiv1.GetChatAttachmentRequest]) (*connect.Response[apiv1.GetChatAttachmentResponse], error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return connect.NewResponse(&apiv1.GetChatAttachmentResponse{
+		Data:     f.data,
+		MimeType: f.mimeType,
+	}), nil
+}
+
 // mockChatReplier is a mock implementation of the chatReplier interface
 // for unit testing without HTTP servers.
 type mockChatReplier struct {
@@ -1850,6 +1867,173 @@ var _ = Describe("buildPromptText", func() {
 
 		It("should return the message without a sender prefix", func() {
 			Expect(result).To(Equal("Just a message"))
+		})
+	})
+})
+
+var _ = Describe("buildPromptBlocks", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	When("attachmentClient is nil", func() {
+		var (
+			client *wikiChatClient
+			blocks []acp.ContentBlock
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.attachmentClient = nil
+			blocks = buildPromptBlocks(ctx, client, "", "Hello with ![img](/api/chat-attachments/abc-123)")
+		})
+
+		It("should return a single text block", func() {
+			Expect(blocks).To(HaveLen(1))
+		})
+
+		It("should use the message text as the text block content", func() {
+			Expect(blocks[0].Text).NotTo(BeNil())
+		})
+	})
+
+	When("message has no attachment URLs", func() {
+		var (
+			client *wikiChatClient
+			blocks []acp.ContentBlock
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.attachmentClient = &fakeAttachmentFetcher{}
+			blocks = buildPromptBlocks(ctx, client, "", "Plain message with no attachments")
+		})
+
+		It("should return a single text block", func() {
+			Expect(blocks).To(HaveLen(1))
+		})
+	})
+
+	When("message contains a valid image attachment URL", func() {
+		var (
+			client  *wikiChatClient
+			fetcher *fakeAttachmentFetcher
+			blocks  []acp.ContentBlock
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			fetcher = &fakeAttachmentFetcher{
+				data:     []byte("fakepng"),
+				mimeType: "image/png",
+			}
+			client.attachmentClient = fetcher
+			blocks = buildPromptBlocks(ctx, client, "", "Look at this: ![img](/api/chat-attachments/abc-def-123)")
+		})
+
+		It("should return a text block plus an image block", func() {
+			Expect(blocks).To(HaveLen(2))
+		})
+
+		It("should have an image block as the second block", func() {
+			Expect(blocks[1].Image).NotTo(BeNil())
+		})
+
+		It("should encode the image data as base64", func() {
+			Expect(blocks[1].Image.Data).NotTo(BeEmpty())
+		})
+
+		It("should use the correct mime type", func() {
+			Expect(blocks[1].Image.MimeType).To(Equal("image/png"))
+		})
+	})
+
+	When("fetcher returns an error", func() {
+		var (
+			client *wikiChatClient
+			blocks []acp.ContentBlock
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.attachmentClient = &fakeAttachmentFetcher{
+				err: errors.New("not found"),
+			}
+			blocks = buildPromptBlocks(ctx, client, "", "Look: ![img](/api/chat-attachments/baad-cafe)")
+		})
+
+		It("should return only the text block (skip failed attachment)", func() {
+			Expect(blocks).To(HaveLen(1))
+		})
+	})
+
+	When("attachment has a non-image mime type", func() {
+		var (
+			client *wikiChatClient
+			blocks []acp.ContentBlock
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.attachmentClient = &fakeAttachmentFetcher{
+				data:     []byte("some pdf bytes"),
+				mimeType: "application/pdf",
+			}
+			blocks = buildPromptBlocks(ctx, client, "", "See ![doc](/api/chat-attachments/0a1b2c3d)")
+		})
+
+		It("should return only the text block (skip non-image)", func() {
+			Expect(blocks).To(HaveLen(1))
+		})
+	})
+
+	When("message has more than the max number of attachments", func() {
+		var (
+			client *wikiChatClient
+			blocks []acp.ContentBlock
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.attachmentClient = &fakeAttachmentFetcher{
+				data:     []byte("fakepng"),
+				mimeType: "image/png",
+			}
+			// Build a message with 6 attachments (max is 5); use hex-only IDs to match chatAttachmentURLPattern
+			msg := "a ![i](/api/chat-attachments/aaaa-0001) b ![i](/api/chat-attachments/aaaa-0002) c ![i](/api/chat-attachments/aaaa-0003) d ![i](/api/chat-attachments/aaaa-0004) e ![i](/api/chat-attachments/aaaa-0005) f ![i](/api/chat-attachments/aaaa-0006)"
+			blocks = buildPromptBlocks(ctx, client, "", msg)
+		})
+
+		It("should cap image blocks at maxAttachmentsPerMessage", func() {
+			// 1 text block + 5 image blocks (not 6)
+			Expect(blocks).To(HaveLen(1 + maxAttachmentsPerMessage))
+		})
+	})
+
+	When("text-only path is unchanged by image fetching", func() {
+		var (
+			client       *wikiChatClient
+			textOnlyText string
+			mixedText    string
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = "Some context"
+			textOnlyBlocks := buildPromptBlocks(ctx, client, "Alice", "Hello")
+			textOnlyText = textOnlyBlocks[0].Text.Text
+
+			client2 := newWikiChatClient("test-page", "http://localhost:1")
+			client2.pageContext = "Some context"
+			client2.attachmentClient = &fakeAttachmentFetcher{}
+			mixedBlocks := buildPromptBlocks(ctx, client2, "Alice", "Hello")
+			mixedText = mixedBlocks[0].Text.Text
+		})
+
+		It("should produce the same text block with or without an attachmentClient", func() {
+			Expect(mixedText).To(Equal(textOnlyText))
 		})
 	})
 })

@@ -343,6 +343,10 @@ func (*noopChatServer) SendTurnStatus(_ context.Context, _ *connect.Request[apiv
 	return nil, errChatNoop
 }
 
+func (*noopChatServer) GetChatAttachment(_ context.Context, _ *connect.Request[apiv1.GetChatAttachmentRequest]) (*connect.Response[apiv1.GetChatAttachmentResponse], error) {
+	return nil, errChatNoop
+}
+
 var _ = Describe("Decorate for a service that declares no service_description", func() {
 	var (
 		server              *mcpserver.MCPServer

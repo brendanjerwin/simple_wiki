@@ -905,7 +905,8 @@ func setupGRPCServer(
 		WithChatAgentChangeNotifier(chatBufferMgr).
 		WithChecklistMutator(checklistMutator).
 		WithMapMutator(mapMutator).
-		WithSurveyMutator(surveyMutator)
+		WithSurveyMutator(surveyMutator).
+		WithChatAttachmentStore(site.ChatAttachmentStore)
 
 	if keepWiring != nil {
 		grpcAPIServer = grpcAPIServer.

@@ -103,6 +103,14 @@ service ChatService {
   rpc NotifyAgentAttached(NotifyAgentAttachedRequest) returns (NotifyAgentAttachedResponse) {
     option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
   }
+
+  // GetChatAttachment is called by the pool daemon to retrieve attachment bytes
+  // by ID so they can be forwarded to the agent as image content blocks.
+  // The pool daemon has no session credential, so this is the only way it
+  // can access attachment data without widening session auth.
+  rpc GetChatAttachment(GetChatAttachmentRequest) returns (GetChatAttachmentResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 }
 
 // Sender identifies who sent a chat message.
@@ -445,3 +453,14 @@ message NotifyAgentAttachedRequest {
 
 // NotifyAgentAttachedResponse is the response for NotifyAgentAttached.
 message NotifyAgentAttachedResponse {}
+
+// GetChatAttachmentRequest is the request for GetChatAttachment.
+message GetChatAttachmentRequest {
+  string id = 1;  // attachment UUID
+}
+
+// GetChatAttachmentResponse is the response for GetChatAttachment.
+message GetChatAttachmentResponse {
+  bytes data = 1;       // raw attachment bytes
+  string mime_type = 2; // MIME type (e.g. "image/png")
+}
