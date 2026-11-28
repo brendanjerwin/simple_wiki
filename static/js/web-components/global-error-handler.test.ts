@@ -190,4 +190,80 @@ describe('Global Error Handler', () => {
       });
     });
   });
+  describe('when an error belongs to foreign code', () => {
+    let errorHandler: (event: ErrorEvent) => void;
+    let rejectionHandler: (event: PromiseRejectionEvent) => void;
+    let warnStub: SinonStub;
+
+    beforeEach(() => {
+      warnStub = stub(console, 'warn');
+      setupGlobalErrorHandler();
+      const errorCall = addEventListenerStub.getCalls().find(call => call.args[0] === 'error');
+      errorHandler = errorCall!.args[1];
+      const rejectionCall = addEventListenerStub.getCalls().find(call => call.args[0] === 'unhandledrejection');
+      rejectionHandler = rejectionCall!.args[1];
+    });
+
+    describe('when an error event names a webkit-masked-url script', () => {
+      let panicEl: KernelPanic | null;
+
+      beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
+        const mockErrorEvent = {
+          error: null,
+          message: 'extension failure',
+          filename: 'webkit-masked-url://hidden/:54:12285',
+          lineno: 0,
+          colno: 0,
+          isTrusted: false
+        } as ErrorEvent;
+
+        errorHandler(mockErrorEvent);
+        panicEl = document.querySelector('kernel-panic');
+      });
+
+      it('should not show kernel panic', () => {
+        expect(panicEl).to.not.exist;
+      });
+
+      it('should log the foreign error', () => {
+        expect(warnStub).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when a rejection reason comes from a masked script', () => {
+      let preventDefaultStub: SinonStub;
+      let panicEl: KernelPanic | null;
+
+      beforeEach(() => {
+        preventDefaultStub = stub();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
+        const mockRejectionEvent = {
+          reason: {
+            name: 'Error',
+            message: 'boom',
+            stack: 'Error: boom\n    at e@webkit-masked-url://hidden/:54:12285'
+          },
+          preventDefault: preventDefaultStub,
+          isTrusted: false,
+          promise: undefined
+        } as unknown as PromiseRejectionEvent;
+
+        rejectionHandler(mockRejectionEvent);
+        panicEl = document.querySelector('kernel-panic');
+      });
+
+      it('should not show kernel panic', () => {
+        expect(panicEl).to.not.exist;
+      });
+
+      it('should leave the browser default handling intact', () => {
+        expect(preventDefaultStub).to.not.have.been.called;
+      });
+
+      it('should log the foreign rejection', () => {
+        expect(warnStub).to.have.been.calledOnce;
+      });
+    });
+  });
 });
