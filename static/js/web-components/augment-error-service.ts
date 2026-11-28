@@ -373,6 +373,7 @@ export class AugmentErrorService {
    */
   private static augmentUnknownError(error: unknown, failedGoalDescription?: string): AugmentedError {
     let message: string;
+    let preservedStack: string | undefined;
 
     if (typeof error === 'string') {
       message = error;
@@ -381,10 +382,35 @@ export class AugmentErrorService {
           typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
         message = error.toString();
       } else {
+        // Duck-type Error-likes before falling back to JSON.stringify.
+        // Covers cross-realm Errors (workers/iframes), DOMExceptions, and proxy-wrapped
+        // errors that are not instanceof Error in this realm.
+        let nameStr = '';
+        let messageStr = '';
+        let stackStr = '';
         try {
-          message = JSON.stringify(error);
+          const errorAsObj = error as Record<string, unknown>;
+          nameStr = typeof errorAsObj['name'] === 'string' ? errorAsObj['name'].trim() : '';
+          messageStr = typeof errorAsObj['message'] === 'string' ? errorAsObj['message'].trim() : '';
+          stackStr = typeof errorAsObj['stack'] === 'string' ? errorAsObj['stack'] : '';
         } catch {
-          message = Object.prototype.toString.call(error);
+          // Property access threw — skip duck-typing and fall through
+        }
+
+        if (nameStr && messageStr) {
+          message = `${nameStr}: ${messageStr}`;
+          preservedStack = stackStr || undefined;
+        } else {
+          try {
+            message = JSON.stringify(error);
+            // JSON.stringify returns '{}' for objects with no serialisable properties
+            // (e.g. DOMException, cross-realm Error). Fall back to a more useful tag.
+            if (message === '{}' || message === '') {
+              message = Object.prototype.toString.call(error);
+            }
+          } catch {
+            message = Object.prototype.toString.call(error);
+          }
         }
       }
     } else {
@@ -393,6 +419,9 @@ export class AugmentErrorService {
 
     // Create Error first, then augment it
     const createdError = new Error(message);
+    if (preservedStack) {
+      createdError.stack = preservedStack;
+    }
 
     return new AugmentedError(
       createdError,
