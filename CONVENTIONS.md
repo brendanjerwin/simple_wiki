@@ -928,7 +928,7 @@ func NewServer(logger *Logger) (*Server, error) {
   }
   ```
 
-- If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
+- If a problem is due to an invalid parameter, don't just fix the parameter value. *also* add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
 - **Never Branch Logic on Error Messages**: Error messages are intended for human consumption and should never be used for conditional logic or control flow. Use proper error types, error codes, or structured error objects instead.
 
