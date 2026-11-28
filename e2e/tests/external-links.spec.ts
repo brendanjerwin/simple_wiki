@@ -111,9 +111,9 @@ identifier = "${TEST_PAGE}"
       await expect(indicator).not.toBeAttached();
     });
 
-    test('should not open in a new tab', async ({ page }) => {
+    test('should open in a new tab', async ({ page }) => {
       const link = page.locator('#rendered a[href="/some_page"]');
-      await expect(link).not.toHaveAttribute('target', '_blank');
+      await expect(link).toHaveAttribute('target', '_blank');
     });
   });
 

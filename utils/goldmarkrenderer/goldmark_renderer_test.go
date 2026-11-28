@@ -228,8 +228,10 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should keep the link in the current tab", func() {
-				Expect(string(output)).NotTo(ContainSubstring(`target="_blank"`))
+			It("should open the link in a new tab", func() {
+				Expect(string(output)).To(ContainSubstring(`target="_blank"`))
+				Expect(string(output)).To(ContainSubstring(`noopener`))
+				Expect(string(output)).To(ContainSubstring(`noreferrer`))
 			})
 
 			It("should not append the external link indicator", func() {
@@ -244,6 +246,10 @@ var _ = Describe("GoldmarkRenderer", func() {
 
 			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should open the anchor link in a new tab", func() {
+				Expect(string(output)).To(ContainSubstring(`target="_blank"`))
 			})
 
 			It("should not append the external link indicator", func() {
@@ -429,8 +435,8 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(string(output)).To(ContainSubstring(">wikilink</a>"))
 			})
 
-			It("should keep the wikilink in the current tab", func() {
-				Expect(string(output)).NotTo(ContainSubstring(`target="_blank"`))
+			It("should open the wikilink in a new tab", func() {
+				Expect(string(output)).To(ContainSubstring(`target="_blank"`))
 			})
 
 			It("should not append the external link indicator", func() {
