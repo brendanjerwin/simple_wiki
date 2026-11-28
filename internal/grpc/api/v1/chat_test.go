@@ -3264,6 +3264,27 @@ var _ = Describe("AgentInventoryService pool-facing RPCs", func() {
 	})
 
 	Describe("GetChatAttachment", func() {
+		var (
+			server *v1.Server
+			ctx    context.Context
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+
+			var err error
+			server, err = v1.NewServer(
+				v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				newMockChatBufferManager(),
+				noOpPageOpener{},
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		When("no attachment store is configured", func() {
 			var (
 				err error
